@@ -1401,39 +1401,52 @@
     <button onclick="close3DDrawModal()">Cancel</button>
   </div>
   <div id="tutorial-modal" class="modal" style="display: none;">
-    <h3>Tutorial</h3>
-    <div id="normal-tutorial">
-      <h4>Normal Mode</h4>
-      <p>Use the "Start Time" and "End Time" inputs to filter lightning strikes by time, then click "Apply Filter".
-        Toggle layers like "Lightning Layer", "Heatmap", and "Overlay Numbers" to visualize data. Use the slider below
-        the map to view strikes within the "Lightning Lifespan" (e.g., 3 hours) from the selected time, up to the "Max
-        History" hours back (left) to now (right). Adjust the "Lightning Lifespan" to control the time window of
-        displayed strikes. Click "Play" to animate strikes from oldest to newest, adjust speed with the slider or
-        "Minutes per Second" input (e.g., 1 = 1 minute of strikes per second), and stop to pause.</p>
-      <p>Enable "Sound" to play a thunder sound for each new strike within the map's view.</p>
-      <p>Enable "3D Mode" to view the map as a 3D globe with terrain using Mapbox's Handry Outlook style, occupying the
-        full map container. In 3D mode, the "Heatmap" checkbox controls a 2D heatmap, and the "3D Heatmap" checkbox
-        enables a 3D terrain-like surface. Both can be enabled simultaneously. Adjust "3D Heatmap Resolution" and "3D
-        Heatmap Tower Height" sliders (visible only in 3D mode) for the 3D heatmap, and "Heatmap Blur" for the 2D
-        heatmap. Overlay numbers, KML, and PNG layers are also supported in 3D mode.</p>
-      <p>Enable "Nowcast" to display predicted lightning movement based on recent strike clusters. Nowcast shows circles
-        at cluster centers and cones indicating the predicted direction of movement, colored by confidence (purple for
-        very high, red for high, orange for moderate, yellow for low). This feature works in both 2D and 3D modes and
-        updates dynamically when applying filters.</p>
+    <h3>Tutorial: RadarLoop UK</h3>
+    <div id="basic-tutorial">
+        <h4>Map Interaction & Time History</h4>
+        
+        <p>Use the **Start Time** and **End Time** inputs to filter lightning strikes by date and time, then click **Apply Filter**.</p>
+        
+        <p>The **history slider** below the map allows you to navigate through past data. The right side is the current time (Now), and the left side goes back up to the **Max History** hours (default: 24 hours). The strikes displayed at any time are those that occurred within the **Lightning Lifespan** (e.g., 3 hours) ending at the slider's current position.</p>
+        
+        <p>Click **Play** to animate the history of strikes from oldest to newest. Adjust the playback speed using the slider or the **Minutes per Second** input (e.g., 1 = 1 minute of strikes per second). Click **Stop** to pause the animation.</p>
     </div>
+    
+    <div id="layer-tutorial">
+        <h4>Layer Management & Visualization</h4>
+        
+        <p>Use the checkboxes to toggle visualization layers:</p>
+        <ul>
+            <li>**Lightning Layer:** Displays individual strike markers.</li>
+            <li>**Heatmap:** Shows a 2D density map of strikes. Adjust its appearance using the **Heatmap Blur** slider.</li>
+            <li>**Overlay Numbers:** Displays the total count of strikes within a cluster or area.</li>
+            <li>**Sound:** Enable this to play a thunder sound for each new strike that occurs within the current map view.</li>
+        </ul>
+
+        <p>Use the **Radar Layer** and **Satellite Layer** dropdowns to overlay weather data. Select a data type (e.g., UK Rainfall Intensity or Europe Infrared) and adjust its visibility using the respective **Opacity** slider. Changing a layer selection will automatically refresh the map to plot the new layer at the current history time.</p>
+    </div>
+    
+    <div id="nowcast-tutorial">
+        <h4>Nowcasting</h4>
+        
+        <p>Enable **Nowcast** to display predicted lightning movement based on recent strike clusters. Nowcast shows circles at cluster centers and cones indicating the predicted direction of movement.</p>
+        <p>Prediction confidence is indicated by color: **Purple** (very high) and **Red** (high). This feature updates dynamically whenever you apply filters or change the time slider position.</p>
+    </div>
+
     <div id="expert-tutorial">
-      <h4>Expert Mode</h4>
-      <p>Enable "Expert Mode" to access KML and PNG uploads. Upload a KML file to overlay risk zones, or a PNG file for
-        custom imagery. Toggle these layers on/off and adjust settings like "PNG Opacity" or layer z-indices to
-        customize their display order in both 2D and 3D modes.</p>
-      <p>For KML files, ensure polygon names match risk levels: 'Low risk', 'Slight risk', 'Enhanced risk', 'Moderate
-        risk', 'High risk' for correct colors.</p>
-      <p>For PNG files, the filename should include the region name (e.g., 'England', 'Wales') to set image bounds.</p>
-      <p>You can also export lightning map as a png file by entering a set of coorindates or drag an area on the map by
-        clicking 'Export Strikes As PNG'.</p>
+        <h4>Expert Mode & Custom Layers</h4>
+        
+        <p>Enable **Expert Mode** to access advanced customization options:</p>
+        <ul>
+            <li>**Custom Layers (KML/PNG):** Upload a KML file to overlay risk zones or a PNG file for custom imagery (e.g., model outputs).</li>
+            <li>**Layer Settings:** Adjust settings like **PNG Opacity** or modify layer z-indices to customize the display order relative to the lightning, radar, and satellite layers.</li>
+            <li>**KML Formatting:** For KML files, ensure polygon names match predefined risk levels ('Low risk', 'Slight risk', 'Enhanced risk', 'Moderate risk', 'High risk') to ensure correct color styling.</li>
+            <li>**PNG Bounds:** For PNG files, the filename should include the region name (e.g., 'England', 'Wales') to help the system automatically set the image boundaries on the map.</li>
+            <li>**Export:** Click **Export Strikes As PNG** to save the current map view and lightning strikes as an image file. You can enter specific coordinates or drag an area on the map to define the export region.</li>
+        </ul>
     </div>
     <button onclick="closeTutorial()">Close</button>
-  </div>
+</div>
   <div id="modal" class="modal" style="display: none;">
     <p>Do you want to adjust the time filter based on the file's timestamp?</p>
     <button onclick="confirmAutoTimeFilter(true)">Yes</button>
