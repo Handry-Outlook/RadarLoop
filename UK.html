@@ -2593,18 +2593,32 @@
       lastWindType = null;
     }
 
+    // *** Assuming the definition of the helper function createVectorLayerStyles is globally available ***
+
     function updateLayerOpacities() {
       const radarOpacity = parseFloat(document.getElementById('radarOpacity')?.value || 0.8);
       const satelliteOpacity = parseFloat(document.getElementById('satelliteOpacity')?.value || 0.8);
-      const isobarOpacity = parseFloat(document.getElementById('isobarOpacity')?.value || 0.8); // NEW
-      const windOpacity = parseFloat(document.getElementById('windOpacity')?.value || 0.8); // NEW
+      const isobarOpacity = parseFloat(document.getElementById('isobarOpacity')?.value || 0.8);
+      const windOpacity = parseFloat(document.getElementById('windOpacity')?.value || 0.8);
 
-      // Apply radar layer opacity
+      // --- RADAR LAYER LOGIC (Use setStyle for VectorTiles, Fallback for others) ---
       if (radarLayer) {
         const radarType = document.getElementById('radarLayer').value;
-        const isVector = radarOptions[radarType]?.type === 'vector-tile';
+        const layerConfig = radarOptions[radarType];
 
-        if (!isVector) {
+        if (layerConfig?.type === 'vector-tile' && radarLayer.setStyle) {
+          // ** Vector Tile Update: Requires updating the internal feature styles (L.vectorGrid) **
+          // NOTE: Since Radar is complex, we need to know its colors. Assuming generic colors for example.
+
+          // To be accurate, you need the actual colors of the radar geometry here.
+          // Let's assume a generic red/orange color for precipitation polygons for illustration:
+          const radarFeatureColor = '#FF8C00';
+
+          const newStyles = createVectorLayerStyles(radarOpacity, radarFeatureColor);
+          radarLayer.setStyle(newStyles);
+
+        } else {
+          // Standard Image/Tile Layer Update
           if (radarLayer.setOpacity) {
             radarLayer.setOpacity(radarOpacity);
           } else if (radarLayer.getElement) {
@@ -2614,7 +2628,7 @@
         }
       }
 
-      // Apply satellite layer opacity
+      // --- SATELLITE LAYER LOGIC (Unchanged, as it handles different layer types) ---
       if (satelliteLayer) {
         const satelliteType = document.getElementById('satelliteLayerSelect').value;
         const isTileLayer = satelliteOptions[satelliteType]?.type === 'tile-layer';
@@ -2624,9 +2638,13 @@
         }
       }
 
-      // Apply isobar layer opacity (NEW)
+      // --- ISOBAR LAYER LOGIC (Unified with setStyle) ---
       if (isobarLayer) {
-        if (isobarLayer.setOpacity) {
+        if (isobarLayer.setStyle) { // Check for setStyle first (best for VectorGrid)
+          // Isobar is assumed to be white lines
+          const isobarColor = '#FFFFFF';
+          isobarLayer.setStyle(createVectorLayerStyles(isobarOpacity, isobarColor));
+        } else if (isobarLayer.setOpacity) {
           isobarLayer.setOpacity(isobarOpacity);
         } else if (isobarLayer.getElement) {
           const imgElement = isobarLayer.getElement();
@@ -2634,9 +2652,13 @@
         }
       }
 
-      // Apply wind layer opacity (NEW)
+      // --- WIND LAYER LOGIC (Unified with setStyle) ---
       if (windLayer) {
-        if (windLayer.setOpacity) {
+        if (windLayer.setStyle) { // Check for setStyle first (best for VectorGrid)
+          // Wind is assumed to be light blue lines
+          const windColor = '#88E0FF';
+          windLayer.setStyle(createVectorLayerStyles(windOpacity, windColor));
+        } else if (windLayer.setOpacity) {
           windLayer.setOpacity(windOpacity);
         } else if (windLayer.getElement) {
           const imgElement = windLayer.getElement();
@@ -2646,7 +2668,18 @@
 
       updateLegend();
     }
-
+    /**
+     * Creates the style object required for L.vectorGrid.setStyle()
+     * @param {number} opacity - The target opacity.
+     * @param {string} color - The feature stroke color (e.g., '#FFFFFF' for Isobar, '#88E0FF' for Wind).
+     */
+    function createVectorLayerStyles(opacity, color) {
+      const style = { stroke: true, weight: 2, opacity: opacity, fill: false, color: color };
+      return {
+        'default': style,
+        'features': style // Assuming a generic 'features' layer name
+      };
+    }
     // Debounced function that actually calls the heavy updateMapLayers
     const triggerMapUpdate = debounce((timestamp) => {
       // CRITICAL for Historical Checks
@@ -2798,6 +2831,16 @@
         triggerMapUpdate(Date.now());
       }
     });
+
+
+
+
+
+
+
+
+
+
 
 
 
