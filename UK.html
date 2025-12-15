@@ -1200,6 +1200,8 @@
     <div class="section">
       <h4>🗺️ Map Style</h4>
       <label>Map Style: <select id="map-style" onchange="switchBaseMap(this.value)">
+          <option value="mapbox-streets-satellite">Mapbox Streets-Satellite</option>
+          <option value="mapbox-navigation">Mapbox Navigation</option>
           <option value="mapbox-traffic-night">Mapbox Traffic Night</option>
           <option value="mapbox-traffic-day">Mapbox Traffic Day</option>
           <option value="custom">Mapbox Classic</option>
@@ -1207,8 +1209,6 @@
           <option value="mapbox-outdoors">Mapbox Outdoors</option>
           <option value="mapbox-dark">Mapbox Dark</option>
           <option value="mapbox-light">Mapbox Light</option>
-          <option value="mapbox-streets-satellite">Mapbox Streets-Satellite</option>
-          <option value="mapbox-navigation">Mapbox Navigation</option>
           <option value="mapbox-navigation-night">Mapbox Navigation Night</option>
           <option value="osm">OpenStreetMap</option>
           <option value="opentopo">OpenTopoMap</option>
@@ -1222,7 +1222,7 @@
       <div class="section"></div>
       <h4>⛈️ Weather Layers</h4>
 
-      <label>Radar Layer:
+      <label>Radar Layer and Others:
         <select id="radarLayer" onchange="radarLayerTypeHandler();">
           <option value="uk-precip-intensity">UK High Resolution Rainfall Intensity (Smoothed)</option>
           <option value="uk-precip-intensity-pixelated">UK High Resolution Rainfall Intensity (Pixelated)</option>
@@ -1231,6 +1231,11 @@
           <option value="europe-precip-intensity">Europe Low Resolution Rainfall Intensity</option>
           <option value="europe-precip-type">Europe Low Resolution Precipitation Type</option>
           <option value="global-precip-intensity">Precipitation - NASA global precipitation intensity</option>
+          <option value="global-wind-speed">Global Wind Speed (test)</option>
+          <option value="global-wave-height">Global Wave Height (test)</option>
+          <option value="global-wave-period">Global Peak Wave Period (test)</option>
+          <option value="global-current-speed">Global Current Speed (test)</option>
+          <option value="global-visibility">Global Visibility (test)</option>
           <option value="none">None</option>
         </select>
         <span class="tooltip">Select radar data layer</span>
@@ -1569,7 +1574,7 @@
       })
     };
 
-    map = L.map('map', { layers: [baseLayers['mapbox-traffic-night']], zoomControl: false }).setView([53.5, -4.5], 6);
+    map = L.map('map', { layers: [baseLayers['mapbox-streets-satellite']], zoomControl: false }).setView([53.5, -4.5], 6);
 
     map3D = new mapboxgl.Map({
       container: 'map-3d',
@@ -1727,6 +1732,36 @@
 
         url: 'https://tiles.meteoguard.dtn.com/tiles/VECTOR.obs-radar.nasa.global-imerg_01x01_intensity.default/${iso}/${iso}/{z}/{x}/{y}.pbf',
         interval: 15 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'NASA'
+      },
+      'global-current-speed': {
+
+        url: 'https://tiles.meteoguard.dtn.com/tiles/VECTOR.mg-manta-production-output_dtn_manta_global_6min_current_speed.default/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'NASA'
+      },
+      'global-wave-height': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/VECTOR.mg-manta-production-output_dtn_manta_global_6min_significant_wave_height.default/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'NASA'
+      },
+      'global-wave-period': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/VECTOR.mg-manta-production-output_dtn_manta_global_6min_peak_period.default/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'NASA'
+      },
+      'global-visibility': {
+
+        url: 'https://tiles.meteoguard.dtn.com/tiles/VECTOR.mg-manta-production-output_dtn_manta_global_6min_visibility.default/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
         type: 'vector-tile',
         bounds: null,
         attribution: 'NASA'
@@ -2160,6 +2195,18 @@
      */
     async function plotLayerIfNecessary(layerType, optionsMap, targetTimestamp, isSatellite) {
       const layerConfig = optionsMap[layerType];
+
+      // --- ADD THIS CRITICAL CHECK ---
+      if (!layerConfig) {
+        console.error(`Layer configuration not found for type: ${layerType}`);
+        // Also ensure the layer is removed if it somehow got this far
+        const currentLayer = isSatellite ? satelliteLayer : radarLayer;
+        if (currentLayer) {
+          map.removeLayer(currentLayer);
+          if (isSatellite) { satelliteLayer = null; } else { radarLayer = null; }
+        }
+        return; // Exit if the layer config is undefined
+      }
       const interval = layerConfig.interval;
 
       const roundedDate = new Date(targetTimestamp);
@@ -2172,7 +2219,7 @@
       const lastType = isSatellite ? lastSatelliteType : lastRadarType;
 
       if (lastTimestamp === roundedTimestampMs && lastType === layerType) {
-        return;
+        return; // Prevents re-plotting
       }
       // Set the requested timestamp tracking variables
       if (isSatellite) {
@@ -2348,24 +2395,36 @@
       triggerMapUpdate(timestamp);
     }
 
-    // ...
     function radarLayerTypeHandler() {
+      // 1. Force state reset to null to guarantee plot logic runs
+      lastRadarTimestamp = null;
+      lastRadarType = null;
+
+      // 2. Eagerly remove the existing layer before fetching a new one.
+      // This helps prevent race conditions and ensures visual feedback.
+      clearRadarLayers();
+
       // Get the timestamp from the slider or current time
       const timestamp = getCurrentSliderTimestamp();
 
       // Force the map to update immediately with the current time/slider value.
-      // We skip the history display update, as the timestamp hasn't changed.
       triggerMapUpdate(timestamp, true);
     }
 
     function satelliteLayerTypeHandler() {
+      // 1. Force state reset to null to guarantee plot logic runs
+      lastSatelliteTimestamp = null;
+      lastSatelliteType = null;
+
+      // 2. Eagerly remove the existing layer before fetching a new one.
+      clearSatelliteLayers();
+
       // Get the timestamp from the slider or current time
       const timestamp = getCurrentSliderTimestamp();
 
       // Force the map to update immediately with the current time/slider value.
       triggerMapUpdate(timestamp, true);
     }
-    // ...
 
 
     // --- INITIALIZATION AND EVENT ATTACHMENT ---
@@ -3604,15 +3663,15 @@
 
       if (isDark) {
         // Switch to a good dark base map
-        mapStyleSelect.value = 'mapbox-traffic-night'; // or 'mapbox-dark' or 'maptiler-dark'
-        switchBaseMap('mapbox-traffic-night');
+        mapStyleSelect.value = 'mapbox-streets-satellite'; // or 'mapbox-dark' or 'maptiler-dark'
+        switchBaseMap('mapbox-streets-satellite');
 
         // Update button text
         event.target.textContent = '☀️ Light Mode';
       } else {
         // Switch to a good light base map
-        mapStyleSelect.value = 'mapbox-traffic-day'; // or 'mapbox-light' or 'maptiler-light'
-        switchBaseMap('mapbox-traffic-day');
+        mapStyleSelect.value = 'mapbox-outdoors'; // or 'mapbox-light' or 'maptiler-light'
+        switchBaseMap('mapbox-outdoors');
 
         // Update button text
         event.target.textContent = '🌙 Dark Mode';
