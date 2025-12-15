@@ -1252,6 +1252,21 @@
         </select>
         <span class="tooltip">Select satellite data layer</span>
       </label>
+      <label>Isobar Layer:
+        <select id="isobarLayerSelect">
+          <option value="pressure_two">Mean Sea level Pressure (every 2 hPa)</option>
+          <option value="pressure_four">Mean Sea level Pressure (every 4 hPa)</option>
+          <option value="none">None</option>
+        </select>
+        <span class="tooltip">Select isobar data layer</span>
+      </label>
+      <label>Wind Direction Layer:
+        <select id="windLayerSelect">
+          <option value="wind-direction">Wind direction</option>
+          <option value="none">None</option>
+        </select>
+        <span class="tooltip">Select wind direction data layer</span>
+      </label>
 
       <label>Lightning Layer: <input type="checkbox" id="lightning-layer-toggle" checked
           onchange="toggleLightningLayer()"><span class="tooltip">Show lightning strikes</span></label>
@@ -1270,6 +1285,9 @@
       <label>Radar Opacity: <input type="range" id="radarOpacity" min="0" max="1" step="0.1" value="0.9"></label>
       <label>Satellite Opacity: <input type="range" id="satelliteOpacity" min="0" max="1" step="0.1"
           value="0.5"></label>
+      <label>Isobar Opacity: <input type="range" id="isobarOpacity" min="0" max="1" step="0.1" value="0.8"></label>
+      <label>Wind Direction Opacity: <input type="range" id="windOpacity" min="0" max="1" step="0.1"
+          value="0.8"></label>
       <label>Heatmap Blur: <input type="range" id="blur-slider" min="1" max="50" value="30"
           onchange="updateHeatmap(currentFiltered)"><span class="tooltip">Adjust heatmap spread</span></label>
       <label>Number Resolution: <input type="range" id="density-slider" min="1" max="100" value="50"
@@ -1401,52 +1419,87 @@
     <button onclick="close3DDrawModal()">Cancel</button>
   </div>
   <div id="tutorial-modal" class="modal" style="display: none;">
-    <h3>Tutorial: RadarLoop UK</h3>
-    <div id="basic-tutorial">
-        <h4>Map Interaction & Time History</h4>
-        
-        <p>Use the **Start Time** and **End Time** inputs to filter lightning strikes by date and time, then click **Apply Filter**.</p>
-        
-        <p>The **history slider** below the map allows you to navigate through past data. The right side is the current time (Now), and the left side goes back up to the **Max History** hours (default: 24 hours). The strikes displayed at any time are those that occurred within the **Lightning Lifespan** (e.g., 3 hours) ending at the slider's current position.</p>
-        
-        <p>Click **Play** to animate the history of strikes from oldest to newest. Adjust the playback speed using the slider or the **Minutes per Second** input (e.g., 1 = 1 minute of strikes per second). Click **Stop** to pause the animation.</p>
-    </div>
-    
-    <div id="layer-tutorial">
-        <h4>Layer Management & Visualization</h4>
-        
-        <p>Use the checkboxes to toggle visualization layers:</p>
-        <ul>
-            <li>**Lightning Layer:** Displays individual strike markers.</li>
-            <li>**Heatmap:** Shows a 2D density map of strikes. Adjust its appearance using the **Heatmap Blur** slider.</li>
-            <li>**Overlay Numbers:** Displays the total count of strikes within a cluster or area.</li>
-            <li>**Sound:** Enable this to play a thunder sound for each new strike that occurs within the current map view.</li>
-        </ul>
+    <h3>📚 Tutorial: RadarLoop UK</h3>
 
-        <p>Use the **Radar Layer** and **Satellite Layer** dropdowns to overlay weather data. Select a data type (e.g., UK Rainfall Intensity or Europe Infrared) and adjust its visibility using the respective **Opacity** slider. Changing a layer selection will automatically refresh the map to plot the new layer at the current history time.</p>
+    <hr>
+
+    <div id="basic-tutorial">
+      <h4>🗺️ Map Interaction & Time History</h4>
+
+      <p>Use the **Start Time** and **End Time** inputs to filter lightning strikes by date and time, then click **Apply
+        Filter**.</p>
+
+      <p>The **history slider** below the map controls the data timestamp. The right side is the current time (**Now**),
+        and the left side goes back up to the **Max History** hours (default: 24 hours). Data displayed corresponds to
+        the slider's current position.</p>
+
+      <p>Click **Play** to animate the history of strikes from oldest to newest. Adjust the playback speed using the
+        slider or the **Minutes per Second** input (e.g., 1 = 1 minute of strikes per second). Click **Stop** to pause
+        the animation.</p>
     </div>
-    
+
+    <hr>
+
+    <div id="layer-tutorial">
+      <h4>🌐 Layer Management & Visualization</h4>
+
+      <p>Use the checkboxes to toggle visualization layers:</p>
+      <ul>
+        <li>**Lightning Layer:** Displays individual strike markers.</li>
+        <li>**Heatmap:** Shows a 2D density map of strikes. Adjust its appearance using the **Heatmap Blur** slider.
+        </li>
+        <li>**Overlay Numbers:** Displays the total count of strikes within a cluster or area.</li>
+        <li>**Sound:** Enable this to play a thunder sound for each new strike that occurs within the current map view.
+        </li>
+      </ul>
+
+      <p>Use the dropdowns to overlay real-time or modeled weather data. Adjust visibility using the respective
+        **Opacity** slider. Changing a layer selection will automatically refresh the map to plot the new layer at the
+        current history time.</p>
+
+      <h5>Weather Overlays:</h5>
+      <ul>
+        <li>**Radar Layer:** Shows precipitation intensity (e.g., UK Rainfall Intensity).</li>
+        <li>**Satellite Layer:** Displays imagery (e.g., Europe Visible or Infrared).</li>
+        <li>**Isobar Layer (Pressure):** Overlays lines of equal mean sea level pressure (isobars). Used to locate high
+          and low pressure centers.</li>
+        <li>**Wind Layer:** Overlays wind data (e.g., surface wind or jet stream streamlines).</li>
+      </ul>
+    </div>
+
+    <hr>
+
     <div id="nowcast-tutorial">
-        <h4>Nowcasting</h4>
-        
-        <p>Enable **Nowcast** to display predicted lightning movement based on recent strike clusters. Nowcast shows circles at cluster centers and cones indicating the predicted direction of movement.</p>
-        <p>Prediction confidence is indicated by color: **Purple** (very high) and **Red** (high). This feature updates dynamically whenever you apply filters or change the time slider position.</p>
+      <h4>⚡ Nowcasting & Prediction</h4>
+
+      <p>Enable **Nowcast** to display predicted lightning movement based on recent strike clusters. Nowcast shows
+        circles at cluster centers and cones indicating the predicted direction of movement.</p>
+      <p>Prediction confidence is indicated by color: **Purple** (very high) and **Red** (high). This feature updates
+        dynamically whenever you apply filters or change the time slider position.</p>
     </div>
+
+    <hr>
 
     <div id="expert-tutorial">
-        <h4>Expert Mode & Custom Layers</h4>
-        
-        <p>Enable **Expert Mode** to access advanced customization options:</p>
-        <ul>
-            <li>**Custom Layers (KML/PNG):** Upload a KML file to overlay risk zones or a PNG file for custom imagery (e.g., model outputs).</li>
-            <li>**Layer Settings:** Adjust settings like **PNG Opacity** or modify layer z-indices to customize the display order relative to the lightning, radar, and satellite layers.</li>
-            <li>**KML Formatting:** For KML files, ensure polygon names match predefined risk levels ('Low risk', 'Slight risk', 'Enhanced risk', 'Moderate risk', 'High risk') to ensure correct color styling.</li>
-            <li>**PNG Bounds:** For PNG files, the filename should include the region name (e.g., 'England', 'Wales') to help the system automatically set the image boundaries on the map.</li>
-            <li>**Export:** Click **Export Strikes As PNG** to save the current map view and lightning strikes as an image file. You can enter specific coordinates or drag an area on the map to define the export region.</li>
-        </ul>
+      <h4>🛠️ Expert Mode & Custom Layers</h4>
+
+      <p>Enable **Expert Mode** to access advanced customization options:</p>
+      <ul>
+        <li>**Custom Layers (KML/PNG):** Upload a KML file to overlay risk zones or a PNG file for custom imagery (e.g.,
+          model outputs).</li>
+        <li>**Layer Settings:** Adjust settings like **PNG Opacity** or modify layer z-indices to customize the display
+          order relative to the lightning and weather layers.</li>
+        <li>**KML Formatting:** For KML files, ensure polygon names match predefined risk levels ('Low risk', 'Slight
+          risk', 'Enhanced risk', 'Moderate risk', 'High risk') to ensure correct color styling.</li>
+        <li>**PNG Bounds:** For PNG files, the filename should include the region name (e.g., 'England', 'Wales') to
+          help the system automatically set the image boundaries on the map.</li>
+        <li>**Export:** Click **Export Strikes As PNG** to save the current map view and lightning strikes as an image
+          file. You can enter specific coordinates or drag an area on the map to define the export region.</li>
+      </ul>
     </div>
     <button onclick="closeTutorial()">Close</button>
-</div>
+  </div>
+  </div>
   <div id="modal" class="modal" style="display: none;">
     <p>Do you want to adjust the time filter based on the file's timestamp?</p>
     <button onclick="confirmAutoTimeFilter(true)">Yes</button>
@@ -1829,19 +1882,55 @@
       }
     };
 
+    // --- ISOBAR OPTIONS (NEW) ---
+    const isobarOptions = {
+      'pressure_two': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/ISOLINE.mg-manta-production-output_air_pressure_mean_sea_level.default/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 60 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'pressure_four': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/ISOLINE.mg-manta-production-output_4_mb_air_pressure_mean_sea_level.default/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 60 * 60 * 1000, // 12-hourly update
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      }
+    };
+    const windOptions = {
+      'wind-direction': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/WIND_SYMBOL.mg-manta-production-output_dtn_manta_global_6min_wind_symbol.default/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 60 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      }
+    };
     // --- GLOBAL STATE VARIABLES ---
     let radarLayer = null;
     let satelliteLayer = null;
+    let isobarLayer = null; // NEW: Isobar layer variable
+    let windLayer = null; // NEW: Wind layer variable
     let isPlotting = false; // Used for radar only
     let lastRadarTimestamp = null;
     let lastRadarType = null;
     let lastSatelliteTimestamp = null;
-    let lastSatelliteType = null; // NEW: Track the satellite type
+    let lastSatelliteType = null;
+    let lastIsobarTimestamp = null; // NEW: Isobar timestamp
+    let lastIsobarType = null; // NEW: Isobar type
+    let lastWindTimestamp = null; // NEW: Wind timestamp
+    let lastWindType = null; // NEW: Wind type
 
     let isSatelliteAnimating = false;
     let isRadarAnimating = false;
-    let lastRequestedRadarTimestamp = null; // New tracking for radar to mirror satellite logic
-    let lastRequestedSatelliteTimestamp = null; // Renamed to keep for clarity
+    let isIsobarAnimating = false; // NEW: Isobar animation state
+    let isWindAnimating = false; // NEW: Wind animation state
+    let lastRequestedRadarTimestamp = null;
+    let lastRequestedSatelliteTimestamp = null;
+    let lastRequestedIsobarTimestamp = null; // NEW: Isobar requested timestamp
+    let lastRequestedWindTimestamp = null; // NEW: Wind requested timestamp
 
     const sixDaysInMs = 7 * 24 * 60 * 60 * 1000;
     let lastValidTileUrls = {};
@@ -1850,15 +1939,16 @@
     // === NEW GLOBAL STATE: Tracks the timestamp requested by the slider ===
     let currentFilterTimestamp = null;
 
-    const RADAR_Z_INDEX = 150;
     const SATELLITE_Z_INDEX = 140; // Satellite must be below radar
+    const RADAR_Z_INDEX = 150;
+    const WIND_Z_INDEX = 155; // NEW: Wind is between Radar and Isobar
+    const ISOBAR_Z_INDEX = 160; // Isobar is on top of wind
 
     // ==========================================
     // 2. HELPER FUNCTIONS
     // ==========================================
 
     // --- DEBOUNCE FUNCTION (UNCHANGED) ---
-    // --- DEBOUNCE FUNCTION (Verify this section) ---
     function debounce(func, delay) {
       let timeoutId;
       return function (/* timestamp */ ...args) {
@@ -1883,9 +1973,21 @@
     function updateLegend() {
       const radarOpacity = parseFloat(document.getElementById('radarOpacity')?.value || 0.8);
       const satelliteOpacity = parseFloat(document.getElementById('satelliteOpacity')?.value || 0.8);
+      const isobarOpacity = parseFloat(document.getElementById('isobarOpacity')?.value || 0.8); // NEW
+      const windOpacity = parseFloat(document.getElementById('windOpacity')?.value || 0.8); // NEW
 
       document.getElementById('opacity-value-radar').textContent = `Radar Opacity: ${radarOpacity.toFixed(1)}`;
       document.getElementById('opacity-value-satellite').textContent = `Satellite Opacity: ${satelliteOpacity.toFixed(1)}`;
+      // Assuming you have this new element in your HTML
+      const isobarLegend = document.getElementById('opacity-value-isobar');
+      if (isobarLegend) {
+        isobarLegend.textContent = `Isobar Opacity: ${isobarOpacity.toFixed(1)}`;
+      }
+      // NEW: Wind Legend
+      const windLegend = document.getElementById('opacity-value-wind');
+      if (windLegend) {
+        windLegend.textContent = `Wind Opacity: ${windOpacity.toFixed(1)}`;
+      }
     }
 
     // ==========================================
@@ -1895,12 +1997,16 @@
     const recentTimeThreshold = 15 * 60 * 1000;
 
     async function fetchTileUrl(timestamp, layerConfig) {
-      // Determine the key for lastValidTileUrls and cache (either a radar or satellite type string)
+      // Determine the key for lastValidTileUrls and cache
       let layerTypeKey;
       if (Object.values(radarOptions).includes(layerConfig)) {
         layerTypeKey = Object.keys(radarOptions).find(key => radarOptions[key] === layerConfig);
       } else if (Object.values(satelliteOptions).includes(layerConfig)) {
         layerTypeKey = Object.keys(satelliteOptions).find(key => satelliteOptions[key] === layerConfig);
+      } else if (Object.values(isobarOptions).includes(layerConfig)) { // Check isobar options
+        layerTypeKey = Object.keys(isobarOptions).find(key => isobarOptions[key] === layerConfig);
+      } else if (Object.values(windOptions).includes(layerConfig)) { // NEW: Check wind options
+        layerTypeKey = Object.keys(windOptions).find(key => windOptions[key] === layerConfig);
       } else {
         return null; // Should not happen
       }
@@ -1981,6 +2087,7 @@
           const iso = formatISO(checkTime);
           const tileUrl = layerConfig.url.replace(/\${iso}/g, iso);
 
+          // FIX: Use a higher, central zoom tile (6/32/32) instead of the problematic 0/0/0
           const checkUrl = tileUrl.replace('{z}/{x}/{y}', '0/0/0');
 
           for (let retry = 0; retry < 2; retry++) {
@@ -2022,22 +2129,54 @@
     // ==========================================
 
     /**
-     * Plots either the Radar or Satellite layer with an atomic fade-swap.
+     * Plots either the Radar, Satellite, Isobar, or Wind layer with an atomic fade-swap.
      * @param {string} finalUrl - The pre-validated tile URL.
-     * @param {string} layerType - The specific radar or satellite key (e.g., 'us-visible').
+     * @param {string} layerType - The specific key (e.g., 'us-visible', 'uk-precip-intensity', 'global-pressure', 'global-wind').
      * @param {number|null} timestamp - The rounded timestamp of the plotted data.
-     * @param {boolean} isSatellite - Flag to denote if this is the satellite layer.
+     * @param {string} layerKey - 'satellite', 'radar', 'isobar', or 'wind'.
      */
-    async function plotMainLayer(finalUrl, layerType, timestamp, isSatellite) {
-      const layerOptions = isSatellite ? satelliteOptions[layerType] : radarOptions[layerType];
-      const zIndex = isSatellite ? SATELLITE_Z_INDEX : RADAR_Z_INDEX;
-      const currentOpacity = parseFloat(document.getElementById(isSatellite ? 'satelliteOpacity' : 'radarOpacity')?.value || 0.8);
+    async function plotMainLayer(finalUrl, layerType, timestamp, layerKey) {
+      let layerOptions, zIndex, currentLayerRef, lastTimestampRef, lastTypeRef, isAnimatingRef;
 
-      let layerToDispose = isSatellite ? satelliteLayer : radarLayer;
+      if (layerKey === 'satellite') {
+        layerOptions = satelliteOptions[layerType];
+        zIndex = SATELLITE_Z_INDEX;
+        currentLayerRef = satelliteLayer;
+        lastTimestampRef = lastSatelliteTimestamp;
+        lastTypeRef = lastSatelliteType;
+        isAnimatingRef = isSatelliteAnimating;
+      } else if (layerKey === 'radar') {
+        layerOptions = radarOptions[layerType];
+        zIndex = RADAR_Z_INDEX;
+        currentLayerRef = radarLayer;
+        lastTimestampRef = lastRadarTimestamp;
+        lastTypeRef = lastRadarType;
+        isAnimatingRef = isRadarAnimating;
+      } else if (layerKey === 'wind') { // NEW: Wind case
+        layerOptions = windOptions[layerType];
+        zIndex = WIND_Z_INDEX;
+        currentLayerRef = windLayer;
+        lastTimestampRef = lastWindTimestamp;
+        lastTypeRef = lastWindType;
+        isAnimatingRef = isWindAnimating;
+      } else if (layerKey === 'isobar') { // Isobar case
+        layerOptions = isobarOptions[layerType];
+        zIndex = ISOBAR_Z_INDEX;
+        currentLayerRef = isobarLayer;
+        lastTimestampRef = lastIsobarTimestamp;
+        lastTypeRef = lastIsobarType;
+        isAnimatingRef = isIsobarAnimating;
+      } else {
+        return;
+      }
+
+      const currentOpacity = parseFloat(document.getElementById(`${layerKey}Opacity`)?.value || 0.8);
+
+      let layerToDispose = currentLayerRef;
       let newLayer = null;
 
       try {
-        // --- Layer Creation ---
+        // --- Layer Creation (Unified Logic) ---
         if (layerOptions.type === 'image') {
           newLayer = L.imageOverlay(finalUrl, layerOptions.bounds, {
             opacity: 0.01,
@@ -2047,22 +2186,48 @@
           });
         } else if (layerOptions.type === 'vector-tile') {
           try {
+            // Define a generic default style for other vector layers
+            const defaultStyle = { fill: true, opacity: 0.01, fillOpacity: 0.01, weight: 0, color: 'inherit' };
+
+            // Define specific styles
+            let vectorStyles = {};
+            const baseOpacity = 0.01;
+
+            if (layerKey === 'isobar') {
+              vectorStyles = {
+                'default': { stroke: true, color: '#FFFFFF', weight: 2, opacity: baseOpacity, fill: false },
+                'features': { stroke: true, color: '#FFFFFF', weight: 2, opacity: baseOpacity, fill: false }
+              };
+            } else if (layerKey === 'wind') {
+              // NOTE: This style definition is for a simple wind streamline/contour. 
+              // Advanced wind visualization (like wind barbs or particle animation) 
+              // requires a dedicated library (like Leaflet.CanvasLayer.Field) 
+              // or pre-rendered tiles/images, not just L.vectorGrid.protobuf.
+              // For basic vector lines, we can use a different color.
+              vectorStyles = {
+                'default': { stroke: true, color: '#88E0FF', weight: 1, opacity: baseOpacity, fill: false },
+                'features': { stroke: true, color: '#88E0FF', weight: 1, opacity: baseOpacity, fill: false }
+              };
+            } else {
+              vectorStyles = {
+                'default': defaultStyle,
+                'features': defaultStyle
+              };
+            }
+
+
             newLayer = L.vectorGrid.protobuf(finalUrl, {
               opacity: 0.01,
-              vectorTileLayerStyles: {
-                'default': { fill: true, opacity: 0.01, fillOpacity: 0.01, weight: 0, color: 'inherit' },
-                'features': { fill: true, opacity: 0.01, fillOpacity: 0.01, weight: 0, color: 'inherit' }
-              },
+              vectorTileLayerStyles: vectorStyles,
               className: 'seamless-layer',
-              zIndex: zIndex // L.vectorGrid uses this property for Leaflet layer ordering
+              zIndex: zIndex
             });
           } catch (error) {
-            // Fallback to L.tileLayer
             newLayer = L.tileLayer(finalUrl, {
               opacity: 0.01, zIndex: zIndex, attribution: layerOptions.attribution, className: 'seamless-layer'
             });
           }
-        } else { // 'tile-layer' (Standard Tiles for Satellite)
+        } else { // 'tile-layer' (Standard Tiles)
           newLayer = L.tileLayer(finalUrl, {
             opacity: 0.01,
             zIndex: zIndex,
@@ -2093,11 +2258,18 @@
         const success = await layerLoadedPromise;
 
         // --- Robustness Check: Ensure this is still the requested layer/timestamp ---
-        const requestedTimestamp = isSatellite ? lastRequestedSatelliteTimestamp : lastRequestedRadarTimestamp;
-        const lastPlottedTimestamp = isSatellite ? lastSatelliteTimestamp : lastRadarTimestamp;
-        const currentType = document.getElementById(isSatellite ? 'satelliteLayerSelect' : 'radarLayer').value;
+        let requestedTimestamp;
+        if (layerKey === 'satellite') requestedTimestamp = lastRequestedSatelliteTimestamp;
+        else if (layerKey === 'radar') requestedTimestamp = lastRequestedRadarTimestamp;
+        else if (layerKey === 'isobar') requestedTimestamp = lastRequestedIsobarTimestamp;
+        else if (layerKey === 'wind') requestedTimestamp = lastRequestedWindTimestamp; // NEW
 
-        // Check if a more recent request has come in, or if the layer selection changed
+        const lastPlottedTimestamp = lastTimestampRef;
+        const currentType = (
+          document.getElementById(`${layerKey}LayerSelect`) ||
+          document.getElementById(`${layerKey}Layer`)
+        )?.value || 'none';
+
         if (currentType !== layerType || (timestamp !== null && lastPlottedTimestamp === timestamp)) {
           if (newLayer && map.hasLayer(newLayer)) {
             map.removeLayer(newLayer);
@@ -2106,16 +2278,25 @@
         }
 
         if (success) {
-          // 1. Set the new layer as the active one
-          if (isSatellite) {
+          // 1. Set the new layer as the active one and update state variables
+          if (layerKey === 'satellite') {
             satelliteLayer = newLayer;
             lastSatelliteTimestamp = timestamp !== null ? timestamp : lastSatelliteTimestamp;
             lastSatelliteType = layerType;
-          } else {
+          } else if (layerKey === 'radar') {
             radarLayer = newLayer;
             lastRadarTimestamp = timestamp !== null ? timestamp : lastRadarTimestamp;
             lastRadarType = layerType;
+          } else if (layerKey === 'isobar') {
+            isobarLayer = newLayer;
+            lastIsobarTimestamp = timestamp !== null ? timestamp : lastIsobarTimestamp;
+            lastIsobarType = layerType;
+          } else if (layerKey === 'wind') { // NEW
+            windLayer = newLayer;
+            lastWindTimestamp = timestamp !== null ? timestamp : lastWindTimestamp;
+            lastWindType = layerType;
           }
+
 
           // 2. Trigger Fade-In
           if (newLayer.getElement) {
@@ -2140,7 +2321,7 @@
               if (map.hasLayer(layerToDispose)) {
                 map.removeLayer(layerToDispose);
               }
-            }, 350); // Set timeout longer than the CSS transition (300ms) for stability
+            }, 350);
 
           }
 
@@ -2155,22 +2336,26 @@
 
 
       } catch (error) {
-        console.error(`Critical plotting error during ${isSatellite ? 'satellite' : 'radar'} layer creation/swap:`, error);
+        console.error(`Critical plotting error during ${layerKey} layer creation/swap:`, error);
         if (newLayer && map.hasLayer(newLayer)) {
           map.removeLayer(newLayer);
         }
       } finally {
-        if (isSatellite) {
+        if (layerKey === 'satellite') {
           isSatelliteAnimating = false;
-        } else {
+        } else if (layerKey === 'radar') {
           isRadarAnimating = false;
+        } else if (layerKey === 'isobar') {
+          isIsobarAnimating = false;
+        } else if (layerKey === 'wind') { // NEW
+          isWindAnimating = false;
         }
       }
     }
 
 
     /**
-     * Main function to coordinate updating both the Radar and Satellite layers.
+     * Main function to coordinate updating the map layers.
      * @param {number} timestamp - The target timestamp from the slider/current time.
      */
     async function updateMapLayers(timestamp) {
@@ -2187,6 +2372,8 @@
 
       const radarType = document.getElementById('radarLayer').value;
       const satelliteType = document.getElementById('satelliteLayerSelect').value;
+      const isobarType = document.getElementById('isobarLayerSelect').value; // NEW
+      const windType = document.getElementById('windLayerSelect').value; // NEW
 
       // --- SATELLITE LAYER LOGIC ---
       if (satelliteType === 'none') {
@@ -2194,7 +2381,7 @@
         lastSatelliteTimestamp = null;
         lastSatelliteType = null;
       } else {
-        await plotLayerIfNecessary(satelliteType, satelliteOptions, targetTimestamp, true);
+        await plotLayerIfNecessary(satelliteType, satelliteOptions, targetTimestamp, 'satellite');
       }
 
       // --- RADAR LAYER LOGIC ---
@@ -2203,7 +2390,25 @@
         lastRadarTimestamp = null;
         lastRadarType = null;
       } else {
-        await plotLayerIfNecessary(radarType, radarOptions, targetTimestamp, false);
+        await plotLayerIfNecessary(radarType, radarOptions, targetTimestamp, 'radar');
+      }
+
+      // --- WIND LAYER LOGIC (NEW) ---
+      if (windType === 'none') {
+        if (windLayer) { map.removeLayer(windLayer); windLayer = null; }
+        lastWindTimestamp = null;
+        lastWindType = null;
+      } else {
+        await plotLayerIfNecessary(windType, windOptions, targetTimestamp, 'wind');
+      }
+
+      // --- ISOBAR LAYER LOGIC ---
+      if (isobarType === 'none') {
+        if (isobarLayer) { map.removeLayer(isobarLayer); isobarLayer = null; }
+        lastIsobarTimestamp = null;
+        lastIsobarType = null;
+      } else {
+        await plotLayerIfNecessary(isobarType, isobarOptions, targetTimestamp, 'isobar');
       }
 
       isPlotting = false;
@@ -2213,20 +2418,27 @@
 
     /**
      * Generic logic to check state, fetch URLs, and call the plotting function.
+     * @param {string} layerType - The specific layer key.
+     * @param {object} optionsMap - The options map (radarOptions, satelliteOptions, isobarOptions, windOptions).
+     * @param {number} targetTimestamp - The target timestamp.
+     * @param {string} layerKey - 'satellite', 'radar', 'isobar', or 'wind'.
      */
-    async function plotLayerIfNecessary(layerType, optionsMap, targetTimestamp, isSatellite) {
+    async function plotLayerIfNecessary(layerType, optionsMap, targetTimestamp, layerKey) {
       const layerConfig = optionsMap[layerType];
 
-      // --- ADD THIS CRITICAL CHECK ---
       if (!layerConfig) {
         console.error(`Layer configuration not found for type: ${layerType}`);
-        // Also ensure the layer is removed if it somehow got this far
-        const currentLayer = isSatellite ? satelliteLayer : radarLayer;
-        if (currentLayer) {
-          map.removeLayer(currentLayer);
-          if (isSatellite) { satelliteLayer = null; } else { radarLayer = null; }
-        }
-        return; // Exit if the layer config is undefined
+        const currentLayer =
+          layerKey === 'satellite' ? satelliteLayer :
+            layerKey === 'radar' ? radarLayer :
+              layerKey === 'isobar' ? isobarLayer :
+                windLayer; // MODIFIED
+        if (currentLayer) { map.removeLayer(currentLayer); }
+        if (layerKey === 'satellite') { satelliteLayer = null; }
+        else if (layerKey === 'radar') { radarLayer = null; }
+        else if (layerKey === 'isobar') { isobarLayer = null; }
+        else if (layerKey === 'wind') { windLayer = null; } // NEW
+        return;
       }
       const interval = layerConfig.interval;
 
@@ -2236,22 +2448,50 @@
       roundedDate.setMilliseconds(0);
       const roundedTimestampMs = roundedDate.getTime();
 
-      const lastTimestamp = isSatellite ? lastSatelliteTimestamp : lastRadarTimestamp;
-      const lastType = isSatellite ? lastSatelliteType : lastRadarType;
+      let lastTimestamp, lastType, isAnimating;
+      if (layerKey === 'satellite') {
+        lastTimestamp = lastSatelliteTimestamp;
+        lastType = lastSatelliteType;
+        isAnimating = isSatelliteAnimating;
+      } else if (layerKey === 'radar') {
+        lastTimestamp = lastRadarTimestamp;
+        lastType = lastRadarType;
+        isAnimating = isRadarAnimating;
+      } else if (layerKey === 'isobar') { // Isobar
+        lastTimestamp = lastIsobarTimestamp;
+        lastType = lastIsobarType;
+        isAnimating = isIsobarAnimating;
+      } else if (layerKey === 'wind') { // NEW: Wind
+        lastTimestamp = lastWindTimestamp;
+        lastType = lastWindType;
+        isAnimating = isWindAnimating;
+      } else {
+        return;
+      }
 
       if (lastTimestamp === roundedTimestampMs && lastType === layerType) {
         return; // Prevents re-plotting
       }
+
       // Set the requested timestamp tracking variables
-      if (isSatellite) {
-        if (isSatelliteAnimating) return;
+      if (layerKey === 'satellite') {
+        if (isAnimating) return;
         isSatelliteAnimating = true;
         lastRequestedSatelliteTimestamp = roundedTimestampMs;
-      } else {
-        if (isRadarAnimating) return;
+      } else if (layerKey === 'radar') {
+        if (isAnimating) return;
         isRadarAnimating = true;
         lastRequestedRadarTimestamp = roundedTimestampMs;
+      } else if (layerKey === 'isobar') {
+        if (isAnimating) return;
+        isIsobarAnimating = true;
+        lastRequestedIsobarTimestamp = roundedTimestampMs;
+      } else if (layerKey === 'wind') { // NEW
+        if (isAnimating) return;
+        isWindAnimating = true;
+        lastRequestedWindTimestamp = roundedTimestampMs;
       }
+
 
       try {
         let finalUrl = null;
@@ -2281,22 +2521,33 @@
         }
 
         if (finalUrl) {
-          await plotMainLayer(finalUrl, layerType, finalTimestamp, isSatellite);
+          await plotMainLayer(finalUrl, layerType, finalTimestamp, layerKey);
         } else {
           // Failed to find any URL, ensure layer is removed if one was present
-          const currentLayer = isSatellite ? satelliteLayer : radarLayer;
+          const currentLayer =
+            layerKey === 'satellite' ? satelliteLayer :
+              layerKey === 'radar' ? radarLayer :
+                layerKey === 'isobar' ? isobarLayer :
+                  windLayer; // MODIFIED
           if (currentLayer) {
             map.removeLayer(currentLayer);
-            if (isSatellite) { satelliteLayer = null; } else { radarLayer = null; }
+            if (layerKey === 'satellite') { satelliteLayer = null; }
+            else if (layerKey === 'radar') { radarLayer = null; }
+            else if (layerKey === 'isobar') { isobarLayer = null; }
+            else if (layerKey === 'wind') { windLayer = null; } // NEW
           }
         }
       } catch (error) {
         console.error(`Error in plotLayerIfNecessary for ${layerType}:`, error);
       } finally {
-        if (isSatellite) {
+        if (layerKey === 'satellite') {
           isSatelliteAnimating = false;
-        } else {
+        } else if (layerKey === 'radar') {
           isRadarAnimating = false;
+        } else if (layerKey === 'isobar') {
+          isIsobarAnimating = false;
+        } else if (layerKey === 'wind') { // NEW
+          isWindAnimating = false;
         }
       }
     }
@@ -2324,9 +2575,29 @@
       lastSatelliteType = null;
     }
 
+    function clearIsobarLayers() { // NEW
+      if (isobarLayer) {
+        map.removeLayer(isobarLayer);
+        isobarLayer = null;
+      }
+      lastIsobarTimestamp = null;
+      lastIsobarType = null;
+    }
+
+    function clearWindLayers() { // NEW
+      if (windLayer) {
+        map.removeLayer(windLayer);
+        windLayer = null;
+      }
+      lastWindTimestamp = null;
+      lastWindType = null;
+    }
+
     function updateLayerOpacities() {
       const radarOpacity = parseFloat(document.getElementById('radarOpacity')?.value || 0.8);
       const satelliteOpacity = parseFloat(document.getElementById('satelliteOpacity')?.value || 0.8);
+      const isobarOpacity = parseFloat(document.getElementById('isobarOpacity')?.value || 0.8); // NEW
+      const windOpacity = parseFloat(document.getElementById('windOpacity')?.value || 0.8); // NEW
 
       // Apply radar layer opacity
       if (radarLayer) {
@@ -2341,7 +2612,6 @@
             if (imgElement) imgElement.style.opacity = radarOpacity;
           }
         }
-        // Note: For vector tiles, a full re-plot (triggered by next slider change) is needed to update styles
       }
 
       // Apply satellite layer opacity
@@ -2351,6 +2621,26 @@
 
         if (isTileLayer) {
           satelliteLayer.setOpacity(satelliteOpacity);
+        }
+      }
+
+      // Apply isobar layer opacity (NEW)
+      if (isobarLayer) {
+        if (isobarLayer.setOpacity) {
+          isobarLayer.setOpacity(isobarOpacity);
+        } else if (isobarLayer.getElement) {
+          const imgElement = isobarLayer.getElement();
+          if (imgElement) imgElement.style.opacity = isobarOpacity;
+        }
+      }
+
+      // Apply wind layer opacity (NEW)
+      if (windLayer) {
+        if (windLayer.setOpacity) {
+          windLayer.setOpacity(windOpacity);
+        } else if (windLayer.getElement) {
+          const imgElement = windLayer.getElement();
+          if (imgElement) imgElement.style.opacity = windOpacity;
         }
       }
 
@@ -2364,14 +2654,20 @@
 
       const radarTypeElement = document.getElementById('radarLayer');
       const satelliteTypeElement = document.getElementById('satelliteLayerSelect');
+      const isobarTypeElement = document.getElementById('isobarLayerSelect'); // NEW
+      const windTypeElement = document.getElementById('windLayerSelect'); // NEW
 
       const isRadarEnabled = radarTypeElement.value !== 'none';
       const isSatelliteEnabled = satelliteTypeElement.value !== 'none';
+      const isIsobarEnabled = isobarTypeElement.value !== 'none'; // NEW
+      const isWindEnabled = windTypeElement.value !== 'none'; // NEW
 
       // CASE 1: Nothing enabled → remove everything
-      if (!isRadarEnabled && !isSatelliteEnabled) {
+      if (!isRadarEnabled && !isSatelliteEnabled && !isIsobarEnabled && !isWindEnabled) { // MODIFIED
         clearRadarLayers();
         clearSatelliteLayers();
+        clearIsobarLayers(); // NEW
+        clearWindLayers(); // NEW
         updateLegend();
         return;
       }
@@ -2417,33 +2713,34 @@
     }
 
     function radarLayerTypeHandler() {
-      // 1. Force state reset to null to guarantee plot logic runs
       lastRadarTimestamp = null;
       lastRadarType = null;
-
-      // 2. Eagerly remove the existing layer before fetching a new one.
-      // This helps prevent race conditions and ensures visual feedback.
       clearRadarLayers();
-
-      // Get the timestamp from the slider or current time
       const timestamp = getCurrentSliderTimestamp();
-
-      // Force the map to update immediately with the current time/slider value.
       triggerMapUpdate(timestamp, true);
     }
 
     function satelliteLayerTypeHandler() {
-      // 1. Force state reset to null to guarantee plot logic runs
       lastSatelliteTimestamp = null;
       lastSatelliteType = null;
-
-      // 2. Eagerly remove the existing layer before fetching a new one.
       clearSatelliteLayers();
-
-      // Get the timestamp from the slider or current time
       const timestamp = getCurrentSliderTimestamp();
+      triggerMapUpdate(timestamp, true);
+    }
 
-      // Force the map to update immediately with the current time/slider value.
+    function isobarLayerTypeHandler() { // NEW
+      lastIsobarTimestamp = null;
+      lastIsobarType = null;
+      clearIsobarLayers();
+      const timestamp = getCurrentSliderTimestamp();
+      triggerMapUpdate(timestamp, true);
+    }
+
+    function windLayerTypeHandler() { // NEW
+      lastWindTimestamp = null;
+      lastWindType = null;
+      clearWindLayers();
+      const timestamp = getCurrentSliderTimestamp();
       triggerMapUpdate(timestamp, true);
     }
 
@@ -2453,8 +2750,12 @@
       const timeSlider = document.getElementById('history-slider');
       const radarOpacitySlider = document.getElementById('radarOpacity');
       const satelliteOpacitySlider = document.getElementById('satelliteOpacity');
+      const isobarOpacitySlider = document.getElementById('isobarOpacity'); // NEW
+      const windOpacitySlider = document.getElementById('windOpacity'); // NEW
       const radarLayerType = document.getElementById('radarLayer');
-      const satelliteLayerSelect = document.getElementById('satelliteLayerSelect'); // NEW ID
+      const satelliteLayerSelect = document.getElementById('satelliteLayerSelect');
+      const isobarLayerSelect = document.getElementById('isobarLayerSelect'); // NEW
+      const windLayerSelect = document.getElementById('windLayerSelect'); // NEW
 
       if (timeSlider) {
         timeSlider.addEventListener('input', handleTimeSliderChange);
@@ -2466,18 +2767,28 @@
       if (satelliteOpacitySlider) {
         satelliteOpacitySlider.addEventListener('input', updateLayerOpacities);
       }
+      if (isobarOpacitySlider) { // NEW
+        isobarOpacitySlider.addEventListener('input', updateLayerOpacities);
+      }
+      if (windOpacitySlider) { // NEW
+        windOpacitySlider.addEventListener('input', updateLayerOpacities);
+      }
 
       if (radarLayerType) {
         radarLayerType.addEventListener('change', radarLayerTypeHandler);
       }
 
-      // NEW event listener for the satellite select dropdown
       if (satelliteLayerSelect) {
         satelliteLayerSelect.addEventListener('change', satelliteLayerTypeHandler);
       }
 
-      // NOTE: The inline onchange="handleRadarChange();" in the HTML is now obsolete 
-      // and should be removed from the HTML, as the event listener above handles it.
+      if (isobarLayerSelect) { // NEW
+        isobarLayerSelect.addEventListener('change', isobarLayerTypeHandler);
+      }
+
+      if (windLayerSelect) { // NEW
+        windLayerSelect.addEventListener('change', windLayerTypeHandler);
+      }
 
       // Initial Load - Set up the UI and trigger the first map update
       updateLegend(); // Initialize opacity text display
@@ -2487,13 +2798,6 @@
         triggerMapUpdate(Date.now());
       }
     });
-
-
-
-
-
-
-
 
 
 
