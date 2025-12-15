@@ -56,10 +56,12 @@
       cursor: pointer;
       font-size: 0.9em;
     }
+
     .seamless-layer {
       /* Ensure layers can transition smoothly */
       transition: opacity 0.3s ease-in-out;
     }
+
     .draw-toolbar button:hover {
       background: #2563eb;
     }
@@ -1221,20 +1223,29 @@
       <h4>⛈️ Weather Layers</h4>
 
       <label>Radar Layer:
-        <select id="radarLayer" onchange="handleRadarChange();">
+        <select id="radarLayer" onchange="radarLayerTypeHandler();">
           <option value="uk-precip-intensity">UK High Resolution Rainfall Intensity (Smoothed)</option>
           <option value="uk-precip-intensity-pixelated">UK High Resolution Rainfall Intensity (Pixelated)</option>
           <option value="uk-precip-intensity-accessible">UK High Resolution Rainfall Intensity (Accessible)</option>
           <option value="uk-precip-type">UK High Resolution Precipitation Type</option>
           <option value="europe-precip-intensity">Europe Low Resolution Rainfall Intensity</option>
           <option value="europe-precip-type">Europe Low Resolution Precipitation Type</option>
+          <option value="global-precip-intensity">Precipitation - NASA global precipitation intensity</option>
           <option value="none">None</option>
         </select>
         <span class="tooltip">Select radar data layer</span>
       </label>
-      <label>Satellite Imagery:
-        <input type="checkbox" checked id="satelliteToggle" onchange="satelliteVisibilityHandler();">
-        <span class="tooltip">Show global satellite imagery in 10 minute intervals</span>
+      <label>Satellite Layer:
+        <select id="satelliteLayerSelect" onchange="satelliteLayerTypeHandler();">
+          <option value="global-ir">Satellite - Global infrared (GOES)</option>
+          <option value="europe-vis">Satellite - Europe visible (MeteoSat)</option>
+          <option value="europe-ir">Satellite - Europe infrared (MeteoSat)</option>
+          <option value="europe-water">Satellite - Europe water vapor (MeteoSat)</option>
+          <option value="us-visible">Satellite - North America visible (GOES)</option>
+          <option value="us-ir">Satellite - North America infrared (GOES)</option>
+          <option value="none">None</option>
+        </select>
+        <span class="tooltip">Select satellite data layer</span>
       </label>
 
       <label>Lightning Layer: <input type="checkbox" id="lightning-layer-toggle" checked
@@ -1656,806 +1667,747 @@
     var polygonNowcastLayer = L.layerGroup();
 
     const currentTime = new Date();
-    // ==========================================
-    // 1. GLOBAL VARIABLE DEFINITIONS 
-    // ==========================================
+    // Assuming 'map' is globally defined by Leaflet setup
 
-    function handleSatelliteToggle() {
-      const isEnabled = document.getElementById('satelliteToggle').checked;
-      const currentTimestamp = getCurrentSliderTimestamp();
+    // ==========================================
+    // 1. GLOBAL VARIABLE DEFINITIONS & OPTIONS
+    // ==========================================
 
-      // Force reset tracking vars so next plot thinks it's new
-      lastSatelliteTimestamp = null;
-      lastRequestedSatelliteTimestamp = null;
+    // --- RADAR OPTIONS (UNCHANGED) ---
+    const radarOptions = {
+      'uk-precip-intensity': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/radar-precip-intensity-uk-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 5 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'DTN Meteoguard'
+      },
+      'uk-precip-type': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/radar-precip-type-uk-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 5 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'DTN Meteoguard'
+      },
+      'europe-precip-intensity': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/radar-precip-intensity-europe-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 15 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'DTN Meteoguard'
+      },
+      'europe-precip-type': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/radar-precip-type-europe-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 15 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'DTN Meteoguard'
+      },
+      'uk-precip-intensity-pixelated': {
+        url: 'https://maps.consumer-digital.api.metoffice.gov.uk/wms_ob/single/high-res/rainfall_radar/${iso}.png',
+        interval: 5 * 60 * 1000,
+        type: 'image',
+        bounds: [
+          [44.02, -25],
+          [64, 16]
+        ],
+        attribution: 'Met Office'
+      },
+      'uk-precip-intensity-accessible': {
+        url: 'https://maps.consumer-digital.api.metoffice.gov.uk/wms_ob/single/high-res/rainfall_radar_accessible/${iso}.png',
+        interval: 5 * 60 * 1000,
+        type: 'image',
+        bounds: [
+          [44.02, -25],
+          [64, 16]
+        ],
+        attribution: 'Met Office'
+      },
+      'global-precip-intensity': {
 
-      if (!isEnabled) {
-        // Instant off
-        if (satelliteLayer && map.hasLayer(satelliteLayer)) {
-          map.removeLayer(satelliteLayer);
-          satelliteLayer = null;
-        }
-      }
+        url: 'https://tiles.meteoguard.dtn.com/tiles/VECTOR.obs-radar.nasa.global-imerg_01x01_intensity.default/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 15 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'NASA'
+      }
+    };
 
-      // ALWAYS force a full refresh at current time — bypass debounce
-      updateRadarLayer(currentTimestamp);  // This calls plotSatelliteLayer() internally
+    // --- SATELLITE OPTIONS (NEW) ---
+    const satelliteOptions = {
+      'global-ir': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/RASTER.obs-sat.mg.global-composite_data_ir.default/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 10 * 60 * 1000, // Example interval
+        type: 'tile-layer',
+        attribution: 'DTN Meteoguard'
+      },
+      'europe-vis': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/RASTER.obs-sat.ems.meteosat-0e_europe_proj_hrv.default/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 15 * 60 * 1000,
+        type: 'tile-layer',
+        attribution: 'DTN Meteoguard'
+      },
+      'europe-ir': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/RASTER.obs-sat.ems.meteosat-0e_europe_proj_ir108.default/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 15 * 60 * 1000,
+        type: 'tile-layer',
+        attribution: 'DTN Meteoguard'
+      },
+      'europe-water': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/RASTER.obs-sat.ems.meteosat-0e_europe_proj_wv062.default/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 15 * 60 * 1000,
+        type: 'tile-layer',
+        attribution: 'DTN Meteoguard'
+      },
+      'us-visible': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/RASTER.obs-sat.noaa.goes-east-75w.sh.s3.mg_north_america_vis.default/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 5 * 60 * 1000,
+        type: 'tile-layer',
+        attribution: 'NOAA/GOES'
+      },
+      'us-ir': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/RASTER.obs-sat.noaa.goes-east-75w.sh.s3.mg_north_america_ir.default/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 5 * 60 * 1000,
+        type: 'tile-layer',
+        attribution: 'NOAA/GOES'
+      }
+    };
 
-      updateLegend();
-    }
-    function satelliteToggleHandler() {
-      const isEnabled = document.getElementById('satelliteToggle').checked;
-      const timeSlider = document.getElementById('history-slider');
+    // --- GLOBAL STATE VARIABLES ---
+    let radarLayer = null;
+    let satelliteLayer = null;
+    let isPlotting = false; // Used for radar only
+    let lastRadarTimestamp = null;
+    let lastRadarType = null;
+    let lastSatelliteTimestamp = null;
+    let lastSatelliteType = null; // NEW: Track the satellite type
 
-      // Get the current timestamp using the slider logic or Date.now() if no slider
-      let timestamp = Date.now();
-      if (timeSlider) {
-        // Find the most recently calculated timestamp to avoid recalculating the slider
-        // In a real setup, getCurrentSliderTimestamp() should return this value.
-        // We call the existing radarLayerTypeHandler to get the timestamp and trigger the map update.
-        radarLayerTypeHandler(); // This calls the debounced triggerMapUpdate(timestamp)
-      } else {
-        // If no slider, just update at the current time, but force it to run immediately.
-        triggerMapUpdate.call(null, timestamp, true); // Pass 'true' to force immediate execution
-      }
+    let isSatelliteAnimating = false;
+    let isRadarAnimating = false;
+    let lastRequestedRadarTimestamp = null; // New tracking for radar to mirror satellite logic
+    let lastRequestedSatelliteTimestamp = null; // Renamed to keep for clarity
 
-      if (!isEnabled) {
-        // --- INSTANT OFF: Always remove the layer immediately on uncheck ---
-        if (satelliteLayer && map.hasLayer(satelliteLayer)) {
-          map.removeLayer(satelliteLayer);
-          satelliteLayer = null;
-        }
-        lastSatelliteTimestamp = null;
-        lastRequestedSatelliteTimestamp = null;
-      }
-
-      updateLegend();
-    }
-    function handleRadarChange() {
-      const radarType = document.getElementById('radarLayer').value;
-
-      if (radarType === 'none') {
-        // Instantly remove radar
-        if (radarLayer && map.hasLayer(radarLayer)) {
-          map.removeLayer(radarLayer);
-          radarLayer = null;
-        }
-        lastRadarTimestamp = null;
-        lastRadarType = null;
-      } else {
-        // Instantly update radar at current time
-        const currentTimestamp = getCurrentSliderTimestamp();
-        updateRadarLayer(currentTimestamp);
-      }
-
-      updateLegend();
-    }
-    const radarOptions = {
-      'uk-precip-intensity': {
-        url: 'https://tiles.meteoguard.dtn.com/tiles/radar-precip-intensity-uk-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
-        interval: 5 * 60 * 1000,
-        type: 'vector-tile',
-        bounds: null
-      },
-      'uk-precip-type': {
-        url: 'https://tiles.meteoguard.dtn.com/tiles/radar-precip-type-uk-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
-        interval: 5 * 60 * 1000,
-        type: 'vector-tile',
-        bounds: null
-      },
-      'europe-precip-intensity': {
-        url: 'https://tiles.meteoguard.dtn.com/tiles/radar-precip-intensity-europe-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
-        interval: 15 * 60 * 1000,
-        type: 'vector-tile',
-        bounds: null
-      },
-      'europe-precip-type': {
-        url: 'https://tiles.meteoguard.dtn.com/tiles/radar-precip-type-europe-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
-        interval: 15 * 60 * 1000,
-        type: 'vector-tile',
-        bounds: null
-      },
-      'uk-precip-intensity-pixelated': {
-        url: 'https://maps.consumer-digital.api.metoffice.gov.uk/wms_ob/single/high-res/rainfall_radar/${iso}.png',
-        interval: 5 * 60 * 1000,
-        type: 'image',
-        bounds: [[44.02, -25], [64, 16]]
-      },
-      'uk-precip-intensity-accessible': {
-        url: 'https://maps.consumer-digital.api.metoffice.gov.uk/wms_ob/single/high-res/rainfall_radar_accessible/${iso}.png',
-        interval: 5 * 60 * 1000,
-        type: 'image',
-        bounds: [[44.02, -25], [64, 16]]
-      }
-    };
-
-    // DIRECT URL: Using direct satellite URL 
-    const satelliteOptions = {
-      url: 'https://tiles.meteoguard.dtn.com/tiles/RASTER.obs-sat.mg.global-composite_data_ir.WeatherPro/${iso}/${iso}/{z}/{x}/{y}.png',
-      interval: 10 * 60 * 1000,
-      type: 'tile-layer'
-    };
-
-
-    // --- GLOBAL STATE VARIABLES ---
-    let radarLayer = null;
-    let satelliteLayer = null;
-    let isPlotting = false;
-    let lastRadarTimestamp = null;
-    let lastRadarType = null;
-    let lastSatelliteTimestamp = null;
-
-    let isSatelliteAnimating = false;
-    let lastRequestedSatelliteTimestamp = null;
-    let isRadarAnimating = false;
-
-    const sixDaysInMs = 7 * 24 * 60 * 60 * 1000;
-    let lastValidTileUrls = {};
-    const radarValidationCache = new Map();
+    const sixDaysInMs = 7 * 24 * 60 * 60 * 1000;
+    let lastValidTileUrls = {};
+    const radarValidationCache = new Map();
 
     // === NEW GLOBAL STATE: Tracks the timestamp requested by the slider ===
     let currentFilterTimestamp = null;
 
+    const RADAR_Z_INDEX = 150;
+    const SATELLITE_Z_INDEX = 140; // Satellite must be below radar
 
-    // ==========================================
-    // 2. HELPER FUNCTIONS
-    // ==========================================
+    // ==========================================
+    // 2. HELPER FUNCTIONS
+    // ==========================================
 
-    // --- DEBOUNCE FUNCTION ---
-    function debounce(func, delay) {
-      let timeoutId;
-      return function (/* timestamp */ ...args) {
-        const context = this;
-        const forceExecute = args.length > 1 && args[1] === true; 
+    // --- DEBOUNCE FUNCTION (UNCHANGED) ---
+    // --- DEBOUNCE FUNCTION (Verify this section) ---
+    function debounce(func, delay) {
+      let timeoutId;
+      return function (/* timestamp */ ...args) {
+        const context = this;
+        // Check if the second argument is explicitly passed as true
+        const forceExecute = args.length > 1 && args[1] === true;
 
-        clearTimeout(timeoutId);
+        clearTimeout(timeoutId);
 
-        if (forceExecute) {
-          func.apply(context, [args[0]]); 
-          timeoutId = null;
-        } else {
-          timeoutId = setTimeout(() => {
-            func.apply(context, args);
-          }, delay);
-        }
-      };
-    }
-
-
-    function updateLegend() {
-      const radarOpacity = parseFloat(document.getElementById('radarOpacity')?.value || 0.8);
-      const satelliteOpacity = parseFloat(document.getElementById('satelliteOpacity')?.value || 0.8);
-
-      document.getElementById('opacity-value-radar').textContent = `Radar Opacity: ${radarOpacity.toFixed(1)}`;
-      document.getElementById('opacity-value-satellite').textContent = `Satellite Opacity: ${satelliteOpacity.toFixed(1)}`;
-    }
-
-    // ==========================================
-    // 3. IMAGE/TILE FETCHING LOGIC (STRICT HISTORICAL BOUNDS)
-    // ==========================================
-
-    const recentTimeThreshold = 15 * 60 * 1000;
-
-    async function fetchTileUrl(timestamp, layerConfig, isPrefetch = false) {
-      const radarType = layerConfig === satelliteOptions ? 'satellite' : Object.keys(radarOptions).find(key => radarOptions[key] === layerConfig);
-
-      if (layerConfig.type === 'tile-layer') {
-        const date = new Date(timestamp);
-        const formatISO = (d) => d.toISOString().replace(/\.\d{3}Z$/, 'Z');
-        return layerConfig.url.replace(/\${iso}/g, formatISO(date));
-      }
-
-      const cacheKey = `${radarType}_${timestamp}`;
-      if (Date.now() - timestamp < recentTimeThreshold) {
-        radarValidationCache.delete(cacheKey);
-      }
-      if (radarValidationCache.has(cacheKey)) {
-        return radarValidationCache.get(cacheKey);
-      }
-
-      const cacheAndReturn = (result) => {
-        if (Date.now() - timestamp >= recentTimeThreshold) {
-          radarValidationCache.set(cacheKey, result);
-        }
-        return result;
-      };
-
-      if (typeof timestamp !== 'number' || isNaN(timestamp)) {
-        return cacheAndReturn(lastValidTileUrls[radarType] || null);
-      }
-
-      const date = new Date(timestamp);
-      const interval = layerConfig.interval || 5 * 60 * 1000;
-
-      date.setMinutes(Math.floor(date.getMinutes() / (interval / 60 / 1000)) * (interval / 60 / 1000));
-      date.setSeconds(0);
-      date.setMilliseconds(0);
-
-      let minTime = new Date(Date.now() - sixDaysInMs);
-      const formatISO = (d) => d.toISOString().replace(/\.\d{3}Z$/, 'Z');
-      
-
-        // --- ENFORCED LOGIC: Determine search bounds based on current filter time ---
-        // If viewing historical data, limit searches to immediate past for stability.
-        let maxAttempts = layerConfig.type === 'image' ? 4 : 288;
-        let isHistoricalView = currentFilterTimestamp && (Date.now() - currentFilterTimestamp) > recentTimeThreshold;
-        let currentTimeCheck = new Date(date);
-
-        if (isHistoricalView) {
-            // In historical mode, only check the exact time requested and a few times before it.
-            maxAttempts = 3; 
+        if (forceExecute) {
+          func.apply(context, [args[0]]); // Execute immediately
+          timeoutId = null;
         } else {
-            // If viewing "Now" or near-recent past, check aggressively backwards.
-            maxAttempts = layerConfig.type === 'image' ? 4 : 288;
+          timeoutId = setTimeout(() => { // Execute after delay
+            func.apply(context, args);
+          }, delay);
+        }
+      };
+    }
+
+
+    function updateLegend() {
+      const radarOpacity = parseFloat(document.getElementById('radarOpacity')?.value || 0.8);
+      const satelliteOpacity = parseFloat(document.getElementById('satelliteOpacity')?.value || 0.8);
+
+      document.getElementById('opacity-value-radar').textContent = `Radar Opacity: ${radarOpacity.toFixed(1)}`;
+      document.getElementById('opacity-value-satellite').textContent = `Satellite Opacity: ${satelliteOpacity.toFixed(1)}`;
+    }
+
+    // ==========================================
+    // 3. IMAGE/TILE FETCHING LOGIC (MODIFIED)
+    // ==========================================
+
+    const recentTimeThreshold = 15 * 60 * 1000;
+
+    async function fetchTileUrl(timestamp, layerConfig) {
+      // Determine the key for lastValidTileUrls and cache (either a radar or satellite type string)
+      let layerTypeKey;
+      if (Object.values(radarOptions).includes(layerConfig)) {
+        layerTypeKey = Object.keys(radarOptions).find(key => radarOptions[key] === layerConfig);
+      } else if (Object.values(satelliteOptions).includes(layerConfig)) {
+        layerTypeKey = Object.keys(satelliteOptions).find(key => satelliteOptions[key] === layerConfig);
+      } else {
+        return null; // Should not happen
+      }
+
+      if (layerConfig.type === 'tile-layer') {
+        const date = new Date(timestamp);
+        const formatISO = (d) => d.toISOString().replace(/\.\d{3}Z$/, 'Z');
+        // No validation check needed for standard tile layers, just construct the URL
+        return layerConfig.url.replace(/\${iso}/g, formatISO(date));
+      }
+
+      // --- Validation/Cache Logic for Image and Vector-Tile Layers ---
+      const cacheKey = `${layerTypeKey}_${timestamp}`;
+      if (Date.now() - timestamp < recentTimeThreshold) {
+        radarValidationCache.delete(cacheKey);
+      }
+      if (radarValidationCache.has(cacheKey)) {
+        return radarValidationCache.get(cacheKey);
+      }
+
+      const cacheAndReturn = (result) => {
+        if (Date.now() - timestamp >= recentTimeThreshold) {
+          radarValidationCache.set(cacheKey, result);
+        }
+        return result;
+      };
+
+      if (typeof timestamp !== 'number' || isNaN(timestamp)) {
+        return cacheAndReturn(lastValidTileUrls[layerTypeKey] || null);
+      }
+
+      const date = new Date(timestamp);
+      const interval = layerConfig.interval || 5 * 60 * 1000;
+
+      date.setMinutes(Math.floor(date.getMinutes() / (interval / 60 / 1000)) * (interval / 60 / 1000));
+      date.setSeconds(0);
+      date.setMilliseconds(0);
+
+      let minTime = new Date(Date.now() - sixDaysInMs);
+      const formatISO = (d) => d.toISOString().replace(/\.\d{3}Z$/, 'Z');
+
+
+      // --- ENFORCED LOGIC: Determine search bounds based on current filter time ---
+      let maxAttempts = layerConfig.type === 'image' ? 4 : 288;
+      let isHistoricalView = currentFilterTimestamp && (Date.now() - currentFilterTimestamp) > recentTimeThreshold;
+      let currentTimeCheck = new Date(date);
+
+      if (isHistoricalView) {
+        maxAttempts = 3;
+      } else {
+        maxAttempts = layerConfig.type === 'image' ? 4 : 288;
+      }
+
+
+      if (layerConfig.type === 'image') {
+        for (let attempt = 0; attempt < maxAttempts && currentTimeCheck >= minTime; attempt++) {
+          const url = layerConfig.url.replace(/\${iso}/g, formatISO(currentTimeCheck));
+          const img = new Image();
+          img.src = url;
+
+          const isValid = await new Promise((resolve) => {
+            img.onload = () => resolve(true);
+            img.onerror = () => resolve(false);
+            setTimeout(() => resolve(false), 5000);
+          });
+
+          if (isValid) {
+            lastValidTileUrls[layerTypeKey] = url;
+            return cacheAndReturn(url);
+          }
+          currentTimeCheck.setMinutes(currentTimeCheck.getMinutes() - (interval / 60 / 1000));
+        }
+        return cacheAndReturn(lastValidTileUrls[layerTypeKey] || null);
+      } else {
+        // Tile Logic (Vector Tiles)
+        async function validateTile(checkTime) {
+          if (checkTime < minTime) return null;
+          const iso = formatISO(checkTime);
+          const tileUrl = layerConfig.url.replace(/\${iso}/g, iso);
+
+          const checkUrl = tileUrl.replace('{z}/{x}/{y}', '0/0/0');
+
+          for (let retry = 0; retry < 2; retry++) {
+            try {
+              const response = await fetch(checkUrl, { method: 'GET' });
+
+              if (response.ok) {
+                const arrayBuffer = await response.arrayBuffer();
+                if (arrayBuffer.byteLength > 0) {
+                  return tileUrl.replace(/\${iso}/g, iso);
+                }
+              }
+            } catch (error) {
+              // Ignore error
+            }
+          }
+          return null;
+        }
+
+        for (let i = 0; i < maxAttempts; i++) {
+          const checkTime = new Date(date.getTime() - i * interval);
+          const tileUrl = await validateTile(checkTime);
+          if (tileUrl) {
+            lastValidTileUrls[layerTypeKey] = tileUrl;
+            return cacheAndReturn(tileUrl);
+          }
+        }
+
+        if (lastValidTileUrls[layerTypeKey]) {
+          return cacheAndReturn(lastValidTileUrls[layerTypeKey]);
+        }
+
+        return cacheAndReturn(null);
+      }
+    }
+
+    // ==========================================
+    // 4. MAIN UPDATE FUNCTIONS (UNIFIED)
+    // ==========================================
+
+    /**
+     * Plots either the Radar or Satellite layer with an atomic fade-swap.
+     * @param {string} finalUrl - The pre-validated tile URL.
+     * @param {string} layerType - The specific radar or satellite key (e.g., 'us-visible').
+     * @param {number|null} timestamp - The rounded timestamp of the plotted data.
+     * @param {boolean} isSatellite - Flag to denote if this is the satellite layer.
+     */
+    async function plotMainLayer(finalUrl, layerType, timestamp, isSatellite) {
+      const layerOptions = isSatellite ? satelliteOptions[layerType] : radarOptions[layerType];
+      const zIndex = isSatellite ? SATELLITE_Z_INDEX : RADAR_Z_INDEX;
+      const currentOpacity = parseFloat(document.getElementById(isSatellite ? 'satelliteOpacity' : 'radarOpacity')?.value || 0.8);
+
+      let layerToDispose = isSatellite ? satelliteLayer : radarLayer;
+      let newLayer = null;
+
+      try {
+        // --- Layer Creation ---
+        if (layerOptions.type === 'image') {
+          newLayer = L.imageOverlay(finalUrl, layerOptions.bounds, {
+            opacity: 0.01,
+            zIndex: zIndex,
+            attribution: layerOptions.attribution,
+            className: 'seamless-layer'
+          });
+        } else if (layerOptions.type === 'vector-tile') {
+          try {
+            newLayer = L.vectorGrid.protobuf(finalUrl, {
+              opacity: 0.01,
+              vectorTileLayerStyles: {
+                'default': { fill: true, opacity: 0.01, fillOpacity: 0.01, weight: 0, color: 'inherit' },
+                'features': { fill: true, opacity: 0.01, fillOpacity: 0.01, weight: 0, color: 'inherit' }
+              },
+              className: 'seamless-layer',
+              zIndex: zIndex // L.vectorGrid uses this property for Leaflet layer ordering
+            });
+          } catch (error) {
+            // Fallback to L.tileLayer
+            newLayer = L.tileLayer(finalUrl, {
+              opacity: 0.01, zIndex: zIndex, attribution: layerOptions.attribution, className: 'seamless-layer'
+            });
+          }
+        } else { // 'tile-layer' (Standard Tiles for Satellite)
+          newLayer = L.tileLayer(finalUrl, {
+            opacity: 0.01,
+            zIndex: zIndex,
+            attribution: layerOptions.attribution,
+            tms: true,
+            tileSize: 256,
+            className: 'seamless-layer'
+          });
+        }
+        if (!newLayer) return;
+
+        newLayer.addTo(map);
+
+        // --- Wait for Layer Load ---
+        const layerLoadedPromise = new Promise(resolve => {
+          const timeout = setTimeout(() => { resolve(true); }, 1000); // Max wait time
+
+          newLayer.once('load', () => {
+            clearTimeout(timeout);
+            resolve(true);
+          });
+          newLayer.once('error', () => {
+            clearTimeout(timeout);
+            resolve(false);
+          });
+        });
+
+        const success = await layerLoadedPromise;
+
+        // --- Robustness Check: Ensure this is still the requested layer/timestamp ---
+        const requestedTimestamp = isSatellite ? lastRequestedSatelliteTimestamp : lastRequestedRadarTimestamp;
+        const lastPlottedTimestamp = isSatellite ? lastSatelliteTimestamp : lastRadarTimestamp;
+        const currentType = document.getElementById(isSatellite ? 'satelliteLayerSelect' : 'radarLayer').value;
+
+        // Check if a more recent request has come in, or if the layer selection changed
+        if (currentType !== layerType || (timestamp !== null && lastPlottedTimestamp === timestamp)) {
+          if (newLayer && map.hasLayer(newLayer)) {
+            map.removeLayer(newLayer);
+          }
+          return;
+        }
+
+        if (success) {
+          // 1. Set the new layer as the active one
+          if (isSatellite) {
+            satelliteLayer = newLayer;
+            lastSatelliteTimestamp = timestamp !== null ? timestamp : lastSatelliteTimestamp;
+            lastSatelliteType = layerType;
+          } else {
+            radarLayer = newLayer;
+            lastRadarTimestamp = timestamp !== null ? timestamp : lastRadarTimestamp;
+            lastRadarType = layerType;
+          }
+
+          // 2. Trigger Fade-In
+          if (newLayer.getElement) {
+            const imgElement = newLayer.getElement();
+            if (imgElement) imgElement.style.opacity = currentOpacity;
+          } else if (newLayer.setOpacity) {
+            newLayer.setOpacity(currentOpacity);
+          }
+
+
+          // 3. Trigger Fade-Out and Deferred Removal of old layer
+          if (layerToDispose && map.hasLayer(layerToDispose)) {
+            // Trigger the fade-out on the old layer's element
+            if (layerToDispose.getElement) {
+              const oldImgElement = layerToDispose.getElement();
+              if (oldImgElement) oldImgElement.style.opacity = 0;
+            } else if (layerToDispose.setOpacity) {
+              layerToDispose.setOpacity(0);
+            }
+
+            setTimeout(() => {
+              if (map.hasLayer(layerToDispose)) {
+                map.removeLayer(layerToDispose);
+              }
+            }, 350); // Set timeout longer than the CSS transition (300ms) for stability
+
+          }
+
+          lastValidTileUrls[layerType] = finalUrl;
+
+        } else {
+          // Cleanup on failure
+          if (newLayer && map.hasLayer(newLayer)) {
+            map.removeLayer(newLayer);
+          }
         }
 
 
-      if (layerConfig.type === 'image') {
-        for (let attempt = 0; attempt < maxAttempts && currentTimeCheck >= minTime; attempt++) {
-          const url = layerConfig.url.replace(/\${iso}/g, formatISO(currentTimeCheck));
-          const img = new Image();
-          img.src = url;
-
-          const isValid = await new Promise((resolve) => {
-            img.onload = () => resolve(true);
-            img.onerror = () => resolve(false);
-            setTimeout(() => resolve(false), 5000);
-          });
-
-          if (isValid) {
-            lastValidTileUrls[radarType] = url;
-            return cacheAndReturn(url);
-          }
-          currentTimeCheck.setMinutes(currentTimeCheck.getMinutes() - (interval / 60 / 1000));
-        }
-        return cacheAndReturn(lastValidTileUrls[radarType] || null);
-      } else {
-        // Tile Logic (Vector Tiles)
-        async function validateTile(checkTime) {
-          if (checkTime < minTime) return null; 
-          const iso = formatISO(checkTime);
-          const tileUrl = layerConfig.url.replace(/\${iso}/g, iso);
-
-          const checkUrl = tileUrl.replace('{z}/{x}/{y}', '0/0/0');
-
-          for (let retry = 0; retry < 2; retry++) {
-            try {
-              const response = await fetch(checkUrl, { method: 'GET' });
-
-              if (response.ok) {
-                const arrayBuffer = await response.arrayBuffer();
-                if (arrayBuffer.byteLength > 0) {
-                  return tileUrl.replace(/\${iso}/g, iso);
-                }
-              }
-            } catch (error) {
-              // Ignore error
-            }
-          }
-          return null;
-        }
-
-        for (let i = 0; i < maxAttempts; i++) {
-          // NOTE: We use date (the rounded original timestamp) and subtract 'i' intervals.
-          const checkTime = new Date(date.getTime() - i * interval);
-          const tileUrl = await validateTile(checkTime);
-          if (tileUrl) {
-            lastValidTileUrls[radarType] = tileUrl;
-            return cacheAndReturn(tileUrl);
-          }
-        }
-
-        if (lastValidTileUrls[radarType]) {
-          return cacheAndReturn(lastValidTileUrls[radarType]);
-        }
-
-        return cacheAndReturn(null);
-      }
-    }
-
-    // ==========================================
-    // 4. MAIN UPDATE FUNCTIONS
-    // ==========================================
-
-    // --- UPDATED: Includes Atomic Fade-Swap Logic ---
-    async function plotSatelliteLayer(timestamp) {
-      const isEnabled = document.getElementById('satelliteToggle')?.checked;
-      const layerToDispose = satelliteLayer; // The layer currently visible
-
-      const interval = satelliteOptions.interval;
-      const roundedDate = new Date(timestamp);
-      roundedDate.setMinutes(Math.floor(roundedDate.getMinutes() / (interval / 60 / 1000)) * (interval / 60 / 1000));
-      roundedDate.setSeconds(0);
-      roundedDate.setMilliseconds(0);
-      const roundedTimestampMs = roundedDate.getTime();
-
-      lastRequestedSatelliteTimestamp = roundedTimestampMs;
-
-      if (!isEnabled) {
-        if (satelliteLayer && map.hasLayer(satelliteLayer)) {
-          map.removeLayer(satelliteLayer);
-          satelliteLayer = null;
-        }
-        lastSatelliteTimestamp = null;
-        lastRequestedSatelliteTimestamp = null;
-        return;
-      }
-
-      if (lastSatelliteTimestamp === roundedTimestampMs && satelliteLayer) return;
-
-      if (isSatelliteAnimating) {
-        return;
-      }
-
-      isSatelliteAnimating = true;
-      let newSatelliteLayer = null;
-
-      try {
-        const finalUrl = await fetchTileUrl(roundedTimestampMs, satelliteOptions);
-
-        if (!finalUrl) {
-            // Failed to find URL, if old layer exists, leave it.
-          return;
-        }
-
-        const currentSatelliteOpacity = parseFloat(document.getElementById('satelliteOpacity')?.value || 0.8);
-        const SATELLITE_Z_INDEX = 140;
-
-        newSatelliteLayer = L.tileLayer(finalUrl, {
-          opacity: 0, // Start invisible 
-          zIndex: SATELLITE_Z_INDEX,
-          attribution: 'DTN Meteoguard',
-          tms: true,
-          tileSize: 256,
-          className: 'seamless-layer' // CRITICAL CSS CLASS
-        });
-
-        newSatelliteLayer.addTo(map);
-
-        const layerLoadedPromise = new Promise(resolve => {
-          const timeout = setTimeout(() => {
-            resolve(true); // Resolve after timeout even if 'load' didn't fire
-          }, 1000);
-
-          newSatelliteLayer.once('load', () => {
-            clearTimeout(timeout);
-            resolve(true);
-          });
-          newSatelliteLayer.once('error', () => {
-            clearTimeout(timeout);
-            resolve(false);
-          });
-        });
-
-        const success = await layerLoadedPromise;
-
-        if (roundedTimestampMs === lastRequestedSatelliteTimestamp) {
-          if (success) {
-            // Atomic Swap for Satellite
-            satelliteLayer = newSatelliteLayer; 
-            
-                // 1. Trigger Fade-In for the new layer
-            satelliteLayer.setOpacity(currentSatelliteOpacity);
-
-                // 2. Trigger Fade-Out and Deferred Removal of old layer
-            if (layerToDispose && map.hasLayer(layerToDispose)) {
-              layerToDispose.setOpacity(0); // Trigger fade-out
-
-              setTimeout(() => {
-                if (map.hasLayer(layerToDispose)) {
-                  map.removeLayer(layerToDispose);
-                }
-              }, 250); // 250ms is slightly longer than the 200ms CSS transition
-            }
-
-            lastSatelliteTimestamp = roundedTimestampMs;
-          } else {
-            if (newSatelliteLayer && map.hasLayer(newSatelliteLayer)) {
-              map.removeLayer(newSatelliteLayer);
-            }
-          }
-        } else {
-          // Request cancelled/new request initiated - remove the newly loaded layer
-          if (newSatelliteLayer && map.hasLayer(newSatelliteLayer)) {
-            map.removeLayer(newSatelliteLayer);
-          }
-        }
-
-      } catch (error) {
-        console.error("Critical error during satellite layer creation:", error);
-        if (newSatelliteLayer && map.hasLayer(newSatelliteLayer)) {
-          map.removeLayer(newSatelliteLayer);
-        }
-      } finally {
-        isSatelliteAnimating = false;
-      }
-    }
-
-
-    async function updateRadarLayer(timestamp) {
-      if (isPlotting) return;
-
-      const radarType = document.getElementById('radarLayer').value;
-      const PROCESSING_DELAY_MS = 5 * 60 * 1000;
-
-      let targetTimestamp = timestamp;
-      const timeSlider = document.getElementById('history-slider');
-
-      if (timeSlider && timeSlider.value === timeSlider.max) {
-        targetTimestamp = Date.now() - PROCESSING_DELAY_MS;
-      }
-
-      await plotSatelliteLayer(targetTimestamp);
-
-      if (radarType === 'none') {
-        if (radarLayer) {
-          map.removeLayer(radarLayer);
-          radarLayer = null;
-        }
-        lastRadarTimestamp = null;
-        updateLegend();
-        return;
-      }
-
-      const layerConfig = radarOptions[radarType];
-      const interval = layerConfig.interval;
-
-      const roundedDate = new Date(targetTimestamp);
-      roundedDate.setMinutes(Math.floor(roundedDate.getMinutes() / (interval / 60 / 1000)) * (interval / 60 / 1000));
-      roundedDate.setSeconds(0);
-      roundedDate.setMilliseconds(0);
-      const roundedTimestampMs = roundedDate.getTime();
-
-      if (lastRadarTimestamp === roundedTimestampMs && lastRadarType === radarType) return;
-
-      if (isRadarAnimating) return;
-      isRadarAnimating = true;
-
-      isPlotting = true;
-
-      try {
-        // We only check the target time and the two immediate prefetch times.
-        const radarUrls = await Promise.all([
-          fetchTileUrl(roundedTimestampMs, layerConfig).catch(() => null),
-          fetchTileUrl(roundedTimestampMs - interval, layerConfig, true).catch(() => null),
-          fetchTileUrl(roundedTimestampMs - 2 * interval, layerConfig, true).catch(() => null)
-        ]);
-
-        const [currentRadarUrl, previousRadarUrl1, previousRadarUrl2] = radarUrls;
-
-        let finalUrl = currentRadarUrl;
-        let finalTimestamp = roundedTimestampMs;
-
-        if (!finalUrl) {
-          if (previousRadarUrl1) {
-            finalUrl = previousRadarUrl1;
-            finalTimestamp = roundedTimestampMs - interval;
-          } else if (previousRadarUrl2) {
-            finalUrl = previousRadarUrl2;
-            finalTimestamp = roundedTimestampMs - 2 * interval;
-          } else if (lastValidTileUrls[radarType]) {
-            finalUrl = lastValidTileUrls[radarType];
-            // Explicitly clear the last tracked timestamp 
-            lastRadarTimestamp = null; 
-            finalTimestamp = null;
-          } else {
-            if (radarLayer) { map.removeLayer(radarLayer); radarLayer = null; }
-            updateLegend();
-            return;
-          }
-        }
-
-        await plotMainRadarLayer(finalUrl, radarType, finalTimestamp);
-
-      } catch (error) {
-        console.error("UpdateRadarLayer failed:", error);
-      } finally {
-        isPlotting = false;
-        isRadarAnimating = false;
-      }
-      updateLegend();
-    }
-
-
-    // ====================================================================
-    // 5. PLOTTING FUNCTION for MAIN RADAR (Atomic Fade-Swap)
-    // ====================================================================
-
-    async function plotMainRadarLayer(radarUrl, radarType, timestamp) {
-      const currentRadarOpacity = parseFloat(document.getElementById('radarOpacity')?.value || 0.8);
-      let newRadarLayer = null;
-      const options = radarOptions[radarType];
-
-      const RADAR_Z_INDEX = 150;
-      const layerToDispose = radarLayer; // The layer currently visible
-
-      try {
-        // --- Layer Creation ---
-        if (options.type === 'image') {
-          // L.imageOverlay is best controlled via its element style
-          newRadarLayer = L.imageOverlay(radarUrl, options.bounds, {
-            opacity: 0.01, // Set near-zero opacity to hide it initially but keep it on the map
-            zIndex: RADAR_Z_INDEX,
-            attribution: 'Met Office',
-            className: 'seamless-layer'
-          });
-        } else if (options.type === 'vector-tile') {
-          // Vector grid opacity must be handled by the library/styles, so we rely on setOpacity
-          // ... (vectorGrid creation logic - unchanged) ...
-          try {
-            newRadarLayer = L.vectorGrid.protobuf(radarUrl, {
-              // Set initial opacity low via Leaflet's property if available (will be 0 later)
-              opacity: 0.01, 
-              vectorTileLayerStyles: { 
-                'default': { fill: true, opacity: 0.01, fillOpacity: 0.01, weight: 0, color: 'inherit' }, 
-                'features': { fill: true, opacity: 0.01, fillOpacity: 0.01, weight: 0, color: 'inherit' }
-              },
-              // ... (other vector options) ...
-              className: 'seamless-layer'
-            });
-          } catch (error) {
-            // Fallback to L.tileLayer
-            newRadarLayer = L.tileLayer(radarUrl, {
-              opacity: 0.01, zIndex: RADAR_Z_INDEX, attribution: 'DTN Meteoguard', className: 'seamless-layer'
-            });
-          }
-        }
-        if (!newRadarLayer) return;
-
-        newRadarLayer.addTo(map);
-
-        // --- Wait for Layer Load ---
-        const layerLoadedPromise = new Promise(resolve => {
-          const timeout = setTimeout(() => { resolve(true); }, 500); // Wait up to 500ms
-
-          newRadarLayer.once('load', () => {
-            clearTimeout(timeout);
-            resolve(true);
-          });
-          newRadarLayer.once('error', () => {
-            clearTimeout(timeout);
-            resolve(false);
-          });
-        });
-
-        const success = await layerLoadedPromise;
-
-        if (success) {
-          // Robustness Check (unchanged)
-          if (radarType !== document.getElementById('radarLayer').value || (timestamp !== null && lastRadarTimestamp === timestamp)) {
-            if (newRadarLayer && map.hasLayer(newRadarLayer)) {
-              map.removeLayer(newRadarLayer);
-            }
-            return;
-          }
-
-
-          // 1. Set the new layer as the active one
-          radarLayer = newRadarLayer; 
-
-          // 2. Trigger Fade-In
-          if (options.type === 'image') {
-            // Explicitly set style for the quickest transition start
-            const imgElement = radarLayer.getElement();
-            if (imgElement) imgElement.style.opacity = currentRadarOpacity; 
-          } else if (radarLayer.setOpacity) {
-            // Use setOpacity for tile layers and vector grids
-            radarLayer.setOpacity(currentRadarOpacity);
-          } 
-
-
-          // 3. Trigger Fade-Out and Deferred Removal of old layer
-          if (layerToDispose && map.hasLayer(layerToDispose)) {
-                // Trigger the fade-out on the old layer's element
-                if (layerToDispose.getElement) {
-                    const oldImgElement = layerToDispose.getElement();
-                    if (oldImgElement) oldImgElement.style.opacity = 0; 
-                } else if (layerToDispose.setOpacity) {
-                    layerToDispose.setOpacity(0);
-                }
-            
-            setTimeout(() => {
-              if (map.hasLayer(layerToDispose)) {
-                map.removeLayer(layerToDispose); // Remove after fade-out completes (0.3s transition + buffer)
-              }
-            }, 350); // Set timeout longer than the CSS transition (300ms) for stability
-
-          }
-
-          lastValidTileUrls[radarType] = radarUrl;
-          lastRadarTimestamp = timestamp !== null ? timestamp : lastRadarTimestamp;
-          lastRadarType = radarType;
-
-        } else {
-          // Cleanup on failure
-          if (newRadarLayer && map.hasLayer(newRadarLayer)) {
-            map.removeLayer(newRadarLayer);
-          }
-        }
-
-
-      } catch (error) {
-        console.error("Critical plotting error during layer creation/swap:", error);
-        if (newRadarLayer && map.hasLayer(newRadarLayer)) {
-          map.removeLayer(newRadarLayer);
-        }
-      }
-    }
-
-    // ==========================================
-    // 6. UTILITY AND EVENT HANDLERS
-    // ==========================================
-
-    function clearRadarLayers() {
-      if (radarLayer) {
-        map.removeLayer(radarLayer);
-        radarLayer = null;
-      }
-      lastRadarTimestamp = null;
-      lastRadarType = null;
-    }
-
-    function updateLayerOpacities() {
-      const radarOpacity = parseFloat(document.getElementById('radarOpacity')?.value || 0.8);
-      const satelliteOpacity = parseFloat(document.getElementById('satelliteOpacity')?.value || 0.8);
-
-      // Apply radar layer opacity
-      if (radarLayer) {
-        // NOTE: We must not change opacity of vector grids here, as it overrides the internal styles.
-        // We only update the opacity on non-vector layers.
-        const radarType = document.getElementById('radarLayer').value;
+      } catch (error) {
+        console.error(`Critical plotting error during ${isSatellite ? 'satellite' : 'radar'} layer creation/swap:`, error);
+        if (newLayer && map.hasLayer(newLayer)) {
+          map.removeLayer(newLayer);
+        }
+      } finally {
+        if (isSatellite) {
+          isSatelliteAnimating = false;
+        } else {
+          isRadarAnimating = false;
+        }
+      }
+    }
+
+
+    /**
+     * Main function to coordinate updating both the Radar and Satellite layers.
+     * @param {number} timestamp - The target timestamp from the slider/current time.
+     */
+    async function updateMapLayers(timestamp) {
+      if (isPlotting) return; // Prevent concurrent updates (primarily for radar, but blocks all)
+      isPlotting = true;
+
+      const PROCESSING_DELAY_MS = 5 * 60 * 1000;
+      let targetTimestamp = timestamp;
+
+      const timeSlider = document.getElementById('history-slider');
+      if (timeSlider && timeSlider.value === timeSlider.max) {
+        targetTimestamp = Date.now() - PROCESSING_DELAY_MS;
+      }
+
+      const radarType = document.getElementById('radarLayer').value;
+      const satelliteType = document.getElementById('satelliteLayerSelect').value;
+
+      // --- SATELLITE LAYER LOGIC ---
+      if (satelliteType === 'none') {
+        if (satelliteLayer) { map.removeLayer(satelliteLayer); satelliteLayer = null; }
+        lastSatelliteTimestamp = null;
+        lastSatelliteType = null;
+      } else {
+        await plotLayerIfNecessary(satelliteType, satelliteOptions, targetTimestamp, true);
+      }
+
+      // --- RADAR LAYER LOGIC ---
+      if (radarType === 'none') {
+        if (radarLayer) { map.removeLayer(radarLayer); radarLayer = null; }
+        lastRadarTimestamp = null;
+        lastRadarType = null;
+      } else {
+        await plotLayerIfNecessary(radarType, radarOptions, targetTimestamp, false);
+      }
+
+      isPlotting = false;
+      updateLegend();
+    }
+
+
+    /**
+     * Generic logic to check state, fetch URLs, and call the plotting function.
+     */
+    async function plotLayerIfNecessary(layerType, optionsMap, targetTimestamp, isSatellite) {
+      const layerConfig = optionsMap[layerType];
+      const interval = layerConfig.interval;
+
+      const roundedDate = new Date(targetTimestamp);
+      roundedDate.setMinutes(Math.floor(roundedDate.getMinutes() / (interval / 60 / 1000)) * (interval / 60 / 1000));
+      roundedDate.setSeconds(0);
+      roundedDate.setMilliseconds(0);
+      const roundedTimestampMs = roundedDate.getTime();
+
+      const lastTimestamp = isSatellite ? lastSatelliteTimestamp : lastRadarTimestamp;
+      const lastType = isSatellite ? lastSatelliteType : lastRadarType;
+
+      if (lastTimestamp === roundedTimestampMs && lastType === layerType) {
+        return;
+      }
+      // Set the requested timestamp tracking variables
+      if (isSatellite) {
+        if (isSatelliteAnimating) return;
+        isSatelliteAnimating = true;
+        lastRequestedSatelliteTimestamp = roundedTimestampMs;
+      } else {
+        if (isRadarAnimating) return;
+        isRadarAnimating = true;
+        lastRequestedRadarTimestamp = roundedTimestampMs;
+      }
+
+      try {
+        let finalUrl = null;
+        let finalTimestamp = roundedTimestampMs;
+
+        // Fetch the target and two previous times (prefetch for robustness)
+        const urls = await Promise.all([
+          fetchTileUrl(roundedTimestampMs, layerConfig).catch(() => null),
+          fetchTileUrl(roundedTimestampMs - interval, layerConfig).catch(() => null),
+          fetchTileUrl(roundedTimestampMs - 2 * interval, layerConfig).catch(() => null)
+        ]);
+
+        const [currentUrl, previousUrl1, previousUrl2] = urls;
+
+        finalUrl = currentUrl;
+        if (!finalUrl) {
+          if (previousUrl1) {
+            finalUrl = previousUrl1;
+            finalTimestamp = roundedTimestampMs - interval;
+          } else if (previousUrl2) {
+            finalUrl = previousUrl2;
+            finalTimestamp = roundedTimestampMs - 2 * interval;
+          } else if (lastValidTileUrls[layerType]) {
+            finalUrl = lastValidTileUrls[layerType];
+            finalTimestamp = null; // Use old URL, but don't update timestamp tracking
+          }
+        }
+
+        if (finalUrl) {
+          await plotMainLayer(finalUrl, layerType, finalTimestamp, isSatellite);
+        } else {
+          // Failed to find any URL, ensure layer is removed if one was present
+          const currentLayer = isSatellite ? satelliteLayer : radarLayer;
+          if (currentLayer) {
+            map.removeLayer(currentLayer);
+            if (isSatellite) { satelliteLayer = null; } else { radarLayer = null; }
+          }
+        }
+      } catch (error) {
+        console.error(`Error in plotLayerIfNecessary for ${layerType}:`, error);
+      } finally {
+        if (isSatellite) {
+          isSatelliteAnimating = false;
+        } else {
+          isRadarAnimating = false;
+        }
+      }
+    }
+
+
+    // ==========================================
+    // 5. UTILITY AND EVENT HANDLERS
+    // ==========================================
+
+    function clearRadarLayers() {
+      if (radarLayer) {
+        map.removeLayer(radarLayer);
+        radarLayer = null;
+      }
+      lastRadarTimestamp = null;
+      lastRadarType = null;
+    }
+
+    function clearSatelliteLayers() {
+      if (satelliteLayer) {
+        map.removeLayer(satelliteLayer);
+        satelliteLayer = null;
+      }
+      lastSatelliteTimestamp = null;
+      lastSatelliteType = null;
+    }
+
+    function updateLayerOpacities() {
+      const radarOpacity = parseFloat(document.getElementById('radarOpacity')?.value || 0.8);
+      const satelliteOpacity = parseFloat(document.getElementById('satelliteOpacity')?.value || 0.8);
+
+      // Apply radar layer opacity
+      if (radarLayer) {
+        const radarType = document.getElementById('radarLayer').value;
         const isVector = radarOptions[radarType]?.type === 'vector-tile';
 
         if (!isVector) {
-            if (radarLayer.setOpacity) {
-              radarLayer.setOpacity(radarOpacity);
-            } else if (radarLayer.getElement) {
-              const imgElement = radarLayer.getElement();
-              if (imgElement) imgElement.style.opacity = radarOpacity;
-            }
-        } else {
-            // For vector grids, changing the slider requires re-creating the layer to update styles.
-            // This is handled automatically by the next slider movement triggering `updateRadarLayer`.
+          if (radarLayer.setOpacity) {
+            radarLayer.setOpacity(radarOpacity);
+          } else if (radarLayer.getElement) {
+            const imgElement = radarLayer.getElement();
+            if (imgElement) imgElement.style.opacity = radarOpacity;
+          }
         }
-      }
+        // Note: For vector tiles, a full re-plot (triggered by next slider change) is needed to update styles
+      }
 
-      // Apply satellite layer opacity
-      if (satelliteLayer) {
-        satelliteLayer.setOpacity(satelliteOpacity);
-      }
+      // Apply satellite layer opacity
+      if (satelliteLayer) {
+        const satelliteType = document.getElementById('satelliteLayerSelect').value;
+        const isTileLayer = satelliteOptions[satelliteType]?.type === 'tile-layer';
 
-      updateLegend();
-    }
+        if (isTileLayer) {
+          satelliteLayer.setOpacity(satelliteOpacity);
+        }
+      }
 
-    // Debounced function that actually calls the heavy updateRadarLayer
-    const triggerMapUpdate = debounce((timestamp) => {
-        // === NEW STATE UPDATE: CRITICAL for Historical Checks ===
-        currentFilterTimestamp = timestamp;
+      updateLegend();
+    }
 
-      const radarTypeElement = document.getElementById('radarLayer');
-      const isRadarEnabled = radarTypeElement.value !== 'none';
-      const isSatelliteEnabled = document.getElementById('satelliteToggle')?.checked;
+    // Debounced function that actually calls the heavy updateMapLayers
+    const triggerMapUpdate = debounce((timestamp) => {
+      // CRITICAL for Historical Checks
+      currentFilterTimestamp = timestamp;
 
-      // CASE 1: Nothing enabled → remove everything
-      if (!isRadarEnabled && !isSatelliteEnabled) {
-        clearRadarLayers(); // removes radar
-        if (satelliteLayer && map.hasLayer(satelliteLayer)) {
-          map.removeLayer(satelliteLayer);
-          satelliteLayer = null;
-          lastSatelliteTimestamp = null;
-        }
-        updateLegend();
-        return;
-      }
+      const radarTypeElement = document.getElementById('radarLayer');
+      const satelliteTypeElement = document.getElementById('satelliteLayerSelect');
 
-      // CASE 2: At least one layer enabled → update normally
-      updateRadarLayer(timestamp);
+      const isRadarEnabled = radarTypeElement.value !== 'none';
+      const isSatelliteEnabled = satelliteTypeElement.value !== 'none';
 
-      updateLegend();
-    }, 100);
+      // CASE 1: Nothing enabled → remove everything
+      if (!isRadarEnabled && !isSatelliteEnabled) {
+        clearRadarLayers();
+        clearSatelliteLayers();
+        updateLegend();
+        return;
+      }
 
-    function getCurrentSliderTimestamp() {
-      const historySlider = document.getElementById('history-slider');
-      if (!historySlider) return Date.now();
+      // CASE 2: At least one layer enabled → update normally
+      updateMapLayers(timestamp);
 
-      const rawValue = historySlider.value;
-      const sliderMax = parseInt(historySlider.getAttribute('max') || 100, 10);
-      const sliderValue = parseFloat(rawValue);
+      updateLegend();
+    }, 100);
 
-      const maxHistoryHours = 6;
-      const maxHistoryMs = maxHistoryHours * 60 * 60 * 1000;
-      const normalizedValue = (sliderMax - sliderValue) / sliderMax;
-      return Date.now() - normalizedValue * maxHistoryMs;
-    }
+    function getCurrentSliderTimestamp() {
+      const historySlider = document.getElementById('history-slider');
+      if (!historySlider) return Date.now();
 
+      const rawValue = historySlider.value;
+      const sliderMax = parseInt(historySlider.getAttribute('max') || 100, 10);
+      const sliderValue = parseFloat(rawValue);
 
-    function handleTimeSliderChange(event) {
-      const historySlider = event.target;
-      const timestamp = getCurrentSliderTimestamp();
-
-      const timeDisplay = document.getElementById('history-time');
-      if (timeDisplay) {
-        timeDisplay.innerText = new Date(timestamp).toLocaleString('en-GB', {
-          timeZone: 'Europe/London',
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit'
-        }) + ' BST';
-      }
-
-      triggerMapUpdate(timestamp);
-    }
-
-    function radarLayerTypeHandler() {
-      const timeSlider = document.getElementById('history-slider');
-      if (timeSlider) {
-        handleTimeSliderChange({ target: timeSlider });
-      } else {
-        triggerMapUpdate(Date.now());
-      }
-    }
-
-    function satelliteVisibilityHandler() {
-      const isEnabled = document.getElementById('satelliteToggle').checked;
-      
-      if (!isEnabled) {
-        // --- INSTANT OFF ---
-        if (satelliteLayer && map.hasLayer(satelliteLayer)) {
-          map.removeLayer(satelliteLayer);
-          satelliteLayer = null;
-        }
-        lastSatelliteTimestamp = null;
-        lastRequestedSatelliteTimestamp = null;
-        updateLegend(); 
-        return; 
-      }
-
-      // --- INSTANT ON (Bypass debounce) ---
-      lastSatelliteTimestamp = null;
-      lastRequestedSatelliteTimestamp = null;
-
-      const timestamp = getCurrentSliderTimestamp();
-
-      plotSatelliteLayer(timestamp);
-
-      updateLegend();
-    }
+      const maxHistoryHours = 6;
+      const maxHistoryMs = maxHistoryHours * 60 * 60 * 1000;
+      const normalizedValue = (sliderMax - sliderValue) / sliderMax;
+      return Date.now() - normalizedValue * maxHistoryMs;
+    }
 
 
-    // --- INITIALIZATION AND EVENT ATTACHMENT ---
-    document.addEventListener('DOMContentLoaded', () => {
-      const timeSlider = document.getElementById('history-slider');
-      const radarOpacitySlider = document.getElementById('radarOpacity');
-      const satelliteOpacitySlider = document.getElementById('satelliteOpacity');
-      const radarLayerType = document.getElementById('radarLayer');
-      const satelliteToggle = document.getElementById('satelliteToggle');
+    function handleTimeSliderChange(event) {
+      const historySlider = event.target;
+      const timestamp = getCurrentSliderTimestamp();
 
-      if (timeSlider) {
-        timeSlider.addEventListener('input', handleTimeSliderChange);
-      }
+      const timeDisplay = document.getElementById('history-time');
+      if (timeDisplay) {
+        timeDisplay.innerText = new Date(timestamp).toLocaleString('en-GB', {
+          timeZone: 'Europe/London',
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        }) + ' BST';
+      }
 
-      // Attach handler to BOTH new opacity sliders
-      if (radarOpacitySlider) {
-        radarOpacitySlider.addEventListener('input', updateLayerOpacities);
-      }
-      if (satelliteOpacitySlider) {
-        satelliteOpacitySlider.addEventListener('input', updateLayerOpacities);
-      }
+      triggerMapUpdate(timestamp);
+    }
 
-      if (radarLayerType) {
-        radarLayerType.addEventListener('change', radarLayerTypeHandler);
-      }
-      if (satelliteToggle) {
-        satelliteToggle.addEventListener('change', satelliteVisibilityHandler);
-      }
-      // Initial Load - Set up the UI and trigger the first map update
-      updateLegend(); // Initialize opacity text display
-      if (timeSlider) {
-        handleTimeSliderChange({ target: timeSlider });
-      } else {
-        triggerMapUpdate(Date.now());
-      }
-    });
+    // ...
+    function radarLayerTypeHandler() {
+      // Get the timestamp from the slider or current time
+      const timestamp = getCurrentSliderTimestamp();
+
+      // Force the map to update immediately with the current time/slider value.
+      // We skip the history display update, as the timestamp hasn't changed.
+      triggerMapUpdate(timestamp, true);
+    }
+
+    function satelliteLayerTypeHandler() {
+      // Get the timestamp from the slider or current time
+      const timestamp = getCurrentSliderTimestamp();
+
+      // Force the map to update immediately with the current time/slider value.
+      triggerMapUpdate(timestamp, true);
+    }
+    // ...
+
+
+    // --- INITIALIZATION AND EVENT ATTACHMENT ---
+    document.addEventListener('DOMContentLoaded', () => {
+      const timeSlider = document.getElementById('history-slider');
+      const radarOpacitySlider = document.getElementById('radarOpacity');
+      const satelliteOpacitySlider = document.getElementById('satelliteOpacity');
+      const radarLayerType = document.getElementById('radarLayer');
+      const satelliteLayerSelect = document.getElementById('satelliteLayerSelect'); // NEW ID
+
+      if (timeSlider) {
+        timeSlider.addEventListener('input', handleTimeSliderChange);
+      }
+
+      if (radarOpacitySlider) {
+        radarOpacitySlider.addEventListener('input', updateLayerOpacities);
+      }
+      if (satelliteOpacitySlider) {
+        satelliteOpacitySlider.addEventListener('input', updateLayerOpacities);
+      }
+
+      if (radarLayerType) {
+        radarLayerType.addEventListener('change', radarLayerTypeHandler);
+      }
+
+      // NEW event listener for the satellite select dropdown
+      if (satelliteLayerSelect) {
+        satelliteLayerSelect.addEventListener('change', satelliteLayerTypeHandler);
+      }
+
+      // NOTE: The inline onchange="handleRadarChange();" in the HTML is now obsolete 
+      // and should be removed from the HTML, as the event listener above handles it.
+
+      // Initial Load - Set up the UI and trigger the first map update
+      updateLegend(); // Initialize opacity text display
+      if (timeSlider) {
+        handleTimeSliderChange({ target: timeSlider });
+      } else {
+        triggerMapUpdate(Date.now());
+      }
+    });
+
 
 
 
@@ -4356,7 +4308,7 @@
       updateNowcast(currentFiltered);
       updateZIndex();
       updateLegend();
-      updateRadarLayer(end.getTime());
+      updateMapLayers(end.getTime());
 
       if (is3DMode) update3DView();
 
