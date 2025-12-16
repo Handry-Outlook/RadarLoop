@@ -1221,7 +1221,7 @@
 
       <div class="section"></div>
       <h4>⛈️ Weather Layers</h4>
-      <label>Radar and Weather Layer:
+      <label>Radar Layer:
         <select id="radarLayer" onchange="radarLayerTypeHandler();">
           <option value="uk-precip-intensity">UK High Resolution Rainfall Intensity (Smoothed)</option>
           <option value="uk-precip-intensity-pixelated">UK High Resolution Rainfall Intensity (Pixelated)</option>
@@ -1251,41 +1251,7 @@
           <option value="radar-reflectivity-mosaic-global-raster">Synthetic Radar - Grid (Global)</option>
           <option value="placeholder">-------------------------------------------------------------------------</option>
 
-          <option value="precip-qpe-168hrs-eu-contours">Observed Precipitation – Past 7 days Contour (Europe)</option>
-          <option value="precip-qpe-168hrs-eu-raster">Observed Precipitation – Past 7 days Grid (Europe)</option>
-          <option value="precip-qpe-72hrs-eu-contours">Observed Precipitation – Past 3 days Contour (Europe)</option>
-          <option value="precip-qpe-72hrs-eu-raster">Observed Precipitation – Past 3 days Grid (Europe)</option>
-          <option value="precip-qpe-48hrs-eu-contours">Observed Precipitation – Past 2 days Contour (Europe)</option>
-          <option value="precip-qpe-48hrs-eu-raster">Observed Precipitation – Past 2 days Grid (Europe)</option>
-          <option value="precip-qpe-24hrs-eu-contours">Observed Precipitation – Past 24h Contour (Europe)</option>
-          <option value="precip-qpe-24hrs-eu-raster">Observed Precipitation – Past 24h Grid (Europe)</option>
-          <option value="precip-qpe-1hr-eu-contours">Observed Precipitation – Past 1h Contour (Europe)</option>
-          <option value="precip-qpe-1hr-eu-raster">Observed Precipitation – Past 1h Grid (Europe)</option>
-          <option value="placeholder">-------------------------------------------------------------------------</option>
-
-          <option value="precip-qpe-168hrs-gm-contours">Observed Precipitation – Past 7 days Contour (Global)</option>
-          <option value="precip-qpe-168hrs-gm-raster">Observed Precipitation – Past 7 days Grid (Global)</option>
-          <option value="precip-qpe-72hrs-gm-contours">Observed Precipitation – Past 3 days Contour (Global)</option>
-          <option value="precip-qpe-72hrs-gm-raster">Observed Precipitation – Past 3 days Grid (Global)</option>
-          <option value="precip-qpe-48hrs-gm-contours">Observed Precipitation – Past 2 days Contour (Global)</option>
-          <option value="precip-qpe-48hrs-gm-raster">Observed Precipitation – Past 2 days Grid (Global)</option>
-          <option value="precip-qpe-24hrs-gm-contours">Observed Precipitation – Past 24h Contour (Global)</option>
-          <option value="precip-qpe-24hrs-gm-raster">Observed Precipitation – Past 24h Grid (Global)</option>
-          <option value="precip-qpe-1hr-gm-contours">Observed Precipitation – Past 1h Contour (Global)</option>
-          <option value="precip-qpe-1hr-gm-raster">Observed Precipitation – Past 1h Grid (Global)</option>
-          <option value="placeholder">-------------------------------------------------------------------------</option>
-          <option value="global-visibility">Visibility</option>
-          <option value="global-wind-speed">Wind Speed</option>
-
-          <option value="placeholder">-------------------------------------------------------------------------</option>
-
-          <option value="global-current-speed">Current Speed</option>
-          <option value="global-wave-height">Peak Wave Period</option>
-          <option value="global-wave-period">Peak Wave Period</option>
-          <option value="fcst-sea-wave-height-swell-waves-contours">Swell Waves</option>
-          <option value="fcst-sea-wave-height-swell-waves-period-contours">Swell Waves Period</option>
-          <option value="fcst-sea-wave-height-wind-waves-contours">Wind Waves</option>
-          <option value="fcst-sea-wave-height-wind-waves-period-contours">Wind Waves Period</option>
+          
 
           <option value="none">None</option>
         </select>
@@ -1302,7 +1268,6 @@
           <option value="satellite-infrared-enhanced-global-raster">Global Enhanced Infrared</option>
           <option value="satellite-visible-global-raster">Global Visible</option>
           <option value="satellite-water-vapor-global-raster">Global Water Vapor</option>
-          <option value="satellite-visible-global-raster">Global Visible</option>
           <option value="satellite-night-fog-global-raster">Global Night Fog</option>
           <option value="none">None</option>
         </select>
@@ -1319,6 +1284,14 @@
       <label>Wind Direction Layer:
         <select id="windLayerSelect">
           <option value="wind-direction">Wind direction</option>
+          <option value="fcst-manta-current-direction-grid">Current Direction</option>
+          <option value="fcst-manta-mean-wave-direction-grid">Mean Wave Direction</option>
+          <option value="fcst-manta-significant-wave-symbol-grid">Significant Wave Height Direction</option>
+          
+          <option value="fcst-manta-swell-wave-symbol-grid">Swell Wave Direction</option>
+          <option value="fcst-sea-wave-height-swell-waves-period-grid">Swell Waves Period Direction</option>
+          <option value="fcst-manta-wind-wave-symbol-grid">Wind Wave Directions</option>
+          <option value="fcst-sea-wave-height-wind-waves-period-grid">Wind Waves Period Direction</option>
           <option value="none">None</option>
         </select>
         <span class="tooltip">Select wind direction data layer</span>
@@ -1362,9 +1335,14 @@
           <option value="none">None</option>
           <option value="sfcanlys-temperature-contours">Surface Temperature</option>
           <option value="sfcanlys-wind-speed-contours">Wind Speed</option>
+          <option value="global-wind-speed">Wind Speed (Alternative)</option>
           <option value="sfcanlys-dew-point-contours">Dew Point Temperature</option>
-          <option value="sfcanlys-wet-bulb-temperature-globe-contours">Wet Bulb Globe Temperature/option>
+          <option value="sfcanlys-wet-bulb-temperature-globe-contours">Wet Bulb Globe Temperature</option>
           <option value="sfcanlys-relative-humidity-contours">Relative Humidity</option>
+          
+          <option value="global-visibility">Visibility</option>
+          
+
           <option value="sfcanlys-snow-depth-contours">Snow Depth</option>
           <option value="sfcanlys-sea-surface-temp-contours">Sea Surface Temperature</option>
           <option value="sfcanlys-uv-radiation-index-contours">UV Radiation Index</option>
@@ -1372,7 +1350,39 @@
           <option value="fcst-onefx-snowfall-last-24hrs-contours">Snowfall Last 24 Hours</option>
           <option value="fcst-onefx-ice-accretion-last-hour-contours">Ice Accretion Last 1 Hour</option>
           <option value="fcst-onefx-wet-snow-last-1hr-contours">Wet Snow Index</option>
+          <option value="placeholder">-------------------------------------------------------------------------</option>
+          <option value="precip-qpe-168hrs-eu-contours">Observed Precipitation – Past 7 days Contour (Europe)</option>
+          <option value="precip-qpe-168hrs-eu-raster">Observed Precipitation – Past 7 days Grid (Europe)</option>
+          <option value="precip-qpe-72hrs-eu-contours">Observed Precipitation – Past 3 days Contour (Europe)</option>
+          <option value="precip-qpe-72hrs-eu-raster">Observed Precipitation – Past 3 days Grid (Europe)</option>
+          <option value="precip-qpe-48hrs-eu-contours">Observed Precipitation – Past 2 days Contour (Europe)</option>
+          <option value="precip-qpe-48hrs-eu-raster">Observed Precipitation – Past 2 days Grid (Europe)</option>
+          <option value="precip-qpe-24hrs-eu-contours">Observed Precipitation – Past 24h Contour (Europe)</option>
+          <option value="precip-qpe-24hrs-eu-raster">Observed Precipitation – Past 24h Grid (Europe)</option>
+          <option value="precip-qpe-1hr-eu-contours">Observed Precipitation – Past 1h Contour (Europe)</option>
+          <option value="precip-qpe-1hr-eu-raster">Observed Precipitation – Past 1h Grid (Europe)</option>
+          <option value="placeholder">-------------------------------------------------------------------------</option>
+         
+          <option value="precip-qpe-168hrs-gm-contours">Observed Precipitation – Past 7 days Contour (Global)</option>
+          <option value="precip-qpe-168hrs-gm-raster">Observed Precipitation – Past 7 days Grid (Global)</option>
+          <option value="precip-qpe-72hrs-gm-contours">Observed Precipitation – Past 3 days Contour (Global)</option>
+          <option value="precip-qpe-72hrs-gm-raster">Observed Precipitation – Past 3 days Grid (Global)</option>
+          <option value="precip-qpe-48hrs-gm-contours">Observed Precipitation – Past 2 days Contour (Global)</option>
+          <option value="precip-qpe-48hrs-gm-raster">Observed Precipitation – Past 2 days Grid (Global)</option>
+          <option value="precip-qpe-24hrs-gm-contours">Observed Precipitation – Past 24h Contour (Global)</option>
+          <option value="precip-qpe-24hrs-gm-raster">Observed Precipitation – Past 24h Grid (Global)</option>
+          <option value="precip-qpe-1hr-gm-contours">Observed Precipitation – Past 1h Contour (Global)</option>
+          <option value="precip-qpe-1hr-gm-raster">Observed Precipitation – Past 1h Grid (Global)</option>
+          
+          <option value="placeholder">-------------------------------------------------------------------------</option>
 
+          <option value="global-current-speed">Current Speed</option>
+          <option value="global-wave-height">Peak Wave Period</option>
+          <option value="global-wave-period">Peak Wave Period</option>
+          <option value="fcst-sea-wave-height-swell-waves-contours">Swell Waves</option>
+          <option value="fcst-sea-wave-height-swell-waves-period-contours">Swell Waves Period</option>
+          <option value="fcst-sea-wave-height-wind-waves-contours">Wind Waves</option>
+          <option value="fcst-sea-wave-height-wind-waves-period-contours">Wind Waves Period</option>
         </select>
         <span class="tooltip">Select Observation data layer</span>
       </label>
@@ -2370,6 +2380,209 @@
       },
     };
     const observationOptions = {
+      'precip-qpe-168hrs-eu-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-168hrs-eu-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-168hrs-eu-raster': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-168hrs-eu-raster/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'tile-layer',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-72hrs-eu-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-72hrs-eu-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-72hrs-eu-raster': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-72hrs-eu-raster/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'tile-layer',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-48hrs-eu-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-48hrs-eu-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-48hrs-eu-raster': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-48hrs-eu-raster/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'tile-layer',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-24hrs-eu-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-24hrs-eu-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-24hrs-eu-raster': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-24hrs-eu-raster/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'tile-layer',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-1hr-eu-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-1hr-eu-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-1hr-eu-raster': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-1hr-eu-raster/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'tile-layer',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-168hrs-gm-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-168hrs-gm-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-168hrs-gm-raster': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-168hrs-gm-raster/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-72hrs-gm-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-72hrs-gm-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-72hrs-gm-raster': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-72hrs-gm-raster/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-48hrs-gm-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-48hrs-gm-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-48hrs-gm-raster': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-48hrs-gm-raster/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-24hrs-gm-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-24hrs-gm-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-24hrs-gm-raster': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-24hrs-gm-raster/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-1hr-gm-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-1hr-gm-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-1hr-gm-raster': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-1hr-gm-raster/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'global-current-speed': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-manta-current-speed-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'global-wave-height': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-manta-significant-wave-height-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'global-wave-period': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-manta-peak-wave-period-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'fcst-sea-wave-height-swell-waves-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-sea-wave-height-swell-waves-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'fcst-sea-wave-height-swell-waves-period-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-sea-wave-height-swell-waves-period-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'fcst-sea-wave-height-wind-waves-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-sea-wave-height-wind-waves-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'fcst-sea-wave-height-wind-waves-period-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-sea-wave-height-wind-waves-period-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'global-visibility': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-manta-visibility-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'global-wind-speed': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-manta-wind-speed-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
       'sfcanlys-temperature-contours': {
         url: 'https://tiles.meteoguard.dtn.com/tiles/sfcanlys-temperature-contours/${iso}/${iso}/{z}/{x}/{y}.png',
         interval: 60 * 60 * 1000, // Hourly update, for example
@@ -2547,8 +2760,8 @@
         bounds: null,
         attribution: 'dtn'
       },
-      'fcst-manta-current-speed-contours': {
-        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-manta-current-speed-contours/${iso}/${iso}/{z}/{x}/{y}.png',
+      'fcst-manta-current-speed-grid': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-manta-current-speed-grid/${iso}/${iso}/{z}/{x}/{y}.png',
         interval: 60 * 60 * 1000, // Hourly update, for example
         type: 'vector-tile', // Typically vector tiles for lines/contours
         bounds: null,
