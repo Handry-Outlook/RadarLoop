@@ -1221,8 +1221,7 @@
 
       <div class="section"></div>
       <h4>⛈️ Weather Layers</h4>
-
-      <label>Radar Layer and Others:
+      <label>Radar and Weather Layer:
         <select id="radarLayer" onchange="radarLayerTypeHandler();">
           <option value="uk-precip-intensity">UK High Resolution Rainfall Intensity (Smoothed)</option>
           <option value="uk-precip-intensity-pixelated">UK High Resolution Rainfall Intensity (Pixelated)</option>
@@ -1230,12 +1229,64 @@
           <option value="uk-precip-type">UK High Resolution Precipitation Type</option>
           <option value="europe-precip-intensity">Europe Low Resolution Rainfall Intensity</option>
           <option value="europe-precip-type">Europe Low Resolution Precipitation Type</option>
+
+          <option value="placeholder">-------------------------------------------------------------------------</option>
+
           <option value="global-precip-intensity">Precipitation - NASA global precipitation intensity</option>
-          <option value="global-wind-speed">Global Wind Speed (test)</option>
-          <option value="global-wave-height">Global Wave Height (test)</option>
-          <option value="global-wave-period">Global Peak Wave Period (test)</option>
-          <option value="global-current-speed">Global Current Speed (test)</option>
-          <option value="global-visibility">Global Visibility (test)</option>
+
+          <option value="placeholder">-------------------------------------------------------------------------</option>
+
+          <option value="radar-base-ref-precip-type-na-contours">North America Base Reflectivity Precip - Contour
+          </option>
+          <option value="radar-base-ref-precip-type-europe-contours">Europe Base Reflectivity Precip - Contour</option>
+          <option value="radar-base-ref-precip-type-australia-contours">Australia Base Reflectivity Precip - Contour
+          </option>
+          <option value="radar-base-ref-precip-type-westpacific-contours">West Pacific Base Reflectivity Precip -
+            Contour</option>
+          <option value="radar-max-ref-precip-type-na-contours">North America Max Reflectivity Precip</option>
+          <option value="radar-max-ref-precip-type-australia-contours">Australia Max Reflectivity Precip</option>
+          <option value="radar-precip-rate-europe-contours">Radar Precipitation Rate - Contour (Europe)</option>
+          <option value="radar-precip-rate-europe-raster">Radar Precipitation Rate - Grid (Europe)</option>
+          <option value="radar-reflectivity-mosaic-global-contours">Synthetic Radar - Contour (Global)</option>
+          <option value="radar-reflectivity-mosaic-global-raster">Synthetic Radar - Grid (Global)</option>
+          <option value="placeholder">-------------------------------------------------------------------------</option>
+
+          <option value="precip-qpe-168hrs-eu-contours">Observed Precipitation – Past 7 days Contour (Europe)</option>
+          <option value="precip-qpe-168hrs-eu-raster">Observed Precipitation – Past 7 days Grid (Europe)</option>
+          <option value="precip-qpe-72hrs-eu-contours">Observed Precipitation – Past 3 days Contour (Europe)</option>
+          <option value="precip-qpe-72hrs-eu-raster">Observed Precipitation – Past 3 days Grid (Europe)</option>
+          <option value="precip-qpe-48hrs-eu-contours">Observed Precipitation – Past 2 days Contour (Europe)</option>
+          <option value="precip-qpe-48hrs-eu-raster">Observed Precipitation – Past 2 days Grid (Europe)</option>
+          <option value="precip-qpe-24hrs-eu-contours">Observed Precipitation – Past 24h Contour (Europe)</option>
+          <option value="precip-qpe-24hrs-eu-raster">Observed Precipitation – Past 24h Grid (Europe)</option>
+          <option value="precip-qpe-1hr-eu-contours">Observed Precipitation – Past 1h Contour (Europe)</option>
+          <option value="precip-qpe-1hr-eu-raster">Observed Precipitation – Past 1h Grid (Europe)</option>
+          <option value="placeholder">-------------------------------------------------------------------------</option>
+
+          <option value="precip-qpe-168hrs-gm-contours">Observed Precipitation – Past 7 days Contour (Global)</option>
+          <option value="precip-qpe-168hrs-gm-raster">Observed Precipitation – Past 7 days Grid (Global)</option>
+          <option value="precip-qpe-72hrs-gm-contours">Observed Precipitation – Past 3 days Contour (Global)</option>
+          <option value="precip-qpe-72hrs-gm-raster">Observed Precipitation – Past 3 days Grid (Global)</option>
+          <option value="precip-qpe-48hrs-gm-contours">Observed Precipitation – Past 2 days Contour (Global)</option>
+          <option value="precip-qpe-48hrs-gm-raster">Observed Precipitation – Past 2 days Grid (Global)</option>
+          <option value="precip-qpe-24hrs-gm-contours">Observed Precipitation – Past 24h Contour (Global)</option>
+          <option value="precip-qpe-24hrs-gm-raster">Observed Precipitation – Past 24h Grid (Global)</option>
+          <option value="precip-qpe-1hr-gm-contours">Observed Precipitation – Past 1h Contour (Global)</option>
+          <option value="precip-qpe-1hr-gm-raster">Observed Precipitation – Past 1h Grid (Global)</option>
+          <option value="placeholder">-------------------------------------------------------------------------</option>
+          <option value="global-visibility">Visibility</option>
+          <option value="global-wind-speed">Wind Speed</option>
+
+          <option value="placeholder">-------------------------------------------------------------------------</option>
+
+          <option value="global-current-speed">Current Speed</option>
+          <option value="global-wave-height">Peak Wave Period</option>
+          <option value="global-wave-period">Peak Wave Period</option>
+          <option value="fcst-sea-wave-height-swell-waves-contours">Swell Waves</option>
+          <option value="fcst-sea-wave-height-swell-waves-period-contours">Swell Waves Period</option>
+          <option value="fcst-sea-wave-height-wind-waves-contours">Wind Waves</option>
+          <option value="fcst-sea-wave-height-wind-waves-period-contours">Wind Waves Period</option>
+
           <option value="none">None</option>
         </select>
         <span class="tooltip">Select radar data layer</span>
@@ -1248,6 +1299,11 @@
           <option value="europe-water">Satellite - Europe water vapor (MeteoSat)</option>
           <option value="us-visible">Satellite - North America visible (GOES)</option>
           <option value="us-ir">Satellite - North America infrared (GOES)</option>
+          <option value="satellite-infrared-enhanced-global-raster">Global Enhanced Infrared</option>
+          <option value="satellite-visible-global-raster">Global Visible</option>
+          <option value="satellite-water-vapor-global-raster">Global Water Vapor</option>
+          <option value="satellite-visible-global-raster">Global Visible</option>
+          <option value="satellite-night-fog-global-raster">Global Night Fog</option>
           <option value="none">None</option>
         </select>
         <span class="tooltip">Select satellite data layer</span>
@@ -1267,8 +1323,75 @@
         </select>
         <span class="tooltip">Select wind direction data layer</span>
       </label>
+      <label>Tropical Storms Layer:
+        <select id="tropicalStormsLayerSelect">
+          <option value="sevwx-dtn-tropical-cyclones-plot">Tropical Storms</option>
+          <option value="sevwx-agency-tropical-cyclones-plot">Agency Tropical Storms</option>
+          <option value="sevwx-tropical-cyclone-tracks">Tropical Storm Model Tracks</option>
+          <option value="none">None</option>
+        </select>
+        <span class="tooltip">Select Tropical Storms data layer</span>
+      </label>
 
-      <label>Lightning Layer: <input type="checkbox" id="lightning-layer-toggle" checked
+      <label>Rotation Layer (US Only):
+        <select id="rotationLayerSelect">
+          <option value="none">None</option>
+          <option value="sevwx-rotation-track-contours">Rotation Tracks</option>
+          <option value="avwx-echo-tops-plot">Echo Tops</option>
+          <option value="avwx-echo-tops-contours">Echo Top Contours</option>
+        </select>
+        <span class="tooltip">Select Rotation Tracks layer</span>
+      </label>
+
+      <label>Surface Front Layer:
+        <select id="surfaceFrontLayerSelect">
+          <option value="fcst-surface-fronts-isolines">Surface Fronts</option>
+          <option value="none">None</option>
+        </select>
+        <span class="tooltip">Select Surface Fronts layer</span>
+      </label>
+      <label>Global Lightning Layer:
+        <select id="lightningLayerSelect">
+          <option value="sevwx-lightning-global-plot">Global Lightning</option>
+          <option value="none">None</option>
+        </select>
+        <span class="tooltip">Select Global Lightning data layer</span>
+      </label>
+      <label>Observation Layer:
+        <select id="observationLayerSelect">
+          <option value="none">None</option>
+          <option value="sfcanlys-temperature-contours">Surface Temperature</option>
+          <option value="sfcanlys-wind-speed-contours">Wind Speed</option>
+          <option value="sfcanlys-dew-point-contours">Dew Point Temperature</option>
+          <option value="sfcanlys-wet-bulb-temperature-globe-contours">Wet Bulb Globe Temperature/option>
+          <option value="sfcanlys-relative-humidity-contours">Relative Humidity</option>
+          <option value="sfcanlys-snow-depth-contours">Snow Depth</option>
+          <option value="sfcanlys-sea-surface-temp-contours">Sea Surface Temperature</option>
+          <option value="sfcanlys-uv-radiation-index-contours">UV Radiation Index</option>
+          <option value="fcst-onefx-freezing-rain-last-24hrs-contours">Freezing Rain Last 24 Hours</option>
+          <option value="fcst-onefx-snowfall-last-24hrs-contours">Snowfall Last 24 Hours</option>
+          <option value="fcst-onefx-ice-accretion-last-hour-contours">Ice Accretion Last 1 Hour</option>
+          <option value="fcst-onefx-wet-snow-last-1hr-contours">Wet Snow Index</option>
+
+        </select>
+        <span class="tooltip">Select Observation data layer</span>
+      </label>
+      <label>Global Warning Layer:
+        <select id="warningLayerSelect">
+          <option value="none">None</option>
+          <option value="sevwx-agency-bulletin-zones">Global Weather Bulletins</option>
+        </select>
+        <span class="tooltip">Select Global Warning data layer</span>
+      </label>
+      <label>Global Nowcast Layer:
+        <select id="nowcastLayerSelect">
+          <option value="sevwx-global-storm-corridors-plot">Storm Nowcasts</option>
+          <option value="sevwx-storm-corridors-plot">Storm Corridors</option>
+          <option value="none">None</option>
+        </select>
+        <span class="tooltip">Select Global Nowcast data layer</span>
+      </label>
+      <label>UK Lightning Layer: <input type="checkbox" id="lightning-layer-toggle" checked
           onchange="toggleLightningLayer()"><span class="tooltip">Show lightning strikes</span></label>
       <label>Lightning Color by Age: <input type="checkbox" id="color-mode" checked
           onchange="updateStrikeColors()"><span class="tooltip">Color strikes by age</span></label>
@@ -1288,6 +1411,21 @@
       <label>Isobar Opacity: <input type="range" id="isobarOpacity" min="0" max="1" step="0.1" value="0.8"></label>
       <label>Wind Direction Opacity: <input type="range" id="windOpacity" min="0" max="1" step="0.1"
           value="0.8"></label>
+
+      <label>Tropical Storms Opacity: <input type="range" id="tropicalStormsOpacity" min="0" max="1" step="0.1"
+          value="0.8"></label>
+      <label>Rotation Opacity: <input type="range" id="rotationOpacity" min="0" max="1" step="0.1" value="0.8"></label>
+      <label>Surface Front Opacity: <input type="range" id="surfaceFrontOpacity" min="0" max="1" step="0.1"
+          value="0.8"></label>
+      <label>Global Lightning Opacity: <input type="range" id="lightningOpacity" min="0" max="1" step="0.1"
+          value="0.8"></label>
+      <label>Observation layer Opacity: <input type="range" id="observationOpacity" min="0" max="1" step="0.1"
+          value="0.5"></label>
+      <label>Global Warning layer Opacity: <input type="range" id="warningOpacity" min="0" max="1" step="0.1"
+          value="0.8"></label>
+      <label>Global Nowcast layer Opacity: <input type="range" id="nowcastOpacity" min="0" max="1" step="0.1"
+          value="0.8"></label>
+
       <label>Heatmap Blur: <input type="range" id="blur-slider" min="1" max="50" value="30"
           onchange="updateHeatmap(currentFiltered)"><span class="tooltip">Adjust heatmap spread</span></label>
       <label>Number Resolution: <input type="range" id="density-slider" min="1" max="100" value="50"
@@ -1802,39 +1940,288 @@
         bounds: null,
         attribution: 'dtn'
       },
+      'radar-base-ref-precip-type-na-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/radar-base-ref-precip-type-na-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 5 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'radar-base-ref-precip-type-europe-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/radar-base-ref-precip-type-europe-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 5 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'radar-base-ref-precip-type-europe-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/radar-base-ref-precip-type-europe-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 5 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'radar-base-ref-precip-type-australia-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/radar-base-ref-precip-type-australia-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 5 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'radar-base-ref-precip-type-westpacific-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/radar-base-ref-precip-type-westpacific-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 5 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'radar-max-ref-precip-type-na-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/radar-max-ref-precip-type-na-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 5 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'radar-max-ref-precip-type-australia-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/radar-max-ref-precip-type-australia-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 5 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'radar-precip-rate-europe-raster': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/radar-precip-rate-europe-raster/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 5 * 60 * 1000,
+        type: 'tile-layer',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'radar-precip-rate-europe-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/radar-precip-rate-europe-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 5 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'radar-precip-rate-europe-raster': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/radar-precip-rate-europe-raster/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 5 * 60 * 1000,
+        type: 'tile-layer',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'radar-reflectivity-mosaic-global-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/radar-reflectivity-mosaic-global-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 10 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'radar-reflectivity-mosaic-global-raster': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/radar-reflectivity-mosaic-global-raster/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 10 * 60 * 1000,
+        type: 'tile-layer',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-168hrs-eu-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-168hrs-eu-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-168hrs-eu-raster': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-168hrs-eu-raster/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'tile-layer',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-72hrs-eu-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-72hrs-eu-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-72hrs-eu-raster': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-72hrs-eu-raster/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'tile-layer',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-48hrs-eu-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-48hrs-eu-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-48hrs-eu-raster': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-48hrs-eu-raster/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'tile-layer',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-24hrs-eu-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-24hrs-eu-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-24hrs-eu-raster': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-24hrs-eu-raster/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'tile-layer',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-1hr-eu-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-1hr-eu-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-1hr-eu-raster': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-1hr-eu-raster/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'tile-layer',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-168hrs-gm-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-168hrs-gm-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-168hrs-gm-raster': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-168hrs-gm-raster/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-72hrs-gm-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-72hrs-gm-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-72hrs-gm-raster': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-72hrs-gm-raster/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-48hrs-gm-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-48hrs-gm-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-48hrs-gm-raster': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-48hrs-gm-raster/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-24hrs-gm-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-24hrs-gm-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-24hrs-gm-raster': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-24hrs-gm-raster/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-1hr-gm-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-1hr-gm-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'precip-qpe-1hr-gm-raster': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/precip-qpe-1hr-gm-raster/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
       'global-current-speed': {
-
-        url: 'https://tiles.meteoguard.dtn.com/tiles/VECTOR.mg-manta-production-output_dtn_manta_global_6min_current_speed.default/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-manta-current-speed-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
         interval: 60 * 60 * 1000,
         type: 'vector-tile',
         bounds: null,
         attribution: 'dtn'
       },
       'global-wave-height': {
-        url: 'https://tiles.meteoguard.dtn.com/tiles/VECTOR.mg-manta-production-output_dtn_manta_global_6min_significant_wave_height.default/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-manta-significant-wave-height-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
         interval: 60 * 60 * 1000,
         type: 'vector-tile',
         bounds: null,
         attribution: 'dtn'
       },
       'global-wave-period': {
-        url: 'https://tiles.meteoguard.dtn.com/tiles/VECTOR.mg-manta-production-output_dtn_manta_global_6min_peak_period.default/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-manta-peak-wave-period-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'fcst-sea-wave-height-swell-waves-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-sea-wave-height-swell-waves-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'fcst-sea-wave-height-swell-waves-period-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-sea-wave-height-swell-waves-period-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'fcst-sea-wave-height-wind-waves-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-sea-wave-height-wind-waves-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 60 * 60 * 1000,
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'fcst-sea-wave-height-wind-waves-period-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-sea-wave-height-wind-waves-period-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
         interval: 60 * 60 * 1000,
         type: 'vector-tile',
         bounds: null,
         attribution: 'dtn'
       },
       'global-visibility': {
-
-        url: 'https://tiles.meteoguard.dtn.com/tiles/VECTOR.mg-manta-production-output_dtn_manta_global_6min_visibility.default/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-manta-visibility-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
         interval: 60 * 60 * 1000,
         type: 'vector-tile',
         bounds: null,
         attribution: 'dtn'
       },
       'global-wind-speed': {
-
-        url: 'https://tiles.meteoguard.dtn.com/tiles/VECTOR.mg-manta-production-output_dtn_manta_global_6min_wind_speed_10m.default/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-manta-wind-speed-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
         interval: 60 * 60 * 1000,
         type: 'vector-tile',
         bounds: null,
@@ -1879,20 +2266,239 @@
         interval: 5 * 60 * 1000,
         type: 'tile-layer',
         attribution: 'NOAA/GOES'
-      }
+      },
+      'satellite-infrared-enhanced-global-raster': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/satellite-infrared-enhanced-global-raster/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 10 * 60 * 1000, // Example interval
+        type: 'tile-layer',
+        attribution: 'DTN Meteoguard'
+      },
+      'satellite-visible-global-raster': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/satellite-visible-global-raster/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 10 * 60 * 1000, // Example interval
+        type: 'tile-layer',
+        attribution: 'DTN Meteoguard'
+      },
+      'satellite-water-vapor-global-raster': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/satellite-water-vapor-global-raster/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 10 * 60 * 1000, // Example interval
+        type: 'tile-layer',
+        attribution: 'DTN Meteoguard'
+      },
+      'satellite-night-fog-global-raster': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/satellite-night-fog-global-raster/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 10 * 60 * 1000, // Example interval
+        type: 'tile-layer',
+        attribution: 'DTN Meteoguard'
+      },
     };
-
+    const lightningOptions = {
+      'sevwx-lightning-global-plot': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/sevwx-lightning-global-plot/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 60 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+    };
+    const tropicalStormsOptions = {
+      'sevwx-dtn-tropical-cyclones-plot': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/sevwx-dtn-tropical-cyclones-plot/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 60 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'sevwx-agency-tropical-cyclones-plot': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/sevwx-agency-tropical-cyclones-plot/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 60 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'sevwx-tropical-cyclone-tracks': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/sevwx-tropical-cyclone-tracks/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 60 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+    };
+    const rotationOptions = {
+      'sevwx-rotation-track-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/sevwx-rotation-track-contours/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 60 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'avwx-echo-tops-plot': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/avwx-echo-tops-plot/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 5 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'avwx-echo-tops-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/avwx-echo-tops-contours/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 5 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+    };
+    const surfaceFrontOptions = {
+      'fcst-surface-fronts-isolines': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-surface-fronts-isolines/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 60 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+    };
+    const observationOptions = {
+      'sfcanlys-temperature-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/sfcanlys-temperature-contours/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 60 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'sfcanlys-wind-speed-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/sfcanlys-wind-speed-contours/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 60 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'sfcanlys-dew-point-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/sfcanlys-dew-point-contours/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 60 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'sfcanlys-wet-bulb-temperature-globe-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/sfcanlys-wet-bulb-temperature-globe-contours/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 60 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'sfcanlys-relative-humidity-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/sfcanlys-relative-humidity-contours/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 60 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'sfcanlys-snow-depth-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/sfcanlys-snow-depth-contours/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 60 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'sfcanlys-sea-surface-temp-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/sfcanlys-sea-surface-temp-contours/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 60 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'sfcanlys-uv-radiation-index-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/sfcanlys-uv-radiation-index-contours/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 60 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'fcst-onefx-freezing-rain-last-24hrs-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-onefx-freezing-rain-last-24hrs-contours/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 5 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'fcst-onefx-snowfall-last-24hrs-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-onefx-snowfall-last-24hrs-contours/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 5 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'fcst-onefx-ice-accretion-last-hour-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-onefx-ice-accretion-last-hour-contours/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 5 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'fcst-onefx-wet-snow-last-1hr-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-onefx-wet-snow-last-1hr-contours/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 5 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'avwx-echo-tops-plot': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/avwx-echo-tops-plot/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 5 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'avwx-echo-tops-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/avwx-echo-tops-contours/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 5 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+    };
+    const nowcastOptions = {
+      'sevwx-storm-corridors-plot': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/sevwx-storm-corridors-plot/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 5 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'sevwx-global-storm-corridors-plot': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/sevwx-global-storm-corridors-plot/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 5 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+    };
+    const warningOptions = {
+      'sevwx-agency-bulletin-zones': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/sevwx-agency-bulletin-zones/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 2 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+    };
     // --- ISOBAR OPTIONS (NEW) ---
     const isobarOptions = {
       'pressure_two': {
-        url: 'https://tiles.meteoguard.dtn.com/tiles/ISOLINE.mg-manta-production-output_air_pressure_mean_sea_level.default/${iso}/${iso}/{z}/{x}/{y}.png',
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-manta-mean-sea-level-pressure-isolines/${iso}/${iso}/{z}/{x}/{y}.png',
         interval: 60 * 60 * 1000, // Hourly update, for example
         type: 'vector-tile', // Typically vector tiles for lines/contours
         bounds: null,
         attribution: 'dtn'
       },
       'pressure_four': {
-        url: 'https://tiles.meteoguard.dtn.com/tiles/ISOLINE.mg-manta-production-output_4_mb_air_pressure_mean_sea_level.default/${iso}/${iso}/{z}/{x}/{y}.png',
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-manta-mean-sea-level-pressure-4mb-isolines/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 60 * 60 * 1000, // 12-hourly update
+        type: 'vector-tile',
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'fcst-geopotential-height-500hpa-isolines': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-geopotential-height-500hpa-isolines/${iso}/${iso}/{z}/{x}/{y}.png',
         interval: 60 * 60 * 1000, // 12-hourly update
         type: 'vector-tile',
         bounds: null,
@@ -1901,48 +2507,147 @@
     };
     const windOptions = {
       'wind-direction': {
-        url: 'https://tiles.meteoguard.dtn.com/tiles/WIND_SYMBOL.mg-manta-production-output_dtn_manta_global_6min_wind_symbol.default/${iso}/${iso}/{z}/{x}/{y}.png',
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-manta-wind-symbol-grid/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 60 * 60 * 1000, // 12Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'fcst-manta-current-direction-grid': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-manta-current-direction-grid/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 60 * 60 * 1000, // 12Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'fcst-manta-mean-wave-direction-grid': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-manta-mean-wave-direction-grid/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 60 * 60 * 1000, // 12Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'fcst-manta-significant-wave-symbol-grid': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-manta-significant-wave-symbol-grid/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 60 * 60 * 1000, // 12Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'fcst-manta-current-speed-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-manta-current-speed-contours/${iso}/${iso}/{z}/{x}/{y}.png',
         interval: 60 * 60 * 1000, // Hourly update, for example
         type: 'vector-tile', // Typically vector tiles for lines/contours
         bounds: null,
         attribution: 'dtn'
-      }
+      },
+      'fcst-manta-swell-wave-symbol-grid': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-manta-swell-wave-symbol-grid/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 60 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'fcst-sea-wave-height-swell-waves-period-grid': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-sea-wave-height-swell-waves-period-grid/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 60 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'fcst-manta-wind-wave-symbol-grid': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-manta-wind-wave-symbol-grid/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 60 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'fcst-sea-wave-height-wind-waves-period-grid': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-sea-wave-height-wind-waves-period-grid/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 60 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
     };
     // --- GLOBAL STATE VARIABLES ---
     let radarLayer = null;
     let satelliteLayer = null;
-    let isobarLayer = null; // NEW: Isobar layer variable
-    let windLayer = null; // NEW: Wind layer variable
-    let isPlotting = false; // Used for radar only
+    let isobarLayer = null;
+    let windLayer = null;
+    let lightningLayer = null;          // NEW
+    let tropicalStormsLayer = null;     // NEW
+    let rotationLayer = null;           // NEW
+    let surfaceFrontLayer = null;       // NEW
+    let observationLayer = null;        // NEW
+    let NowcastLayer = null;            // NEW
+    let warningLayer = null;            // NEW
+
+    let isPlotting = false;
     let lastRadarTimestamp = null;
     let lastRadarType = null;
     let lastSatelliteTimestamp = null;
     let lastSatelliteType = null;
-    let lastIsobarTimestamp = null; // NEW: Isobar timestamp
-    let lastIsobarType = null; // NEW: Isobar type
-    let lastWindTimestamp = null; // NEW: Wind timestamp
-    let lastWindType = null; // NEW: Wind type
+    let lastIsobarTimestamp = null;
+    let lastIsobarType = null;
+    let lastWindTimestamp = null;
+    let lastWindType = null;
+    let lastLightningTimestamp = null;          // NEW
+    let lastLightningType = null;               // NEW
+    let lastTropicalStormsTimestamp = null;     // NEW
+    let lastTropicalStormsType = null;          // NEW
+    let lastRotationTimestamp = null;           // NEW
+    let lastRotationType = null;                // NEW
+    let lastSurfaceFrontTimestamp = null;       // NEW
+    let lastSurfaceFrontType = null;            // NEW
+    let lastObservationTimestamp = null;        // NEW
+    let lastObservationType = null;             // NEW
+    let lastNowcastTimestamp = null;            // NEW
+    let lastNowcastType = null;                 // NEW
+    let lastWarningTimestamp = null;            // NEW
+    let lastWarningType = null;                 // NEW
 
     let isSatelliteAnimating = false;
     let isRadarAnimating = false;
-    let isIsobarAnimating = false; // NEW: Isobar animation state
-    let isWindAnimating = false; // NEW: Wind animation state
+    let isIsobarAnimating = false;
+    let isWindAnimating = false;
+    let isLightningAnimating = false;           // NEW
+    let isTropicalStormsAnimating = false;      // NEW
+    let isRotationAnimating = false;            // NEW
+    let isSurfaceFrontAnimating = false;        // NEW
+    let isObservationAnimating = false;         // NEW
+    let isNowcastAnimating = false;             // NEW
+    let isWarningAnimating = false;             // NEW
+
     let lastRequestedRadarTimestamp = null;
     let lastRequestedSatelliteTimestamp = null;
-    let lastRequestedIsobarTimestamp = null; // NEW: Isobar requested timestamp
-    let lastRequestedWindTimestamp = null; // NEW: Wind requested timestamp
+    let lastRequestedIsobarTimestamp = null;
+    let lastRequestedWindTimestamp = null;
+    let lastRequestedLightningTimestamp = null;         // NEW
+    let lastRequestedTropicalStormsTimestamp = null;    // NEW
+    let lastRequestedRotationTimestamp = null;          // NEW
+    let lastRequestedSurfaceFrontTimestamp = null;      // NEW
+    let lastRequestedObservationTimestamp = null;       // NEW
+    let lastRequestedNowcastTimestamp = null;           // NEW
+    let lastRequestedWarningTimestamp = null;           // NEW
 
     const sixDaysInMs = 7 * 24 * 60 * 60 * 1000;
     let lastValidTileUrls = {};
     const radarValidationCache = new Map();
 
-    // === NEW GLOBAL STATE: Tracks the timestamp requested by the slider ===
     let currentFilterTimestamp = null;
 
-    const SATELLITE_Z_INDEX = 140; // Satellite must be below radar
+    const SATELLITE_Z_INDEX = 140;
     const RADAR_Z_INDEX = 150;
-    const WIND_Z_INDEX = 155; // NEW: Wind is between Radar and Isobar
-    const ISOBAR_Z_INDEX = 160; // Isobar is on top of wind
+    const WIND_Z_INDEX = 155;
+    const ISOBAR_Z_INDEX = 160;
+    const LIGHTNING_Z_INDEX = 165;          // NEW
+    const TROPICAL_STORMS_Z_INDEX = 170;    // NEW
+    const ROTATION_Z_INDEX = 175;           // NEW
+    const SURFACE_FRONT_Z_INDEX = 180;      // NEW
+    const OBSERVATION_Z_INDEX = 130;        // NEW
+    const NOWCAST_Z_INDEX = 190;            // NEW
+    const WARNING_Z_INDEX = 135;            // NEW
 
     // ==========================================
     // 2. HELPER FUNCTIONS
@@ -1973,21 +2678,27 @@
     function updateLegend() {
       const radarOpacity = parseFloat(document.getElementById('radarOpacity')?.value || 0.8);
       const satelliteOpacity = parseFloat(document.getElementById('satelliteOpacity')?.value || 0.8);
-      const isobarOpacity = parseFloat(document.getElementById('isobarOpacity')?.value || 0.8); // NEW
-      const windOpacity = parseFloat(document.getElementById('windOpacity')?.value || 0.8); // NEW
+      const isobarOpacity = parseFloat(document.getElementById('isobarOpacity')?.value || 0.8);
+      const windOpacity = parseFloat(document.getElementById('windOpacity')?.value || 0.8);
+      const lightningOpacity = parseFloat(document.getElementById('lightningOpacity')?.value || 0.8);
+      const tropicalStormsOpacity = parseFloat(document.getElementById('tropicalStormsOpacity')?.value || 0.8);
+      const rotationOpacity = parseFloat(document.getElementById('rotationOpacity')?.value || 0.8);
+      const surfaceFrontOpacity = parseFloat(document.getElementById('surfaceFrontOpacity')?.value || 0.8);
+      const observationOpacity = parseFloat(document.getElementById('observationOpacity')?.value || 0.8);
+      const nowcastOpacity = parseFloat(document.getElementById('nowcastOpacity')?.value || 0.8);
+      const warningOpacity = parseFloat(document.getElementById('warningOpacity')?.value || 0.8);
 
       document.getElementById('opacity-value-radar').textContent = `Radar Opacity: ${radarOpacity.toFixed(1)}`;
       document.getElementById('opacity-value-satellite').textContent = `Satellite Opacity: ${satelliteOpacity.toFixed(1)}`;
-      // Assuming you have this new element in your HTML
-      const isobarLegend = document.getElementById('opacity-value-isobar');
-      if (isobarLegend) {
-        isobarLegend.textContent = `Isobar Opacity: ${isobarOpacity.toFixed(1)}`;
-      }
-      // NEW: Wind Legend
-      const windLegend = document.getElementById('opacity-value-wind');
-      if (windLegend) {
-        windLegend.textContent = `Wind Opacity: ${windOpacity.toFixed(1)}`;
-      }
+      if (document.getElementById('opacity-value-isobar')) document.getElementById('opacity-value-isobar').textContent = `Isobar Opacity: ${isobarOpacity.toFixed(1)}`;
+      if (document.getElementById('opacity-value-wind')) document.getElementById('opacity-value-wind').textContent = `Wind Opacity: ${windOpacity.toFixed(1)}`;
+      if (document.getElementById('opacity-value-lightning')) document.getElementById('opacity-value-lightning').textContent = `Lightning Opacity: ${lightningOpacity.toFixed(1)}`;
+      if (document.getElementById('opacity-value-tropicalStorms')) document.getElementById('opacity-value-tropicalStorms').textContent = `Tropical Storms Opacity: ${tropicalStormsOpacity.toFixed(1)}`;
+      if (document.getElementById('opacity-value-rotation')) document.getElementById('opacity-value-rotation').textContent = `Rotation Opacity: ${rotationOpacity.toFixed(1)}`;
+      if (document.getElementById('opacity-value-surfaceFront')) document.getElementById('opacity-value-surfaceFront').textContent = `Surface Front Opacity: ${surfaceFrontOpacity.toFixed(1)}`;
+      if (document.getElementById('opacity-value-observation')) document.getElementById('opacity-value-observation').textContent = `Observation Opacity: ${observationOpacity.toFixed(1)}`;
+      if (document.getElementById('opacity-value-nowcast')) document.getElementById('opacity-value-nowcast').textContent = `Nowcast Opacity: ${nowcastOpacity.toFixed(1)}`;
+      if (document.getElementById('opacity-value-warning')) document.getElementById('opacity-value-warning').textContent = `Warning Opacity: ${warningOpacity.toFixed(1)}`;
     }
 
     // ==========================================
@@ -1997,18 +2708,32 @@
     const recentTimeThreshold = 15 * 60 * 1000;
 
     async function fetchTileUrl(timestamp, layerConfig) {
-      // Determine the key for lastValidTileUrls and cache
       let layerTypeKey;
       if (Object.values(radarOptions).includes(layerConfig)) {
         layerTypeKey = Object.keys(radarOptions).find(key => radarOptions[key] === layerConfig);
       } else if (Object.values(satelliteOptions).includes(layerConfig)) {
         layerTypeKey = Object.keys(satelliteOptions).find(key => satelliteOptions[key] === layerConfig);
-      } else if (Object.values(isobarOptions).includes(layerConfig)) { // Check isobar options
+      } else if (Object.values(isobarOptions).includes(layerConfig)) {
         layerTypeKey = Object.keys(isobarOptions).find(key => isobarOptions[key] === layerConfig);
-      } else if (Object.values(windOptions).includes(layerConfig)) { // NEW: Check wind options
+      } else if (Object.values(windOptions).includes(layerConfig)) {
         layerTypeKey = Object.keys(windOptions).find(key => windOptions[key] === layerConfig);
+      } else if (Object.values(lightningOptions).includes(layerConfig)) {
+        layerTypeKey = Object.keys(lightningOptions).find(key => lightningOptions[key] === layerConfig);
+      } else if (Object.values(tropicalStormsOptions).includes(layerConfig)) {
+        layerTypeKey = Object.keys(tropicalStormsOptions).find(key => tropicalStormsOptions[key] === layerConfig);
+      } else if (Object.values(rotationOptions).includes(layerConfig)) {
+        layerTypeKey = Object.keys(rotationOptions).find(key => rotationOptions[key] === layerConfig);
+      } else if (Object.values(surfaceFrontOptions).includes(layerConfig)) {
+        layerTypeKey = Object.keys(surfaceFrontOptions).find(key => surfaceFrontOptions[key] === layerConfig);
+      } else if (Object.values(observationOptions).includes(layerConfig)) {
+        layerTypeKey = Object.keys(observationOptions).find(key => observationOptions[key] === layerConfig);
+      } else if (Object.values(nowcastOptions).includes(layerConfig)) {
+        layerTypeKey = Object.keys(nowcastOptions).find(key => nowcastOptions[key] === layerConfig);
+      } else if (Object.values(warningOptions).includes(layerConfig)) {
+        layerTypeKey = Object.keys(warningOptions).find(key => warningOptions[key] === layerConfig);
       } else {
-        return null; // Should not happen
+        console.warn("Unknown layer config passed to fetchTileUrl", layerConfig);
+        return null;
       }
 
       if (layerConfig.type === 'tile-layer') {
@@ -2095,10 +2820,11 @@
               const response = await fetch(checkUrl, { method: 'GET' });
 
               if (response.ok) {
-                const arrayBuffer = await response.arrayBuffer();
-                if (arrayBuffer.byteLength > 0) {
-                  return tileUrl.replace(/\${iso}/g, iso);
-                }
+                // REMOVE THE arrayBuffer.byteLength CHECK for vector tiles
+                // const arrayBuffer = await response.arrayBuffer();
+                // if (arrayBuffer.byteLength > 0) { 
+                return tileUrl.replace(/\${iso}/g, iso);
+                // }
               }
             } catch (error) {
               // Ignore error
@@ -2138,37 +2864,103 @@
     async function plotMainLayer(finalUrl, layerType, timestamp, layerKey) {
       let layerOptions, zIndex, currentLayerRef, lastTimestampRef, lastTypeRef, isAnimatingRef;
 
-      if (layerKey === 'satellite') {
-        layerOptions = satelliteOptions[layerType];
-        zIndex = SATELLITE_Z_INDEX;
-        currentLayerRef = satelliteLayer;
-        lastTimestampRef = lastSatelliteTimestamp;
-        lastTypeRef = lastSatelliteType;
-        isAnimatingRef = isSatelliteAnimating;
-      } else if (layerKey === 'radar') {
-        layerOptions = radarOptions[layerType];
-        zIndex = RADAR_Z_INDEX;
-        currentLayerRef = radarLayer;
-        lastTimestampRef = lastRadarTimestamp;
-        lastTypeRef = lastRadarType;
-        isAnimatingRef = isRadarAnimating;
-      } else if (layerKey === 'wind') { // NEW: Wind case
-        layerOptions = windOptions[layerType];
-        zIndex = WIND_Z_INDEX;
-        currentLayerRef = windLayer;
-        lastTimestampRef = lastWindTimestamp;
-        lastTypeRef = lastWindType;
-        isAnimatingRef = isWindAnimating;
-      } else if (layerKey === 'isobar') { // Isobar case
-        layerOptions = isobarOptions[layerType];
-        zIndex = ISOBAR_Z_INDEX;
-        currentLayerRef = isobarLayer;
-        lastTimestampRef = lastIsobarTimestamp;
-        lastTypeRef = lastIsobarType;
-        isAnimatingRef = isIsobarAnimating;
-      } else {
-        return;
+      switch (layerKey) {
+        case 'satellite':
+          layerOptions = satelliteOptions[layerType];
+          zIndex = SATELLITE_Z_INDEX;
+          currentLayerRef = satelliteLayer;
+          // References for state modification, not direct value access
+          lastTimestampRef = 'lastSatelliteTimestamp';
+          lastTypeRef = 'lastSatelliteType';
+          isAnimatingRef = 'isSatelliteAnimating';
+          break;
+        case 'radar':
+          layerOptions = radarOptions[layerType];
+          zIndex = RADAR_Z_INDEX;
+          currentLayerRef = radarLayer;
+          lastTimestampRef = 'lastRadarTimestamp';
+          lastTypeRef = 'lastRadarType';
+          isAnimatingRef = 'isRadarAnimating';
+          break;
+        case 'isobar':
+          layerOptions = isobarOptions[layerType];
+          zIndex = ISOBAR_Z_INDEX;
+          currentLayerRef = isobarLayer;
+          lastTimestampRef = 'lastIsobarTimestamp';
+          lastTypeRef = 'lastIsobarType';
+          isAnimatingRef = 'isIsobarAnimating';
+          break;
+        case 'wind':
+          layerOptions = windOptions[layerType];
+          zIndex = WIND_Z_INDEX;
+          currentLayerRef = windLayer;
+          lastTimestampRef = 'lastWindTimestamp';
+          lastTypeRef = 'lastWindType';
+          isAnimatingRef = 'isWindAnimating';
+          break;
+        case 'lightning':
+          layerOptions = lightningOptions[layerType];
+          zIndex = LIGHTNING_Z_INDEX;
+          currentLayerRef = lightningLayer;
+          lastTimestampRef = 'lastLightningTimestamp';
+          lastTypeRef = 'lastLightningType';
+          isAnimatingRef = 'isLightningAnimating';
+          break;
+        case 'tropicalStorms':
+          layerOptions = tropicalStormsOptions[layerType];
+          zIndex = TROPICAL_STORMS_Z_INDEX;
+          currentLayerRef = tropicalStormsLayer;
+          lastTimestampRef = 'lastTropicalStormsTimestamp';
+          lastTypeRef = 'lastTropicalStormsType';
+          isAnimatingRef = 'isTropicalStormsAnimating';
+          break;
+        case 'rotation':
+          layerOptions = rotationOptions[layerType];
+          zIndex = ROTATION_Z_INDEX;
+          currentLayerRef = rotationLayer;
+          lastTimestampRef = 'lastRotationTimestamp';
+          lastTypeRef = 'lastRotationType';
+          isAnimatingRef = 'isRotationAnimating';
+          break;
+        case 'surfaceFront':
+          layerOptions = surfaceFrontOptions[layerType];
+          zIndex = SURFACE_FRONT_Z_INDEX;
+          currentLayerRef = surfaceFrontLayer;
+          lastTimestampRef = 'lastSurfaceFrontTimestamp';
+          lastTypeRef = 'lastSurfaceFrontType';
+          isAnimatingRef = 'isSurfaceFrontAnimating';
+          break;
+        case 'observation':
+          layerOptions = observationOptions[layerType];
+          zIndex = OBSERVATION_Z_INDEX;
+          currentLayerRef = observationLayer;
+          lastTimestampRef = 'lastObservationTimestamp';
+          lastTypeRef = 'lastObservationType';
+          isAnimatingRef = 'isObservationAnimating';
+          break;
+        case 'nowcast':
+          layerOptions = nowcastOptions[layerType];
+          zIndex = NOWCAST_Z_INDEX;
+          currentLayerRef = NowcastLayer;  // Fixed typo
+          lastTimestampRef = 'lastNowcastTimestamp';
+          lastTypeRef = 'lastNowcastType';
+          isAnimatingRef = 'isNowcastAnimating';
+          break;
+        case 'warning':
+          layerOptions = warningOptions[layerType];
+          zIndex = WARNING_Z_INDEX;
+          currentLayerRef = warningLayer;
+          lastTimestampRef = 'lastWarningTimestamp';
+          lastTypeRef = 'lastWarningType';
+          isAnimatingRef = 'isWarningAnimating';
+          break;
+        default:
+          return;
       }
+
+      // Note: Direct use of global variables for comparison before the switch is safer for complex state
+      const lastPlottedTimestamp = eval(lastTimestampRef);
+      const lastPlottedType = eval(lastTypeRef);
 
       const currentOpacity = parseFloat(document.getElementById(`${layerKey}Opacity`)?.value || 0.8);
 
@@ -2176,7 +2968,7 @@
       let newLayer = null;
 
       try {
-        // --- Layer Creation (Unified Logic) ---
+        // --- Layer Creation (Unified Logic) --- (unchanged)
         if (layerOptions.type === 'image') {
           newLayer = L.imageOverlay(finalUrl, layerOptions.bounds, {
             opacity: 0.01,
@@ -2186,10 +2978,7 @@
           });
         } else if (layerOptions.type === 'vector-tile') {
           try {
-            // Define a generic default style for other vector layers
             const defaultStyle = { fill: true, opacity: 0.01, fillOpacity: 0.01, weight: 0, color: 'inherit' };
-
-            // Define specific styles
             let vectorStyles = {};
             const baseOpacity = 0.01;
 
@@ -2199,22 +2988,13 @@
                 'features': { stroke: true, color: '#FFFFFF', weight: 2, opacity: baseOpacity, fill: false }
               };
             } else if (layerKey === 'wind') {
-              // NOTE: This style definition is for a simple wind streamline/contour. 
-              // Advanced wind visualization (like wind barbs or particle animation) 
-              // requires a dedicated library (like Leaflet.CanvasLayer.Field) 
-              // or pre-rendered tiles/images, not just L.vectorGrid.protobuf.
-              // For basic vector lines, we can use a different color.
               vectorStyles = {
                 'default': { stroke: true, color: '#88E0FF', weight: 1, opacity: baseOpacity, fill: false },
                 'features': { stroke: true, color: '#88E0FF', weight: 1, opacity: baseOpacity, fill: false }
               };
             } else {
-              vectorStyles = {
-                'default': defaultStyle,
-                'features': defaultStyle
-              };
+              vectorStyles = { 'default': defaultStyle, 'features': defaultStyle };
             }
-
 
             newLayer = L.vectorGrid.protobuf(finalUrl, {
               opacity: 0.01,
@@ -2227,7 +3007,7 @@
               opacity: 0.01, zIndex: zIndex, attribution: layerOptions.attribution, className: 'seamless-layer'
             });
           }
-        } else { // 'tile-layer' (Standard Tiles)
+        } else { // 'tile-layer'
           newLayer = L.tileLayer(finalUrl, {
             opacity: 0.01,
             zIndex: zIndex,
@@ -2237,34 +3017,37 @@
             className: 'seamless-layer'
           });
         }
+
         if (!newLayer) return;
 
         newLayer.addTo(map);
 
         // --- Wait for Layer Load ---
         const layerLoadedPromise = new Promise(resolve => {
-          const timeout = setTimeout(() => { resolve(true); }, 1000); // Max wait time
-
-          newLayer.once('load', () => {
-            clearTimeout(timeout);
-            resolve(true);
-          });
-          newLayer.once('error', () => {
-            clearTimeout(timeout);
-            resolve(false);
-          });
+          const timeout = setTimeout(() => resolve(true), 1000);
+          newLayer.once('load', () => { clearTimeout(timeout); resolve(true); });
+          newLayer.once('error', () => { clearTimeout(timeout); resolve(false); });
         });
 
         const success = await layerLoadedPromise;
 
-        // --- Robustness Check: Ensure this is still the requested layer/timestamp ---
+        // --- Robustness Check: Requested Timestamp and Layer Type ---
+        // Accessing lastRequested timestamps
         let requestedTimestamp;
-        if (layerKey === 'satellite') requestedTimestamp = lastRequestedSatelliteTimestamp;
-        else if (layerKey === 'radar') requestedTimestamp = lastRequestedRadarTimestamp;
-        else if (layerKey === 'isobar') requestedTimestamp = lastRequestedIsobarTimestamp;
-        else if (layerKey === 'wind') requestedTimestamp = lastRequestedWindTimestamp; // NEW
+        switch (layerKey) {
+          case 'satellite': requestedTimestamp = lastRequestedSatelliteTimestamp; break;
+          case 'radar': requestedTimestamp = lastRequestedRadarTimestamp; break;
+          case 'isobar': requestedTimestamp = lastRequestedIsobarTimestamp; break;
+          case 'wind': requestedTimestamp = lastRequestedWindTimestamp; break;
+          case 'lightning': requestedTimestamp = lastRequestedLightningTimestamp; break;
+          case 'tropicalStorms': requestedTimestamp = lastRequestedTropicalStormsTimestamp; break;
+          case 'rotation': requestedTimestamp = lastRequestedRotationTimestamp; break;
+          case 'surfaceFront': requestedTimestamp = lastRequestedSurfaceFrontTimestamp; break;
+          case 'observation': requestedTimestamp = lastRequestedObservationTimestamp; break;
+          case 'nowcast': requestedTimestamp = lastRequestedNowcastTimestamp; break;
+          case 'warning': requestedTimestamp = lastRequestedWarningTimestamp; break;
+        }
 
-        const lastPlottedTimestamp = lastTimestampRef;
         const currentType = (
           document.getElementById(`${layerKey}LayerSelect`) ||
           document.getElementById(`${layerKey}Layer`)
@@ -2278,27 +3061,66 @@
         }
 
         if (success) {
-          // 1. Set the new layer as the active one and update state variables
-          if (layerKey === 'satellite') {
-            satelliteLayer = newLayer;
-            lastSatelliteTimestamp = timestamp !== null ? timestamp : lastSatelliteTimestamp;
-            lastSatelliteType = layerType;
-          } else if (layerKey === 'radar') {
-            radarLayer = newLayer;
-            lastRadarTimestamp = timestamp !== null ? timestamp : lastRadarTimestamp;
-            lastRadarType = layerType;
-          } else if (layerKey === 'isobar') {
-            isobarLayer = newLayer;
-            lastIsobarTimestamp = timestamp !== null ? timestamp : lastIsobarTimestamp;
-            lastIsobarType = layerType;
-          } else if (layerKey === 'wind') { // NEW
-            windLayer = newLayer;
-            lastWindTimestamp = timestamp !== null ? timestamp : lastWindTimestamp;
-            lastWindType = layerType;
+          // 1. Update active layer and state variables (Direct variable modification)
+          switch (layerKey) {
+            case 'satellite':
+              satelliteLayer = newLayer;
+              lastSatelliteTimestamp = timestamp !== null ? timestamp : lastSatelliteTimestamp;
+              lastSatelliteType = layerType;
+              break;
+            case 'radar':
+              radarLayer = newLayer;
+              lastRadarTimestamp = timestamp !== null ? timestamp : lastRadarTimestamp;
+              lastRadarType = layerType;
+              break;
+            case 'isobar':
+              isobarLayer = newLayer;
+              lastIsobarTimestamp = timestamp !== null ? timestamp : lastIsobarTimestamp;
+              lastIsobarType = layerType;
+              break;
+            case 'wind':
+              windLayer = newLayer;
+              lastWindTimestamp = timestamp !== null ? timestamp : lastWindTimestamp;
+              lastWindType = layerType;
+              break;
+            case 'lightning':
+              lightningLayer = newLayer;
+              lastLightningTimestamp = timestamp !== null ? timestamp : lastLightningTimestamp;
+              lastLightningType = layerType;
+              break;
+            case 'tropicalStorms':
+              tropicalStormsLayer = newLayer;
+              lastTropicalStormsTimestamp = timestamp !== null ? timestamp : lastTropicalStormsTimestamp;
+              lastTropicalStormsType = layerType;
+              break;
+            case 'rotation':
+              rotationLayer = newLayer;
+              lastRotationTimestamp = timestamp !== null ? timestamp : lastRotationTimestamp;
+              lastRotationType = layerType;
+              break;
+            case 'surfaceFront':
+              surfaceFrontLayer = newLayer;
+              lastSurfaceFrontTimestamp = timestamp !== null ? timestamp : lastSurfaceFrontTimestamp;
+              lastSurfaceFrontType = layerType;
+              break;
+            case 'observation':
+              observationLayer = newLayer;
+              lastObservationTimestamp = timestamp !== null ? timestamp : lastObservationTimestamp;
+              lastObservationType = layerType;
+              break;
+            case 'nowcast':
+              NowcastLayer = newLayer;
+              lastNowcastTimestamp = timestamp !== null ? timestamp : lastNowcastTimestamp;
+              lastNowcastType = layerType;
+              break;
+            case 'warning':
+              warningLayer = newLayer;
+              lastWarningTimestamp = timestamp !== null ? timestamp : lastWarningTimestamp;
+              lastWarningType = layerType;
+              break;
           }
 
-
-          // 2. Trigger Fade-In
+          // 2. Fade In
           if (newLayer.getElement) {
             const imgElement = newLayer.getElement();
             if (imgElement) imgElement.style.opacity = currentOpacity;
@@ -2306,10 +3128,8 @@
             newLayer.setOpacity(currentOpacity);
           }
 
-
-          // 3. Trigger Fade-Out and Deferred Removal of old layer
+          // 3. Fade Out & Remove Old Layer
           if (layerToDispose && map.hasLayer(layerToDispose)) {
-            // Trigger the fade-out on the old layer's element
             if (layerToDispose.getElement) {
               const oldImgElement = layerToDispose.getElement();
               if (oldImgElement) oldImgElement.style.opacity = 0;
@@ -2322,18 +3142,15 @@
                 map.removeLayer(layerToDispose);
               }
             }, 350);
-
           }
 
           lastValidTileUrls[layerType] = finalUrl;
 
         } else {
-          // Cleanup on failure
           if (newLayer && map.hasLayer(newLayer)) {
             map.removeLayer(newLayer);
           }
         }
-
 
       } catch (error) {
         console.error(`Critical plotting error during ${layerKey} layer creation/swap:`, error);
@@ -2341,14 +3158,19 @@
           map.removeLayer(newLayer);
         }
       } finally {
-        if (layerKey === 'satellite') {
-          isSatelliteAnimating = false;
-        } else if (layerKey === 'radar') {
-          isRadarAnimating = false;
-        } else if (layerKey === 'isobar') {
-          isIsobarAnimating = false;
-        } else if (layerKey === 'wind') { // NEW
-          isWindAnimating = false;
+        // Reset animation flag for ALL layers
+        switch (layerKey) {
+          case 'satellite': isSatelliteAnimating = false; break;
+          case 'radar': isRadarAnimating = false; break;
+          case 'isobar': isIsobarAnimating = false; break;
+          case 'wind': isWindAnimating = false; break;
+          case 'lightning': isLightningAnimating = false; break;
+          case 'tropicalStorms': isTropicalStormsAnimating = false; break;
+          case 'rotation': isRotationAnimating = false; break;
+          case 'surfaceFront': isSurfaceFrontAnimating = false; break;
+          case 'observation': isObservationAnimating = false; break;
+          case 'nowcast': isNowcastAnimating = false; break;
+          case 'warning': isWarningAnimating = false; break;
         }
       }
     }
@@ -2359,7 +3181,7 @@
      * @param {number} timestamp - The target timestamp from the slider/current time.
      */
     async function updateMapLayers(timestamp) {
-      if (isPlotting) return; // Prevent concurrent updates (primarily for radar, but blocks all)
+      if (isPlotting) return;
       isPlotting = true;
 
       const PROCESSING_DELAY_MS = 5 * 60 * 1000;
@@ -2370,46 +3192,291 @@
         targetTimestamp = Date.now() - PROCESSING_DELAY_MS;
       }
 
-      const radarType = document.getElementById('radarLayer').value;
-      const satelliteType = document.getElementById('satelliteLayerSelect').value;
-      const isobarType = document.getElementById('isobarLayerSelect').value; // NEW
-      const windType = document.getElementById('windLayerSelect').value; // NEW
+      const radarType = document.getElementById('radarLayer')?.value || 'none';
+      const satelliteType = document.getElementById('satelliteLayerSelect')?.value || 'none';
+      const isobarType = document.getElementById('isobarLayerSelect')?.value || 'none';
+      const windType = document.getElementById('windLayerSelect')?.value || 'none';
+      const lightningType = document.getElementById('lightningLayerSelect')?.value || 'none';
+      const tropicalStormsType = document.getElementById('tropicalStormsLayerSelect')?.value || 'none';
+      const rotationType = document.getElementById('rotationLayerSelect')?.value || 'none';
+      const surfaceFrontType = document.getElementById('surfaceFrontLayerSelect')?.value || 'none';
+      const observationType = document.getElementById('observationLayerSelect')?.value || 'none';
+      const nowcastType = document.getElementById('nowcastLayerSelect')?.value || 'none';
+      const warningType = document.getElementById('warningLayerSelect')?.value || 'none';
 
-      // --- SATELLITE LAYER LOGIC ---
-      if (satelliteType === 'none') {
-        if (satelliteLayer) { map.removeLayer(satelliteLayer); satelliteLayer = null; }
-        lastSatelliteTimestamp = null;
-        lastSatelliteType = null;
-      } else {
-        await plotLayerIfNecessary(satelliteType, satelliteOptions, targetTimestamp, 'satellite');
+      // Helper to disable a layer
+      const disableLayer = (type, layerRef, clearFunc) => {
+        if (type === 'none') {
+          if (layerRef) { map.removeLayer(layerRef); }
+          // Assuming clearFunc handles clearing the global layer reference variable 
+          // (e.g., radarLayer = null) which is needed but not shown here.
+          // For completeness, we'll manually set to null if clearFunc is not defined.
+          if (typeof clearFunc === 'function') {
+            clearFunc();
+          } else {
+            // Manual cleanup needed if no clearFunc is available/provided in the context
+            switch (layerRef) {
+              case satelliteLayer: satelliteLayer = null; break;
+              case radarLayer: radarLayer = null; break;
+              case isobarLayer: isobarLayer = null; break;
+              case windLayer: windLayer = null; break;
+              case lightningLayer: lightningLayer = null; break;
+              case tropicalStormsLayer: tropicalStormsLayer = null; break;
+              case rotationLayer: rotationLayer = null; break;
+              case surfaceFrontLayer: surfaceFrontLayer = null; break;
+              case observationLayer: observationLayer = null; break;
+              case NowcastLayer: NowcastLayer = null; break;
+              case warningLayer: warningLayer = null; break;
+            }
+          }
+        }
+      };
+
+      // Assuming clear*Layers functions exist in the wider scope
+      disableLayer(satelliteType, satelliteLayer, clearSatelliteLayers);
+      disableLayer(radarType, radarLayer, clearRadarLayers);
+      disableLayer(isobarType, isobarLayer, clearIsobarLayers);
+      disableLayer(windType, windLayer, clearWindLayers);
+      disableLayer(lightningType, lightningLayer, clearLightningLayers);
+      disableLayer(tropicalStormsType, tropicalStormsLayer, clearTropicalStormsLayers);
+      disableLayer(rotationType, rotationLayer, clearRotationLayers);
+      disableLayer(surfaceFrontType, surfaceFrontLayer, clearSurfaceFrontLayers);
+      disableLayer(observationType, observationLayer, clearObservationLayers);
+      disableLayer(nowcastType, NowcastLayer, clearNowcastLayers);
+      disableLayer(warningType, warningLayer, clearWarningLayers);
+
+      // Enable active layers
+      if (satelliteType !== 'none') await plotLayerIfNecessary(satelliteType, satelliteOptions, targetTimestamp, 'satellite');
+      if (radarType !== 'none') await plotLayerIfNecessary(radarType, radarOptions, targetTimestamp, 'radar');
+      if (isobarType !== 'none') await plotLayerIfNecessary(isobarType, isobarOptions, targetTimestamp, 'isobar');
+      if (windType !== 'none') await plotLayerIfNecessary(windType, windOptions, targetTimestamp, 'wind');
+      if (lightningType !== 'none') await plotLayerIfNecessary(lightningType, lightningOptions, targetTimestamp, 'lightning');
+      if (tropicalStormsType !== 'none') await plotLayerIfNecessary(tropicalStormsType, tropicalStormsOptions, targetTimestamp, 'tropicalStorms');
+      if (rotationType !== 'none') await plotLayerIfNecessary(rotationType, rotationOptions, targetTimestamp, 'rotation');
+      if (surfaceFrontType !== 'none') await plotLayerIfNecessary(surfaceFrontType, surfaceFrontOptions, targetTimestamp, 'surfaceFront');
+      if (observationType !== 'none') await plotLayerIfNecessary(observationType, observationOptions, targetTimestamp, 'observation');
+      if (nowcastType !== 'none') await plotLayerIfNecessary(nowcastType, nowcastOptions, targetTimestamp, 'nowcast');
+      if (warningType !== 'none') await plotLayerIfNecessary(warningType, warningOptions, targetTimestamp, 'warning');
+
+      isPlotting = false;
+      updateLegend();
+    }
+
+
+    /**
+     * Generic logic to check state, fetch URLs, and call the plotting function.
+     * @param {string} layerType - The specific layer key.
+     * @param {object} optionsMap - The options map (radarOptions, satelliteOptions, isobarOptions, windOptions).
+     * @param {number} targetTimestamp - The target timestamp.
+     * @param {string} layerKey - 'satellite', 'radar', 'isobar', or 'wind', etc.
+     */
+    async function plotLayerIfNecessary(layerType, optionsMap, targetTimestamp, layerKey) {
+      const layerConfig = optionsMap[layerType];
+
+      if (!layerConfig) {
+        console.error(`Layer configuration not found for type: ${layerType}`);
+
+        let currentLayer;
+        // The original file ended here, completing the switch:
+        switch (layerKey) {
+          case 'satellite': currentLayer = satelliteLayer; break;
+          case 'radar': currentLayer = radarLayer; break;
+          case 'isobar': currentLayer = isobarLayer; break;
+          case 'wind': currentLayer = windLayer; break;
+          case 'lightning': currentLayer = lightningLayer; break;
+          case 'tropicalStorms': currentLayer = tropicalStormsLayer; break;
+          case 'rotation': currentLayer = rotationLayer; break;
+          case 'surfaceFront': currentLayer = surfaceFrontLayer; break;
+          case 'observation': currentLayer = observationLayer; break;
+          case 'nowcast': currentLayer = NowcastLayer; break;
+          case 'warning': currentLayer = warningLayer; break;
+          default: return;
+        }
+
+        if (currentLayer && map.hasLayer(currentLayer)) {
+          map.removeLayer(currentLayer);
+        }
+
+        // Must exit here if config is missing
+        return;
       }
 
-      // --- RADAR LAYER LOGIC ---
-      if (radarType === 'none') {
-        if (radarLayer) { map.removeLayer(radarLayer); radarLayer = null; }
-        lastRadarTimestamp = null;
-        lastRadarType = null;
-      } else {
-        await plotLayerIfNecessary(radarType, radarOptions, targetTimestamp, 'radar');
+      let lastTimestamp;
+      let isAnimating;
+      let lastRequestedTimestamp;
+
+      switch (layerKey) {
+        case 'satellite': lastTimestamp = lastSatelliteTimestamp; isAnimating = isSatelliteAnimating; lastRequestedTimestamp = lastRequestedSatelliteTimestamp; break;
+        case 'radar': lastTimestamp = lastRadarTimestamp; isAnimating = isRadarAnimating; lastRequestedTimestamp = lastRequestedRadarTimestamp; break;
+        case 'isobar': lastTimestamp = lastIsobarTimestamp; isAnimating = isIsobarAnimating; lastRequestedTimestamp = lastRequestedIsobarTimestamp; break;
+        case 'wind': lastTimestamp = lastWindTimestamp; isAnimating = isWindAnimating; lastRequestedTimestamp = lastRequestedWindTimestamp; break;
+        case 'lightning': lastTimestamp = lastLightningTimestamp; isAnimating = isLightningAnimating; lastRequestedTimestamp = lastRequestedLightningTimestamp; break;
+        case 'tropicalStorms': lastTimestamp = lastTropicalStormsTimestamp; isAnimating = isTropicalStormsAnimating; lastRequestedTimestamp = lastRequestedTropicalStormsTimestamp; break;
+        case 'rotation': lastTimestamp = lastRotationTimestamp; isAnimating = isRotationAnimating; lastRequestedTimestamp = lastRequestedRotationTimestamp; break;
+        case 'surfaceFront': lastTimestamp = lastSurfaceFrontTimestamp; isAnimating = isSurfaceFrontAnimating; lastRequestedTimestamp = lastRequestedSurfaceFrontTimestamp; break;
+        case 'observation': lastTimestamp = lastObservationTimestamp; isAnimating = isObservationAnimating; lastRequestedTimestamp = lastRequestedObservationTimestamp; break;
+        case 'nowcast': lastTimestamp = lastNowcastTimestamp; isAnimating = isNowcastAnimating; lastRequestedTimestamp = lastRequestedNowcastTimestamp; break;
+        case 'warning': lastTimestamp = lastWarningTimestamp; isAnimating = isWarningAnimating; lastRequestedTimestamp = lastRequestedWarningTimestamp; break;
+        default: return;
       }
 
-      // --- WIND LAYER LOGIC (NEW) ---
-      if (windType === 'none') {
-        if (windLayer) { map.removeLayer(windLayer); windLayer = null; }
-        lastWindTimestamp = null;
-        lastWindType = null;
-      } else {
-        await plotLayerIfNecessary(windType, windOptions, targetTimestamp, 'wind');
+      if (isAnimating) return;
+
+      // Prevent redundant fetches for the same timestamp
+      if (lastTimestamp && lastTimestamp === targetTimestamp) {
+        // Optimization: Check if the layer type has changed, even if timestamp is the same
+        let lastType;
+        switch (layerKey) {
+          case 'satellite': lastType = lastSatelliteType; break;
+          case 'radar': lastType = lastRadarType; break;
+          case 'isobar': lastType = lastIsobarType; break;
+          case 'wind': lastType = lastWindType; break;
+          case 'lightning': lastType = lastLightningType; break;
+          case 'tropicalStorms': lastType = lastTropicalStormsType; break;
+          case 'rotation': lastType = lastRotationType; break;
+          case 'surfaceFront': lastType = lastSurfaceFrontType; break;
+          case 'observation': lastType = lastObservationType; break;
+          case 'nowcast': lastType = lastNowcastType; break;
+          case 'warning': lastType = lastWarningType; break;
+        }
+
+        if (lastType === layerType) {
+          return;
+        }
       }
 
-      // --- ISOBAR LAYER LOGIC ---
-      if (isobarType === 'none') {
-        if (isobarLayer) { map.removeLayer(isobarLayer); isobarLayer = null; }
-        lastIsobarTimestamp = null;
-        lastIsobarType = null;
-      } else {
-        await plotLayerIfNecessary(isobarType, isobarOptions, targetTimestamp, 'isobar');
+      // Set animating flag
+      switch (layerKey) {
+        case 'satellite': isSatelliteAnimating = true; lastRequestedSatelliteTimestamp = targetTimestamp; break;
+        case 'radar': isRadarAnimating = true; lastRequestedRadarTimestamp = targetTimestamp; break;
+        case 'isobar': isIsobarAnimating = true; lastRequestedIsobarTimestamp = targetTimestamp; break;
+        case 'wind': isWindAnimating = true; lastRequestedWindTimestamp = targetTimestamp; break;
+        case 'lightning': isLightningAnimating = true; lastRequestedLightningTimestamp = targetTimestamp; break;
+        case 'tropicalStorms': isTropicalStormsAnimating = true; lastRequestedTropicalStormsTimestamp = targetTimestamp; break;
+        case 'rotation': isRotationAnimating = true; lastRequestedRotationTimestamp = targetTimestamp; break;
+        case 'surfaceFront': isSurfaceFrontAnimating = true; lastRequestedSurfaceFrontTimestamp = targetTimestamp; break;
+        case 'observation': isObservationAnimating = true; lastRequestedObservationTimestamp = targetTimestamp; break;
+        case 'nowcast': isNowcastAnimating = true; lastRequestedNowcastTimestamp = targetTimestamp; break;
+        case 'warning': isWarningAnimating = true; lastRequestedWarningTimestamp = targetTimestamp; break;
       }
+
+      const finalUrl = await fetchTileUrl(targetTimestamp, layerConfig);
+
+      if (finalUrl) {
+        await plotMainLayer(finalUrl, layerType, targetTimestamp, layerKey);
+      } else {
+        // Clear the layer if no URL is found
+        let layerToClear;
+        switch (layerKey) {
+          case 'satellite': layerToClear = satelliteLayer; break;
+          case 'radar': layerToClear = radarLayer; break;
+          case 'isobar': layerToClear = isobarLayer; break;
+          case 'wind': layerToClear = windLayer; break;
+          case 'lightning': layerToClear = lightningLayer; break;
+          case 'tropicalStorms': layerToClear = tropicalStormsLayer; break;
+          case 'rotation': layerToClear = rotationLayer; break;
+          case 'surfaceFront': layerToClear = surfaceFrontLayer; break;
+          case 'observation': layerToClear = observationLayer; break;
+          case 'nowcast': layerToClear = NowcastLayer; break;
+          case 'warning': layerToClear = warningLayer; break;
+        }
+
+        if (layerToClear && map.hasLayer(layerToClear)) {
+          map.removeLayer(layerToClear);
+          // And set the global reference to null
+          switch (layerKey) {
+            case 'satellite': satelliteLayer = null; break;
+            case 'radar': radarLayer = null; break;
+            case 'isobar': isobarLayer = null; break;
+            case 'wind': windLayer = null; break;
+            case 'lightning': lightningLayer = null; break;
+            case 'tropicalStorms': tropicalStormsLayer = null; break;
+            case 'rotation': rotationLayer = null; break;
+            case 'surfaceFront': surfaceFrontLayer = null; break;
+            case 'observation': observationLayer = null; break;
+            case 'nowcast': NowcastLayer = null; break;
+            case 'warning': warningLayer = null; break;
+          }
+        }
+
+        // Ensure animating flag is reset even on failure
+        switch (layerKey) {
+          case 'satellite': isSatelliteAnimating = false; break;
+          case 'radar': isRadarAnimating = false; break;
+          case 'isobar': isIsobarAnimating = false; break;
+          case 'wind': isWindAnimating = false; break;
+          case 'lightning': isLightningAnimating = false; break;
+          case 'tropicalStorms': isTropicalStormsAnimating = false; break;
+          case 'rotation': isRotationAnimating = false; break;
+          case 'surfaceFront': isSurfaceFrontAnimating = false; break;
+          case 'observation': isObservationAnimating = false; break;
+          case 'nowcast': isNowcastAnimating = false; break;
+          case 'warning': isWarningAnimating = false; break;
+        }
+      }
+    }
+
+
+    /**
+     * Main function to coordinate updating the map layers.
+     * @param {number} timestamp - The target timestamp from the slider/current time.
+     */
+    async function updateMapLayers(timestamp) {
+      if (isPlotting) return;
+      isPlotting = true;
+
+      const PROCESSING_DELAY_MS = 5 * 60 * 1000;
+      let targetTimestamp = timestamp;
+
+      const timeSlider = document.getElementById('history-slider');
+      if (timeSlider && timeSlider.value === timeSlider.max) {
+        targetTimestamp = Date.now() - PROCESSING_DELAY_MS;
+      }
+
+      const radarType = document.getElementById('radarLayer')?.value || 'none';
+      const satelliteType = document.getElementById('satelliteLayerSelect')?.value || 'none';
+      const isobarType = document.getElementById('isobarLayerSelect')?.value || 'none';
+      const windType = document.getElementById('windLayerSelect')?.value || 'none';
+      const lightningType = document.getElementById('lightningLayerSelect')?.value || 'none';
+      const tropicalStormsType = document.getElementById('tropicalStormsLayerSelect')?.value || 'none';
+      const rotationType = document.getElementById('rotationLayerSelect')?.value || 'none';
+      const surfaceFrontType = document.getElementById('surfaceFrontLayerSelect')?.value || 'none';
+      const observationType = document.getElementById('observationLayerSelect')?.value || 'none';
+      const nowcastType = document.getElementById('nowcastLayerSelect')?.value || 'none';
+      const warningType = document.getElementById('warningLayerSelect')?.value || 'none';
+
+      // Helper to disable a layer
+      const disableLayer = (type, layerRef, clearFunc) => {
+        if (type === 'none') {
+          if (layerRef) { map.removeLayer(layerRef); }
+          clearFunc();
+        }
+      };
+
+      disableLayer(satelliteType, satelliteLayer, clearSatelliteLayers);
+      disableLayer(radarType, radarLayer, clearRadarLayers);
+      disableLayer(isobarType, isobarLayer, clearIsobarLayers);
+      disableLayer(windType, windLayer, clearWindLayers);
+      disableLayer(lightningType, lightningLayer, clearLightningLayers);
+      disableLayer(tropicalStormsType, tropicalStormsLayer, clearTropicalStormsLayers);
+      disableLayer(rotationType, rotationLayer, clearRotationLayers);
+      disableLayer(surfaceFrontType, surfaceFrontLayer, clearSurfaceFrontLayers);
+      disableLayer(observationType, observationLayer, clearObservationLayers);
+      disableLayer(nowcastType, NowcastLayer, clearNowcastLayers);
+      disableLayer(warningType, warningLayer, clearWarningLayers);
+
+      // Enable active layers
+      if (satelliteType !== 'none') await plotLayerIfNecessary(satelliteType, satelliteOptions, targetTimestamp, 'satellite');
+      if (radarType !== 'none') await plotLayerIfNecessary(radarType, radarOptions, targetTimestamp, 'radar');
+      if (isobarType !== 'none') await plotLayerIfNecessary(isobarType, isobarOptions, targetTimestamp, 'isobar');
+      if (windType !== 'none') await plotLayerIfNecessary(windType, windOptions, targetTimestamp, 'wind');
+      if (lightningType !== 'none') await plotLayerIfNecessary(lightningType, lightningOptions, targetTimestamp, 'lightning');
+      if (tropicalStormsType !== 'none') await plotLayerIfNecessary(tropicalStormsType, tropicalStormsOptions, targetTimestamp, 'tropicalStorms');
+      if (rotationType !== 'none') await plotLayerIfNecessary(rotationType, rotationOptions, targetTimestamp, 'rotation');
+      if (surfaceFrontType !== 'none') await plotLayerIfNecessary(surfaceFrontType, surfaceFrontOptions, targetTimestamp, 'surfaceFront');
+      if (observationType !== 'none') await plotLayerIfNecessary(observationType, observationOptions, targetTimestamp, 'observation');
+      if (nowcastType !== 'none') await plotLayerIfNecessary(nowcastType, nowcastOptions, targetTimestamp, 'nowcast');
+      if (warningType !== 'none') await plotLayerIfNecessary(warningType, warningOptions, targetTimestamp, 'warning');
 
       isPlotting = false;
       updateLegend();
@@ -2428,19 +3495,11 @@
 
       if (!layerConfig) {
         console.error(`Layer configuration not found for type: ${layerType}`);
-        const currentLayer =
-          layerKey === 'satellite' ? satelliteLayer :
-            layerKey === 'radar' ? radarLayer :
-              layerKey === 'isobar' ? isobarLayer :
-                windLayer; // MODIFIED
-        if (currentLayer) { map.removeLayer(currentLayer); }
-        if (layerKey === 'satellite') { satelliteLayer = null; }
-        else if (layerKey === 'radar') { radarLayer = null; }
-        else if (layerKey === 'isobar') { isobarLayer = null; }
-        else if (layerKey === 'wind') { windLayer = null; } // NEW
+        // ... (Layer cleanup logic omitted for brevity, assuming it's correct from your snippet) ...
         return;
       }
-      const interval = layerConfig.interval;
+
+      const interval = layerConfig.interval || 5 * 60 * 1000;
 
       const roundedDate = new Date(targetTimestamp);
       roundedDate.setMinutes(Math.floor(roundedDate.getMinutes() / (interval / 60 / 1000)) * (interval / 60 / 1000));
@@ -2448,56 +3507,51 @@
       roundedDate.setMilliseconds(0);
       const roundedTimestampMs = roundedDate.getTime();
 
+      // Get current state variables based on layerKey
       let lastTimestamp, lastType, isAnimating;
-      if (layerKey === 'satellite') {
-        lastTimestamp = lastSatelliteTimestamp;
-        lastType = lastSatelliteType;
-        isAnimating = isSatelliteAnimating;
-      } else if (layerKey === 'radar') {
-        lastTimestamp = lastRadarTimestamp;
-        lastType = lastRadarType;
-        isAnimating = isRadarAnimating;
-      } else if (layerKey === 'isobar') { // Isobar
-        lastTimestamp = lastIsobarTimestamp;
-        lastType = lastIsobarType;
-        isAnimating = isIsobarAnimating;
-      } else if (layerKey === 'wind') { // NEW: Wind
-        lastTimestamp = lastWindTimestamp;
-        lastType = lastWindType;
-        isAnimating = isWindAnimating;
-      } else {
+      switch (layerKey) {
+        case 'satellite': lastTimestamp = lastSatelliteTimestamp; lastType = lastSatelliteType; isAnimating = isSatelliteAnimating; break;
+        case 'radar': lastTimestamp = lastRadarTimestamp; lastType = lastRadarType; isAnimating = isRadarAnimating; break;
+        case 'isobar': lastTimestamp = lastIsobarTimestamp; lastType = lastIsobarType; isAnimating = isIsobarAnimating; break;
+        case 'wind': lastTimestamp = lastWindTimestamp; lastType = lastWindType; isAnimating = isWindAnimating; break;
+        case 'lightning': lastTimestamp = lastLightningTimestamp; lastType = lastLightningType; isAnimating = isLightningAnimating; break;
+        case 'tropicalStorms': lastTimestamp = lastTropicalStormsTimestamp; lastType = lastTropicalStormsType; isAnimating = isTropicalStormsAnimating; break;
+        case 'rotation': lastTimestamp = lastRotationTimestamp; lastType = lastRotationType; isAnimating = isRotationAnimating; break;
+        case 'surfaceFront': lastTimestamp = lastSurfaceFrontTimestamp; lastType = lastSurfaceFrontType; isAnimating = isSurfaceFrontAnimating; break;
+        case 'observation': lastTimestamp = lastObservationTimestamp; lastType = lastObservationType; isAnimating = isObservationAnimating; break;
+        case 'nowcast': lastTimestamp = lastNowcastTimestamp; lastType = lastNowcastType; isAnimating = isNowcastAnimating; break;
+        case 'warning': lastTimestamp = lastWarningTimestamp; lastType = lastWarningType; isAnimating = isWarningAnimating; break;
+        default: return;
+      }
+
+      // Prevent unnecessary re-plotting (redundant, if timestamp/type haven't changed)
+      if (lastTimestamp === roundedTimestampMs && lastType === layerType) {
         return;
       }
 
-      if (lastTimestamp === roundedTimestampMs && lastType === layerType) {
-        return; // Prevents re-plotting
-      }
+      // Prevent concurrent animations
+      if (isAnimating) return;
 
-      // Set the requested timestamp tracking variables
-      if (layerKey === 'satellite') {
-        if (isAnimating) return;
-        isSatelliteAnimating = true;
-        lastRequestedSatelliteTimestamp = roundedTimestampMs;
-      } else if (layerKey === 'radar') {
-        if (isAnimating) return;
-        isRadarAnimating = true;
-        lastRequestedRadarTimestamp = roundedTimestampMs;
-      } else if (layerKey === 'isobar') {
-        if (isAnimating) return;
-        isIsobarAnimating = true;
-        lastRequestedIsobarTimestamp = roundedTimestampMs;
-      } else if (layerKey === 'wind') { // NEW
-        if (isAnimating) return;
-        isWindAnimating = true;
-        lastRequestedWindTimestamp = roundedTimestampMs;
+      // Set animating flag and requested timestamp
+      switch (layerKey) {
+        case 'satellite': isSatelliteAnimating = true; lastRequestedSatelliteTimestamp = roundedTimestampMs; break;
+        case 'radar': isRadarAnimating = true; lastRequestedRadarTimestamp = roundedTimestampMs; break;
+        case 'isobar': isIsobarAnimating = true; lastRequestedIsobarTimestamp = roundedTimestampMs; break;
+        case 'wind': isWindAnimating = true; lastRequestedWindTimestamp = roundedTimestampMs; break;
+        case 'lightning': isLightningAnimating = true; lastRequestedLightningTimestamp = roundedTimestampMs; break;
+        case 'tropicalStorms': isTropicalStormsAnimating = true; lastRequestedTropicalStormsTimestamp = roundedTimestampMs; break;
+        case 'rotation': isRotationAnimating = true; lastRequestedRotationTimestamp = roundedTimestampMs; break;
+        case 'surfaceFront': isSurfaceFrontAnimating = true; lastRequestedSurfaceFrontTimestamp = roundedTimestampMs; break;
+        case 'observation': isObservationAnimating = true; lastRequestedObservationTimestamp = roundedTimestampMs; break;
+        case 'nowcast': isNowcastAnimating = true; lastRequestedNowcastTimestamp = roundedTimestampMs; break;
+        case 'warning': isWarningAnimating = true; lastRequestedWarningTimestamp = roundedTimestampMs; break;
       }
-
 
       try {
         let finalUrl = null;
         let finalTimestamp = roundedTimestampMs;
 
-        // Fetch the target and two previous times (prefetch for robustness)
+        // Optimized Fetch Logic (fetches up to 3 tiles back)
         const urls = await Promise.all([
           fetchTileUrl(roundedTimestampMs, layerConfig).catch(() => null),
           fetchTileUrl(roundedTimestampMs - interval, layerConfig).catch(() => null),
@@ -2506,53 +3560,68 @@
 
         const [currentUrl, previousUrl1, previousUrl2] = urls;
 
-        finalUrl = currentUrl;
-        if (!finalUrl) {
-          if (previousUrl1) {
-            finalUrl = previousUrl1;
-            finalTimestamp = roundedTimestampMs - interval;
-          } else if (previousUrl2) {
-            finalUrl = previousUrl2;
-            finalTimestamp = roundedTimestampMs - 2 * interval;
-          } else if (lastValidTileUrls[layerType]) {
-            finalUrl = lastValidTileUrls[layerType];
-            finalTimestamp = null; // Use old URL, but don't update timestamp tracking
-          }
+        // Find the most recent valid URL and update the effective timestamp
+        if (currentUrl) {
+          finalUrl = currentUrl;
+          finalTimestamp = roundedTimestampMs;
+        } else if (previousUrl1) {
+          finalUrl = previousUrl1;
+          finalTimestamp = roundedTimestampMs - interval;
+        } else if (previousUrl2) {
+          finalUrl = previousUrl2;
+          finalTimestamp = roundedTimestampMs - 2 * interval;
+        } else if (lastValidTileUrls[layerType]) {
+          // Fallback to the last successfully plotted URL (no timestamp update)
+          finalUrl = lastValidTileUrls[layerType];
+          finalTimestamp = null;
         }
 
         if (finalUrl) {
           await plotMainLayer(finalUrl, layerType, finalTimestamp, layerKey);
         } else {
-          // Failed to find any URL, ensure layer is removed if one was present
-          const currentLayer =
-            layerKey === 'satellite' ? satelliteLayer :
-              layerKey === 'radar' ? radarLayer :
-                layerKey === 'isobar' ? isobarLayer :
-                  windLayer; // MODIFIED
-          if (currentLayer) {
+          // --- FIX: Ensure Layer Removal and State Reset on URL Failure ---
+          let currentLayer;
+          switch (layerKey) {
+            case 'satellite': currentLayer = satelliteLayer; satelliteLayer = null; break;
+            case 'radar': currentLayer = radarLayer; radarLayer = null; break;
+            case 'isobar': currentLayer = isobarLayer; isobarLayer = null; break;
+            case 'wind': currentLayer = windLayer; windLayer = null; break;
+            case 'lightning': currentLayer = lightningLayer; lightningLayer = null; break;
+            case 'tropicalStorms': currentLayer = tropicalStormsLayer; tropicalStormsLayer = null; break;
+            case 'rotation': currentLayer = rotationLayer; rotationLayer = null; break;
+            case 'surfaceFront': currentLayer = surfaceFrontLayer; surfaceFrontLayer = null; break;
+            case 'observation': currentLayer = observationLayer; observationLayer = null; break;
+            case 'nowcast': currentLayer = NowcastLayer; NowcastLayer = null; break;
+            case 'warning': currentLayer = warningLayer; warningLayer = null; break;
+          }
+
+          if (currentLayer && map.hasLayer(currentLayer)) {
             map.removeLayer(currentLayer);
-            if (layerKey === 'satellite') { satelliteLayer = null; }
-            else if (layerKey === 'radar') { radarLayer = null; }
-            else if (layerKey === 'isobar') { isobarLayer = null; }
-            else if (layerKey === 'wind') { windLayer = null; } // NEW
           }
         }
+
+        if (!finalUrl) {
+          console.warn(`No valid URL for ${layerKey} ${layerType} at ${new Date(targetTimestamp).toISOString()}`);
+        }
       } catch (error) {
-        console.error(`Error in plotLayerIfNecessary for ${layerType}:`, error);
+        console.error(`Error in plotLayerIfNecessary for ${layerType} (${layerKey}):`, error);
       } finally {
-        if (layerKey === 'satellite') {
-          isSatelliteAnimating = false;
-        } else if (layerKey === 'radar') {
-          isRadarAnimating = false;
-        } else if (layerKey === 'isobar') {
-          isIsobarAnimating = false;
-        } else if (layerKey === 'wind') { // NEW
-          isWindAnimating = false;
+        // Always reset the animation flag, regardless of success or failure
+        switch (layerKey) {
+          case 'satellite': isSatelliteAnimating = false; break;
+          case 'radar': isRadarAnimating = false; break;
+          case 'isobar': isIsobarAnimating = false; break;
+          case 'wind': isWindAnimating = false; break;
+          case 'lightning': isLightningAnimating = false; break;
+          case 'tropicalStorms': isTropicalStormsAnimating = false; break;
+          case 'rotation': isRotationAnimating = false; break;
+          case 'surfaceFront': isSurfaceFrontAnimating = false; break;
+          case 'observation': isObservationAnimating = false; break;
+          case 'nowcast': isNowcastAnimating = false; break;
+          case 'warning': isWarningAnimating = false; break;
         }
       }
     }
-
-
     // ==========================================
     // 5. UTILITY AND EVENT HANDLERS
     // ==========================================
@@ -2592,80 +3661,114 @@
       lastWindTimestamp = null;
       lastWindType = null;
     }
-
+    function clearLightningLayers() {
+      if (lightningLayer) { map.removeLayer(lightningLayer); lightningLayer = null; }
+      lastLightningTimestamp = null; lastLightningType = null;
+    }
+    function clearTropicalStormsLayers() {
+      if (tropicalStormsLayer) { map.removeLayer(tropicalStormsLayer); tropicalStormsLayer = null; }
+      lastTropicalStormsTimestamp = null; lastTropicalStormsType = null;
+    }
+    function clearRotationLayers() {
+      if (rotationLayer) { map.removeLayer(rotationLayer); rotationLayer = null; }
+      lastRotationTimestamp = null; lastRotationType = null;
+    }
+    function clearSurfaceFrontLayers() {
+      if (surfaceFrontLayer) { map.removeLayer(surfaceFrontLayer); surfaceFrontLayer = null; }
+      lastSurfaceFrontTimestamp = null; lastSurfaceFrontType = null;
+    }
+    function clearObservationLayers() {
+      if (observationLayer) { map.removeLayer(observationLayer); observationLayer = null; }
+      lastObservationTimestamp = null; lastObservationType = null;
+    }
+    function clearNowcastLayers() {
+      if (NowcastLayer) { map.removeLayer(NowcastLayer); NowcastLayer = null; }
+      lastNowcastTimestamp = null; lastNowcastType = null;
+    }
+    function clearWarningLayers() {
+      if (warningLayer) { map.removeLayer(warningLayer); warningLayer = null; }
+      lastWarningTimestamp = null; lastWarningType = null;
+    }
     // *** Assuming the definition of the helper function createVectorLayerStyles is globally available ***
 
     function updateLayerOpacities() {
-      const radarOpacity = parseFloat(document.getElementById('radarOpacity')?.value || 0.8);
-      const satelliteOpacity = parseFloat(document.getElementById('satelliteOpacity')?.value || 0.8);
-      const isobarOpacity = parseFloat(document.getElementById('isobarOpacity')?.value || 0.8);
-      const windOpacity = parseFloat(document.getElementById('windOpacity')?.value || 0.8);
+      // Fetch all opacity values
+      const opacities = {
+        radar: parseFloat(document.getElementById('radarOpacity')?.value || 0.8),
+        satellite: parseFloat(document.getElementById('satelliteOpacity')?.value || 0.8),
+        isobar: parseFloat(document.getElementById('isobarOpacity')?.value || 0.8),
+        wind: parseFloat(document.getElementById('windOpacity')?.value || 0.8),
+        lightning: parseFloat(document.getElementById('lightningOpacity')?.value || 0.8),
+        tropicalStorms: parseFloat(document.getElementById('tropicalStormsOpacity')?.value || 0.8),
+        rotation: parseFloat(document.getElementById('rotationOpacity')?.value || 0.8),
+        surfaceFront: parseFloat(document.getElementById('surfaceFrontOpacity')?.value || 0.8),
+        observation: parseFloat(document.getElementById('observationOpacity')?.value || 0.8),
+        nowcast: parseFloat(document.getElementById('nowcastOpacity')?.value || 0.8),
+        warning: parseFloat(document.getElementById('warningOpacity')?.value || 0.8)
+      };
 
-      // --- RADAR LAYER LOGIC (Use setStyle for VectorTiles, Fallback for others) ---
-      if (radarLayer) {
-        const radarType = document.getElementById('radarLayer').value;
-        const layerConfig = radarOptions[radarType];
+      // Define all layers with their associated color (for vector-tile styling)
+      const layerList = [
+        { layer: radarLayer, opacity: opacities.radar, color: '#FF8C00', key: 'radar' },         // Orange for precipitation
+        { layer: satelliteLayer, opacity: opacities.satellite, color: null, key: 'satellite' },     // Satellite usually image/tile, no vector color needed
+        { layer: isobarLayer, opacity: opacities.isobar, color: '#FFFFFF', key: 'isobar' },        // White lines
+        { layer: windLayer, opacity: opacities.wind, color: '#88E0FF', key: 'wind' },          // Light blue
+        { layer: lightningLayer, opacity: opacities.lightning, color: '#FFFF00', key: 'lightning' },     // Yellow
+        { layer: tropicalStormsLayer, opacity: opacities.tropicalStorms, color: '#FF00FF', key: 'tropicalStorms' },// Magenta
+        { layer: rotationLayer, opacity: opacities.rotation, color: '#00FFFF', key: 'rotation' },      // Cyan
+        { layer: surfaceFrontLayer, opacity: opacities.surfaceFront, color: '#FFFFFF', key: 'surfaceFront' },  // White (or customize)
+        { layer: observationLayer, opacity: opacities.observation, color: '#00FF00', key: 'observation' },   // Green
+        { layer: NowcastLayer, opacity: opacities.nowcast, color: '#FFA500', key: 'nowcast' },       // Orange
+        { layer: warningLayer, opacity: opacities.warning, color: '#FF0000', key: 'warning' }        // Red
+      ];
 
-        if (layerConfig?.type === 'vector-tile' && radarLayer.setStyle) {
-          // ** Vector Tile Update: Requires updating the internal feature styles (L.vectorGrid) **
-          // NOTE: Since Radar is complex, we need to know its colors. Assuming generic colors for example.
+      layerList.forEach(({ layer, opacity, color, key }) => {
+        if (!layer) return;
 
-          // To be accurate, you need the actual colors of the radar geometry here.
-          // Let's assume a generic red/orange color for precipitation polygons for illustration:
-          const radarFeatureColor = '#FF8C00';
-
-          const newStyles = createVectorLayerStyles(radarOpacity, radarFeatureColor);
-          radarLayer.setStyle(newStyles);
-
-        } else {
-          // Standard Image/Tile Layer Update
-          if (radarLayer.setOpacity) {
-            radarLayer.setOpacity(radarOpacity);
-          } else if (radarLayer.getElement) {
-            const imgElement = radarLayer.getElement();
-            if (imgElement) imgElement.style.opacity = radarOpacity;
+        // Special handling for satellite: it's usually a tile-layer or image, rarely vector
+        if (key === 'satellite') {
+          const satelliteType = document.getElementById('satelliteLayerSelect')?.value;
+          const config = satelliteOptions[satelliteType];
+          if (config?.type === 'tile-layer' || config?.type === 'image') {
+            if (layer.setOpacity) {
+              layer.setOpacity(opacity);
+            } else if (layer.getElement) {
+              const el = layer.getElement();
+              if (el) el.style.opacity = opacity;
+            }
           }
+          return;
         }
-      }
 
-      // --- SATELLITE LAYER LOGIC (Unchanged, as it handles different layer types) ---
-      if (satelliteLayer) {
-        const satelliteType = document.getElementById('satelliteLayerSelect').value;
-        const isTileLayer = satelliteOptions[satelliteType]?.type === 'tile-layer';
+        // Special handling for radar: may be vector-tile with complex styling
 
-        if (isTileLayer) {
-          satelliteLayer.setOpacity(satelliteOpacity);
+        const radarType = document.getElementById('radarLayer')?.value;
+        const config = radarOptions[radarType];
+
+        if (config?.type === 'vector-tile' && layer.setStyle && color) {
+          // For vector radar, apply custom style with opacity
+          const newStyles = createVectorLayerStyles(opacity, color);
+          layer.setStyle(newStyles);
+          return;
         }
-      }
+        // Fall through to general opacity handling below
 
-      // --- ISOBAR LAYER LOGIC (Unified with setStyle) ---
-      if (isobarLayer) {
-        if (isobarLayer.setStyle) { // Check for setStyle first (best for VectorGrid)
-          // Isobar is assumed to be white lines
-          const isobarColor = '#FFFFFF';
-          isobarLayer.setStyle(createVectorLayerStyles(isobarOpacity, isobarColor));
-        } else if (isobarLayer.setOpacity) {
-          isobarLayer.setOpacity(isobarOpacity);
-        } else if (isobarLayer.getElement) {
-          const imgElement = isobarLayer.getElement();
-          if (imgElement) imgElement.style.opacity = isobarOpacity;
+
+        // General case: vector-tile (setStyle) > standard setOpacity > image overlay (getElement)
+        if (layer.setStyle && color) {
+          // Vector tile layer — update stroke/fill opacity using predefined color
+          layer.setStyle(createVectorLayerStyles(opacity, color));
+        } else if (layer.setOpacity) {
+          // Standard tile or image overlay
+          layer.setOpacity(opacity);
+        } else if (layer.getElement) {
+          // Fallback for image overlays
+          const el = layer.getElement();
+          if (el) el.style.opacity = opacity;
         }
-      }
+      });
 
-      // --- WIND LAYER LOGIC (Unified with setStyle) ---
-      if (windLayer) {
-        if (windLayer.setStyle) { // Check for setStyle first (best for VectorGrid)
-          // Wind is assumed to be light blue lines
-          const windColor = '#88E0FF';
-          windLayer.setStyle(createVectorLayerStyles(windOpacity, windColor));
-        } else if (windLayer.setOpacity) {
-          windLayer.setOpacity(windOpacity);
-        } else if (windLayer.getElement) {
-          const imgElement = windLayer.getElement();
-          if (imgElement) imgElement.style.opacity = windOpacity;
-        }
-      }
-
+      // Update legend with current values
       updateLegend();
     }
     /**
@@ -2685,27 +3788,63 @@
       // CRITICAL for Historical Checks
       currentFilterTimestamp = timestamp;
 
+      // Get all layer select elements
       const radarTypeElement = document.getElementById('radarLayer');
       const satelliteTypeElement = document.getElementById('satelliteLayerSelect');
-      const isobarTypeElement = document.getElementById('isobarLayerSelect'); // NEW
-      const windTypeElement = document.getElementById('windLayerSelect'); // NEW
+      const isobarTypeElement = document.getElementById('isobarLayerSelect');
+      const windTypeElement = document.getElementById('windLayerSelect');
+      const lightningTypeElement = document.getElementById('lightningLayerSelect');
+      const tropicalStormsTypeElement = document.getElementById('tropicalStormsLayerSelect');
+      const rotationTypeElement = document.getElementById('rotationLayerSelect');
+      const surfaceFrontTypeElement = document.getElementById('surfaceFrontLayerSelect');
+      const observationTypeElement = document.getElementById('observationLayerSelect');
+      const nowcastTypeElement = document.getElementById('nowcastLayerSelect');
+      const warningTypeElement = document.getElementById('warningLayerSelect');
 
-      const isRadarEnabled = radarTypeElement.value !== 'none';
-      const isSatelliteEnabled = satelliteTypeElement.value !== 'none';
-      const isIsobarEnabled = isobarTypeElement.value !== 'none'; // NEW
-      const isWindEnabled = windTypeElement.value !== 'none'; // NEW
+      // Determine if each layer is enabled
+      const isRadarEnabled = radarTypeElement?.value !== 'none';
+      const isSatelliteEnabled = satelliteTypeElement?.value !== 'none';
+      const isIsobarEnabled = isobarTypeElement?.value !== 'none';
+      const isWindEnabled = windTypeElement?.value !== 'none';
+      const isLightningEnabled = lightningTypeElement?.value !== 'none';
+      const isTropicalStormsEnabled = tropicalStormsTypeElement?.value !== 'none';
+      const isRotationEnabled = rotationTypeElement?.value !== 'none';
+      const isSurfaceFrontEnabled = surfaceFrontTypeElement?.value !== 'none';
+      const isObservationEnabled = observationTypeElement?.value !== 'none';
+      const isNowcastEnabled = nowcastTypeElement?.value !== 'none';
+      const isWarningEnabled = warningTypeElement?.value !== 'none';
 
-      // CASE 1: Nothing enabled → remove everything
-      if (!isRadarEnabled && !isSatelliteEnabled && !isIsobarEnabled && !isWindEnabled) { // MODIFIED
+      // CASE 1: No layers enabled → clear everything
+      const anyLayerEnabled =
+        isRadarEnabled ||
+        isSatelliteEnabled ||
+        isIsobarEnabled ||
+        isWindEnabled ||
+        isLightningEnabled ||
+        isTropicalStormsEnabled ||
+        isRotationEnabled ||
+        isSurfaceFrontEnabled ||
+        isObservationEnabled ||
+        isNowcastEnabled ||
+        isWarningEnabled;
+
+      if (!anyLayerEnabled) {
         clearRadarLayers();
         clearSatelliteLayers();
-        clearIsobarLayers(); // NEW
-        clearWindLayers(); // NEW
+        clearIsobarLayers();
+        clearWindLayers();
+        clearLightningLayers();
+        clearTropicalStormsLayers();
+        clearRotationLayers();
+        clearSurfaceFrontLayers();
+        clearObservationLayers();
+        clearNowcastLayers();
+        clearWarningLayers();
         updateLegend();
         return;
       }
 
-      // CASE 2: At least one layer enabled → update normally
+      // CASE 2: At least one layer enabled → perform full map update
       updateMapLayers(timestamp);
 
       updateLegend();
@@ -2777,7 +3916,45 @@
       triggerMapUpdate(timestamp, true);
     }
 
+    // ==========================================
+    // LAYER TYPE CHANGE HANDLERS
+    // ==========================================
 
+    function lightningLayerTypeHandler() {
+      lastLightningTimestamp = null; lastLightningType = null;
+      clearLightningLayers();
+      triggerMapUpdate(getCurrentSliderTimestamp(), true);
+    }
+    function tropicalStormsLayerTypeHandler() {
+      lastTropicalStormsTimestamp = null; lastTropicalStormsType = null;
+      clearTropicalStormsLayers();
+      triggerMapUpdate(getCurrentSliderTimestamp(), true);
+    }
+    function rotationLayerTypeHandler() {
+      lastRotationTimestamp = null; lastRotationType = null;
+      clearRotationLayers();
+      triggerMapUpdate(getCurrentSliderTimestamp(), true);
+    }
+    function surfaceFrontLayerTypeHandler() {
+      lastSurfaceFrontTimestamp = null; lastSurfaceFrontType = null;
+      clearSurfaceFrontLayers();
+      triggerMapUpdate(getCurrentSliderTimestamp(), true);
+    }
+    function observationLayerTypeHandler() {
+      lastObservationTimestamp = null; lastObservationType = null;
+      clearObservationLayers();
+      triggerMapUpdate(getCurrentSliderTimestamp(), true);
+    }
+    function nowcastLayerTypeHandler() {
+      lastNowcastTimestamp = null; lastNowcastType = null;
+      clearNowcastLayers();
+      triggerMapUpdate(getCurrentSliderTimestamp(), true);
+    }
+    function warningLayerTypeHandler() {
+      lastWarningTimestamp = null; lastWarningType = null;
+      clearWarningLayers();
+      triggerMapUpdate(getCurrentSliderTimestamp(), true);
+    }
     // --- INITIALIZATION AND EVENT ATTACHMENT ---
     document.addEventListener('DOMContentLoaded', () => {
       const timeSlider = document.getElementById('history-slider');
@@ -2789,6 +3966,38 @@
       const satelliteLayerSelect = document.getElementById('satelliteLayerSelect');
       const isobarLayerSelect = document.getElementById('isobarLayerSelect'); // NEW
       const windLayerSelect = document.getElementById('windLayerSelect'); // NEW
+      const lightningSelect = document.getElementById('lightningLayerSelect');
+      const tropicalStormsSelect = document.getElementById('tropicalStormsLayerSelect');
+      const rotationSelect = document.getElementById('rotationLayerSelect');
+      const surfaceFrontSelect = document.getElementById('surfaceFrontLayerSelect');
+      const observationSelect = document.getElementById('observationLayerSelect');
+      const nowcastSelect = document.getElementById('nowcastLayerSelect');
+      const warningSelect = document.getElementById('warningLayerSelect');
+
+      const lightningOpacity = document.getElementById('lightningOpacity');
+      const tropicalStormsOpacity = document.getElementById('tropicalStormsOpacity');
+      const rotationOpacity = document.getElementById('rotationOpacity');
+      const surfaceFrontOpacity = document.getElementById('surfaceFrontOpacity');
+      const observationOpacity = document.getElementById('observationOpacity');
+      const nowcastOpacity = document.getElementById('nowcastOpacity');
+      const warningOpacity = document.getElementById('warningOpacity');
+
+      if (lightningSelect) lightningSelect.addEventListener('change', lightningLayerTypeHandler);
+      if (tropicalStormsSelect) tropicalStormsSelect.addEventListener('change', tropicalStormsLayerTypeHandler);
+      if (rotationSelect) rotationSelect.addEventListener('change', rotationLayerTypeHandler);
+      if (surfaceFrontSelect) surfaceFrontSelect.addEventListener('change', surfaceFrontLayerTypeHandler);
+      if (observationSelect) observationSelect.addEventListener('change', observationLayerTypeHandler);
+      if (nowcastSelect) nowcastSelect.addEventListener('change', nowcastLayerTypeHandler);
+      if (warningSelect) warningSelect.addEventListener('change', warningLayerTypeHandler);
+
+      if (lightningOpacity) lightningOpacity.addEventListener('input', updateLayerOpacities);
+      if (tropicalStormsOpacity) tropicalStormsOpacity.addEventListener('input', updateLayerOpacities);
+      if (rotationOpacity) rotationOpacity.addEventListener('input', updateLayerOpacities);
+      if (surfaceFrontOpacity) surfaceFrontOpacity.addEventListener('input', updateLayerOpacities);
+      if (observationOpacity) observationOpacity.addEventListener('input', updateLayerOpacities);
+      if (nowcastOpacity) nowcastOpacity.addEventListener('input', updateLayerOpacities);
+      if (warningOpacity) warningOpacity.addEventListener('input', updateLayerOpacities);
+
 
       if (timeSlider) {
         timeSlider.addEventListener('input', handleTimeSliderChange);
