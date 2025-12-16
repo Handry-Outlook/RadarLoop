@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="utf-8">
-  <title>RadarLoop UK</title>
+  <title>RadarLoop</title>
   <link rel="icon" type="image/png"
     href="https://raw.githubusercontent.com/Handry-Outlook/Convective-Outlook/main/Handry_outlook_icon_pride_small.png">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1557,7 +1557,7 @@
     <button onclick="close3DDrawModal()">Cancel</button>
   </div>
   <div id="tutorial-modal" class="modal" style="display: none;">
-    <h3>📚 Tutorial: RadarLoop UK</h3>
+    <h3>📚 Tutorial: RadarLoop</h3>
 
     <hr>
 
@@ -1583,25 +1583,38 @@
 
       <p>Use the checkboxes to toggle visualization layers:</p>
       <ul>
-        <li>**Lightning Layer:** Displays individual strike markers.</li>
-        <li>**Heatmap:** Shows a 2D density map of strikes. Adjust its appearance using the **Heatmap Blur** slider.
+        <li>**UK Lightning Layer:** Displays individual strike markers in the UK.</li>
+        <li>**Lightning Heatmap:** Shows a 2D density map of strikes. Adjust its appearance using the **Heatmap Blur**
+          slider.
         </li>
-        <li>**Overlay Numbers:** Displays the total count of strikes within a cluster or area.</li>
+        <li>**Lightning Counter:** Displays the total count of strikes within a cluster or area.</li>
         <li>**Sound:** Enable this to play a thunder sound for each new strike that occurs within the current map view.
         </li>
       </ul>
 
       <p>Use the dropdowns to overlay real-time or modeled weather data. Adjust visibility using the respective
-        **Opacity** slider. Changing a layer selection will automatically refresh the map to plot the new layer at the
+        **Opacity** slider (if available). Changing a layer selection will automatically refresh the map to plot the new
+        layer at the
         current history time.</p>
 
       <h5>Weather Overlays:</h5>
       <ul>
-        <li>**Radar Layer:** Shows precipitation intensity (e.g., UK Rainfall Intensity).</li>
-        <li>**Satellite Layer:** Displays imagery (e.g., Europe Visible or Infrared).</li>
+        <li>**Map Style:** Change the base map's appearance (e.g., Satellite, Dark, Light).</li>
+        <li>**Radar and Weather Layer:** Shows precipitation (rain, snow, type) intensity or reflectivity. This includes
+          UK high-resolution and global products.</li>
+        <li>**Satellite Layer:** Displays cloud or atmospheric imagery (e.g., Visible, Infrared, Water Vapor).</li>
         <li>**Isobar Layer (Pressure):** Overlays lines of equal mean sea level pressure (isobars). Used to locate high
           and low pressure centers.</li>
-        <li>**Wind Layer:** Overlays wind data (e.g., surface wind or jet stream streamlines).</li>
+        <li>**Wind Direction Layer:** Overlays wind direction data.</li>
+        <li>**Tropical Storms Layer:** Displays active tropical storm tracks and forecasts.</li>
+        <li>**Rotation Layer (US Only):** Shows rotational signatures like storm rotation tracks or echo tops.</li>
+        <li>**Surface Front Layer:** Overlays boundaries between different air masses (Cold, Warm, Stationary, Occluded
+          fronts).</li>
+        <li>**Global Lightning Layer:** Displays real-time lightning strikes on a global scale.</li>
+        <li>**Observation Layer:** Provides various surface observational data such as Temperature, Wind Speed, Snow
+          Depth, and Sea Surface Temperature.</li>
+        <li>**Global Warning Layer:** Displays zones with active weather bulletins or warnings.</li>
+        <li>**Global Nowcast Layer:** Shows immediate short-term predictions for storms.</li>
       </ul>
     </div>
 
@@ -8611,8 +8624,8 @@
         titleGroup.innerHTML = `
       <img id="app-logo" 
            src="https://raw.githubusercontent.com/Handry-Outlook/Convective-Outlook/refs/heads/main/Handry_outlook_icon_pride_small.png" 
-           alt="RadarLoop UK ⚡⛈️">
-      <h2 id="app-title">RadarLoop UK ⚡⛈️</h2>
+           alt="RadarLoop ⚡⛈️">
+      <h2 id="app-title">RadarLoop ⚡⛈️</h2>
     `;
 
         // Insert in the middle (after draw-toolbar, before right-controls)
