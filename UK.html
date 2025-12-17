@@ -28,6 +28,92 @@
   </script>
 
   <style>
+    /* Auto-Refresh Dropdown - neutral like Map Style */
+    .refresh-control {
+      background: rgba(255, 255, 255, 0.85);
+      border-color: #e0e0e0;
+    }
+
+    body.dark-mode .refresh-control {
+      background: rgba(45, 45, 45, 0.9);
+      border-color: #555;
+    }
+
+    .refresh-control:hover {
+      background: rgba(255, 255, 255, 0.95);
+      transform: none;
+      box-shadow: none;
+    }
+
+    body.dark-mode .refresh-control:hover {
+      background: rgba(55, 55, 55, 0.95);
+    }
+
+    /* View Mode Button */
+    .button-control {
+      margin-top: 12px;
+      text-align: center;
+    }
+
+    .view-mode-button {
+      padding: 12px 20px;
+      font-size: 0.96em;
+      font-weight: 600;
+      background: #2196F3;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 2px 8px rgba(33, 150, 243, 0.2);
+      width: 100%;
+      max-width: 320px;
+    }
+
+    .view-mode-button:hover {
+      background: #1976D2;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(33, 150, 243, 0.35);
+    }
+
+    body.dark-mode .view-mode-button {
+      background: #4b9bff;
+    }
+
+    body.dark-mode .view-mode-button:hover {
+      background: #3578d6;
+      box-shadow: 0 6px 18px rgba(75, 155, 255, 0.4);
+    }
+
+    /* Tooltip for button */
+    .button-control .tooltip {
+      display: block;
+      margin-top: 6px;
+      font-size: 0.82em;
+      color: #666;
+    }
+
+    body.dark-mode .button-control .tooltip {
+      color: #aaa;
+    }
+
+    /* Neutral controls — no glow, no dimming, calm appearance */
+    .neutral-control,
+    .neutral-control:hover {
+      background: rgba(255, 255, 255, 0.85) !important;
+      border-color: #e0e0e0 !important;
+      box-shadow: none !important;
+      transform: none !important;
+      opacity: 1 !important;
+    }
+
+    body.dark-mode .neutral-control,
+    body.dark-mode .neutral-control:hover {
+      background: rgba(45, 45, 45, 0.9) !important;
+      border-color: #555 !important;
+      box-shadow: none !important;
+    }
+
     /* ==================== BEAUTIFUL ADDITIONAL CONTROLS ==================== */
     /* ==================== GLOW EFFECT FOR SWITCH CONTROLS WHEN ON ==================== */
 
@@ -2276,7 +2362,19 @@
 
 
       <h4>✨ Lightning Heatmap Opacity & Detail</h4>
+      <!-- View Mode Button -->
+      <div class="switch-control view-mode-control">
+        <div class="label-group">
+          <span class="label-text">All Strikes View</span>
+          <span class="tooltip">Show all strikes in current time range</span>
+        </div>
+        <div class="toggle-switch">
+          <input type="checkbox" id="view-mode"
+            onchange="toggleViewMode(); updateSwitchGlow(this, 'view-mode-control')">
+          <label for="view-mode" class="switch"></label>
+        </div>
 
+      </div>
       <label class="pretty-slider">
         Heatmap Blur
         <input type="range" id="blur-slider" min="1" max="50" value="30" onchange="updateHeatmap(currentFiltered)">
@@ -2368,41 +2466,70 @@
 
     <div class="section">
       <h4>🗺️ Polygon Drawing</h4>
-      <label>Enable Polygons: <input type="checkbox" id="drawn-polygons-toggle" checked
-          onchange="toggleDrawnPolygons()"><span class="tooltip">Show/hide drawn polygons</span></label>
-      <label>Opacity: <input type="range" id="polygon-opacity" min="0" max="1" step="0.1" value="0.3"
-          onchange="updateAllPolygonsOpacity()"><span class="tooltip">Adjust polygon fill opacity</span></label>
-      <label>Outline Thickness: <input type="range" id="polygon-weight" min="1" max="10" step="1" value="2"
-          onchange="updateAllPolygonsWeight()"><span class="tooltip">Adjust polygon outline thickness</span></label>
-      <div class="draw-toolbar">
-        <button onclick="toggleDrawing()">Enable Drawing</button>
-        <select id="risk-level-select">
-          <option value="Low risk">Low risk</option>
-          <option value="Slight risk">Slight risk</option>
-          <option value="Enhanced risk">Enhanced risk</option>
-          <option value="Moderate risk">Moderate risk</option>
-          <option value="High risk">High risk</option>
-          <option value="Severe risk">Severe risk</option>
-        </select>
-        <button onclick="exportToKML()">Export KML</button>
+      <!-- Polygon Controls Box (neutral, no glow/dim) -->
+      <div class="layer-control polygon-control neutral-control">
+        <div class="top-row">
+          <div class="label-group">
+            <span class="label-text">Polygon Settings</span>
+            <span class="tooltip">Adjust fill opacity and outline thickness for drawn polygons</span>
+          </div>
+        </div>
+
+        <!-- Fill Opacity Slider -->
+        <div class="opacity-control">
+          <span class="slider-label">Fill Opacity</span>
+          <input type="range" id="polygon-opacity" min="0" max="1" step="0.05" value="0.3"
+            oninput="updateAllPolygonsOpacity(); 
+                      this.closest('.opacity-control').querySelector('.slider-value').textContent = Math.round(this.value * 100) + '%'">
+          <span class="slider-value">30%</span>
+        </div>
+
+        <!-- Outline Thickness Slider -->
+        <div class="opacity-control">
+          <span class="slider-label">Outline Thickness</span>
+          <input type="range" id="polygon-weight" min="1" max="10" step="1" value="2" oninput="updateAllPolygonsWeight(); 
+                      this.closest('.opacity-control').querySelector('.slider-value').textContent = this.value">
+          <span class="slider-value">2</span>
+        </div>
       </div>
     </div>
 
     <div class="section">
       <h4>⚙️ Automation</h4>
-      <label>Auto-refresh: <select id="refresh-interval" onchange="setRefreshInterval()">
+
+      <!-- Auto-Refresh Interval -->
+      <div class="layer-control refresh-control neutral-control">
+        <div class="top-row">
+          <div class="label-group">
+            <span class="label-text">Auto-Refresh Interval</span>
+            <span class="tooltip">Set how often data refreshes automatically</span>
+          </div>
+        </div>
+
+        <select id="refresh-interval" onchange="setRefreshInterval()">
           <option value="0">Off</option>
-          <option value="0.0167">1 seconds (This might slow down your device)</option>
+          <option value="0.0167">1 second (may slow device)</option>
           <option value="0.167" selected>10 seconds</option>
           <option value="0.5">30 seconds</option>
           <option value="1">1 minute</option>
           <option value="5">5 minutes</option>
           <option value="10">10 minutes</option>
-        </select><span class="tooltip">Set data refresh interval</span></label>
-      <label>Auto-set Latest: <input type="checkbox" id="auto-latest" checked onchange="toggleAutoLatest()"><span
-          class="tooltip">Keep time at latest</span></label>
-      <label><button id="view-mode" onclick="toggleViewMode()">Enable All Strikes</button><span class="tooltip">Show all
-          strikes in range</span></label>
+        </select>
+      </div>
+
+      <!-- Auto-set Latest Toggle -->
+      <div class="switch-control auto-latest-control">
+        <div class="label-group">
+          <span class="label-text">Auto-Set Latest Time</span>
+          <span class="tooltip">Keep time slider at most recent data</span>
+        </div>
+        <div class="toggle-switch">
+          <input type="checkbox" id="auto-latest" checked onchange="toggleAutoLatest()">
+          <label for="auto-latest" class="switch"></label>
+        </div>
+      </div>
+
+
     </div>
 
 
