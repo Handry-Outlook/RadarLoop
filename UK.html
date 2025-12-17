@@ -1974,16 +1974,18 @@
           </div>
         </div>
         <select id="radarLayer" onchange="radarLayerTypeHandler();">
+          <option value="placeholder" disabled>High Resolution Europe Data ↓
+          </option>
           <option value="uk-precip-intensity">UK High Resolution Rainfall Intensity (Smoothed)</option>
           <option value="uk-precip-intensity-pixelated">UK High Resolution Rainfall Intensity (Pixelated)</option>
           <option value="uk-precip-intensity-accessible">UK High Resolution Rainfall Intensity (Accessible)</option>
           <option value="uk-precip-type">UK High Resolution Precipitation Type</option>
           <option value="europe-precip-intensity">Europe Low Resolution Rainfall Intensity</option>
           <option value="europe-precip-type">Europe Low Resolution Precipitation Type</option>
-          <option value="placeholder" disabled>-------------------------------------------------------------------------
+          <option value="placeholder" disabled>Satellite Precipitation Estimation ↓
           </option>
           <option value="global-precip-intensity">Precipitation - NASA global precipitation intensity</option>
-          <option value="placeholder" disabled>-------------------------------------------------------------------------
+          <option value="placeholder" disabled>Low Resolution Worldwide Data ↓
           </option>
           <option value="radar-base-ref-precip-type-na-contours">North America Base Reflectivity Precip - Contour
           </option>
@@ -2002,7 +2004,7 @@
         <div class="opacity-control">
           <input type="range" id="radarOpacity" min="0" max="1" step="0.05" value="0.9"
             oninput="updateLayerOpacities()">
-          <span class="opacity-value">90%</span>
+          
         </div>
       </div>
 
@@ -2019,12 +2021,12 @@
           </div>
         </div>
         <select id="satelliteLayerSelect" onchange="satelliteLayerTypeHandler();">
-          <option value="global-ir">Satellite - Global infrared (GOES)</option>
-          <option value="europe-vis">Satellite - Europe visible (MeteoSat)</option>
-          <option value="europe-ir">Satellite - Europe infrared (MeteoSat)</option>
-          <option value="europe-water">Satellite - Europe water vapor (MeteoSat)</option>
-          <option value="us-visible">Satellite - North America visible (GOES)</option>
-          <option value="us-ir">Satellite - North America infrared (GOES)</option>
+          <option value="global-ir">Global infrared (GOES)</option>
+          <option value="europe-vis">Europe visible (MeteoSat)</option>
+          <option value="europe-ir">Europe infrared (MeteoSat)</option>
+          <option value="europe-water">Europe water vapor (MeteoSat)</option>
+          <option value="us-visible">North America visible (GOES)</option>
+          <option value="us-ir">North America infrared (GOES)</option>
           <option value="satellite-infrared-enhanced-global-raster">Global Enhanced Infrared</option>
           <option value="satellite-visible-global-raster">Global Visible</option>
           <option value="satellite-water-vapor-global-raster">Global Water Vapor</option>
@@ -2033,7 +2035,7 @@
         <div class="opacity-control">
           <input type="range" id="satelliteOpacity" min="0" max="1" step="0.05" value="0.5"
             oninput="updateLayerOpacities()">
-          <span class="opacity-value">50%</span>
+          
         </div>
       </div>
 
@@ -2056,7 +2058,7 @@
         <div class="opacity-control">
           <input type="range" id="isobarOpacity" min="0" max="1" step="0.05" value="0.8"
             oninput="updateLayerOpacities()">
-          <span class="opacity-value">80%</span>
+          
         </div>
       </div>
       <!-- Surface Front Layer - ON -->
@@ -2078,7 +2080,7 @@
         <div class="opacity-control">
           <input type="range" id="surfaceFrontOpacity" min="0" max="1" step="0.05" value="0.8"
             oninput="updateLayerOpacities()">
-          <span class="opacity-value">80%</span>
+          
         </div>
       </div>
       <!-- Wind Direction Layer - ON -->
@@ -2105,7 +2107,7 @@
         </select>
         <div class="opacity-control">
           <input type="range" id="windOpacity" min="0" max="1" step="0.05" value="0.8" oninput="updateLayerOpacities()">
-          <span class="opacity-value">80%</span>
+          
         </div>
       </div>
       <!-- Global Nowcast Layer - ON -->
@@ -2123,11 +2125,12 @@
         <select id="nowcastLayerSelect" onchange="nowcastLayerTypeHandler();">
           <option value="sevwx-global-storm-corridors-plot">Storm Nowcasts</option>
           <option value="sevwx-storm-corridors-plot">Storm Corridors</option>
+          <option value="sevwx-hail-swath-contours">Hail Nowcast (US & Canada)</option>
         </select>
         <div class="opacity-control">
           <input type="range" id="nowcastOpacity" min="0" max="1" step="0.05" value="0.8"
             oninput="updateLayerOpacities()">
-          <span class="opacity-value">80%</span>
+          
         </div>
       </div>
       <!-- Tropical Storms Layer - OFF -->
@@ -2150,7 +2153,7 @@
         <div class="opacity-control">
           <input type="range" id="tropicalStormsOpacity" min="0" max="1" step="0.05" value="0.8"
             oninput="updateLayerOpacities()">
-          <span class="opacity-value">80%</span>
+          
         </div>
       </div>
 
@@ -2174,7 +2177,7 @@
         <div class="opacity-control">
           <input type="range" id="rotationOpacity" min="0" max="1" step="0.05" value="0.8"
             oninput="updateLayerOpacities()">
-          <span class="opacity-value">80%</span>
+          
         </div>
       </div>
 
@@ -2198,7 +2201,7 @@
         <div class="opacity-control">
           <input type="range" id="lightningOpacity" min="0" max="1" step="0.05" value="0.8"
             oninput="updateLayerOpacities()">
-          <span class="opacity-value">80%</span>
+          
         </div>
       </div>
 
@@ -2229,6 +2232,8 @@
           <option value="fcst-onefx-snowfall-last-24hrs-contours">Snowfall Last 24 Hours</option>
           <option value="fcst-onefx-ice-accretion-last-hour-contours">Ice Accretion Last 1 Hour</option>
           <option value="fcst-onefx-wet-snow-last-1hr-contours">Wet Snow Index</option>
+          <option value="placeholder" disabled>Europe Accumulated Precipitation ↓
+          </option>
           <option value="precip-qpe-168hrs-eu-contours">Observed Precipitation – Past 7 days Contour (Europe)</option>
           <option value="precip-qpe-168hrs-eu-raster">Observed Precipitation – Past 7 days Grid (Europe)</option>
           <option value="precip-qpe-72hrs-eu-contours">Observed Precipitation – Past 3 days Contour (Europe)</option>
@@ -2239,8 +2244,8 @@
           <option value="precip-qpe-24hrs-eu-raster">Observed Precipitation – Past 24h Grid (Europe)</option>
           <option value="precip-qpe-1hr-eu-contours">Observed Precipitation – Past 1h Contour (Europe)</option>
           <option value="precip-qpe-1hr-eu-raster">Observed Precipitation – Past 1h Grid (Europe)</option>
-          <option value="placeholder">-------------------------------------------------------------------------</option>
-
+          <option value="placeholder" disabled>Global Accumulated Precipitation ↓
+          </option>
           <option value="precip-qpe-168hrs-gm-contours">Observed Precipitation – Past 7 days Contour (Global)</option>
           <option value="precip-qpe-168hrs-gm-raster">Observed Precipitation – Past 7 days Grid (Global)</option>
           <option value="precip-qpe-72hrs-gm-contours">Observed Precipitation – Past 3 days Contour (Global)</option>
@@ -2252,8 +2257,8 @@
           <option value="precip-qpe-1hr-gm-contours">Observed Precipitation – Past 1h Contour (Global)</option>
           <option value="precip-qpe-1hr-gm-raster">Observed Precipitation – Past 1h Grid (Global)</option>
 
-          <option value="placeholder">-------------------------------------------------------------------------</option>
-
+          <option value="placeholder" disabled>Marine Data ↓
+          </option>
           <option value="global-current-speed">Current Speed</option>
           <option value="global-wave-height">Peak Wave Period</option>
           <option value="global-wave-period">Peak Wave Period</option>
@@ -2265,7 +2270,7 @@
         <div class="opacity-control">
           <input type="range" id="observationOpacity" min="0" max="1" step="0.05" value="0.5"
             oninput="updateLayerOpacities()">
-          <span class="opacity-value">50%</span>
+          
         </div>
       </div>
 
@@ -2287,7 +2292,7 @@
         <div class="opacity-control">
           <input type="range" id="warningOpacity" min="0" max="1" step="0.05" value="0.8"
             oninput="updateLayerOpacities()">
-          <span class="opacity-value">80%</span>
+          
         </div>
       </div>
 
@@ -3794,6 +3799,13 @@
       },
       'sevwx-global-storm-corridors-plot': {
         url: 'https://tiles.meteoguard.dtn.com/tiles/sevwx-global-storm-corridors-plot/${iso}/${iso}/{z}/{x}/{y}.png',
+        interval: 5 * 60 * 1000, // Hourly update, for example
+        type: 'vector-tile', // Typically vector tiles for lines/contours
+        bounds: null,
+        attribution: 'dtn'
+      },
+      'sevwx-hail-swath-contours': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/sevwx-hail-swath-contours/${iso}/${iso}/{z}/{x}/{y}.png',
         interval: 5 * 60 * 1000, // Hourly update, for example
         type: 'vector-tile', // Typically vector tiles for lines/contours
         bounds: null,
