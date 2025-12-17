@@ -1136,7 +1136,7 @@
     }
 
     @media (max-width: 768px) {
-      .time-slider-container #history-time {
+      .time-slider-container {
         font-size: 0.7em;
       }
 
@@ -1212,7 +1212,7 @@
       display: flex;
       justify-content: flex-end;
       gap: 10px;
-      margin-top: 4px;
+      margin-top: 0px;
     }
 
     .legend {
@@ -2004,7 +2004,7 @@
         <div class="opacity-control">
           <input type="range" id="radarOpacity" min="0" max="1" step="0.05" value="0.9"
             oninput="updateLayerOpacities()">
-          
+
         </div>
       </div>
 
@@ -2035,7 +2035,7 @@
         <div class="opacity-control">
           <input type="range" id="satelliteOpacity" min="0" max="1" step="0.05" value="0.5"
             oninput="updateLayerOpacities()">
-          
+
         </div>
       </div>
 
@@ -2058,7 +2058,7 @@
         <div class="opacity-control">
           <input type="range" id="isobarOpacity" min="0" max="1" step="0.05" value="0.8"
             oninput="updateLayerOpacities()">
-          
+
         </div>
       </div>
       <!-- Surface Front Layer - ON -->
@@ -2080,7 +2080,7 @@
         <div class="opacity-control">
           <input type="range" id="surfaceFrontOpacity" min="0" max="1" step="0.05" value="0.8"
             oninput="updateLayerOpacities()">
-          
+
         </div>
       </div>
       <!-- Wind Direction Layer - ON -->
@@ -2107,7 +2107,7 @@
         </select>
         <div class="opacity-control">
           <input type="range" id="windOpacity" min="0" max="1" step="0.05" value="0.8" oninput="updateLayerOpacities()">
-          
+
         </div>
       </div>
       <!-- Global Nowcast Layer - ON -->
@@ -2130,7 +2130,7 @@
         <div class="opacity-control">
           <input type="range" id="nowcastOpacity" min="0" max="1" step="0.05" value="0.8"
             oninput="updateLayerOpacities()">
-          
+
         </div>
       </div>
       <!-- Tropical Storms Layer - OFF -->
@@ -2153,7 +2153,7 @@
         <div class="opacity-control">
           <input type="range" id="tropicalStormsOpacity" min="0" max="1" step="0.05" value="0.8"
             oninput="updateLayerOpacities()">
-          
+
         </div>
       </div>
 
@@ -2177,7 +2177,7 @@
         <div class="opacity-control">
           <input type="range" id="rotationOpacity" min="0" max="1" step="0.05" value="0.8"
             oninput="updateLayerOpacities()">
-          
+
         </div>
       </div>
 
@@ -2201,7 +2201,7 @@
         <div class="opacity-control">
           <input type="range" id="lightningOpacity" min="0" max="1" step="0.05" value="0.8"
             oninput="updateLayerOpacities()">
-          
+
         </div>
       </div>
 
@@ -2270,7 +2270,7 @@
         <div class="opacity-control">
           <input type="range" id="observationOpacity" min="0" max="1" step="0.05" value="0.5"
             oninput="updateLayerOpacities()">
-          
+
         </div>
       </div>
 
@@ -2292,7 +2292,7 @@
         <div class="opacity-control">
           <input type="range" id="warningOpacity" min="0" max="1" step="0.05" value="0.8"
             oninput="updateLayerOpacities()">
-          
+
         </div>
       </div>
 
@@ -2643,15 +2643,16 @@
   <div id="map"></div>
   <div id="map-3d"></div>
   <div class="time-slider-container">
-    <label><input type="range" id="history-slider" class="slider" min="0" max="360" value="360"
-        oninput="updateHistory()"> <span id="history-label">Now</span></label>
-    <p id="history-time"></p>
+    <label>
+      <span id="history-label">⏱️ Now | </span>
+      <span id="history-time"></span></label>
+    <input type="range" id="history-slider" class="slider" min="0" max="360" value="360" oninput="updateHistory()">
     <div class="animator">
       <button onclick="playAnimation()">▶️ Play</button>
       <button onclick="stopAnimation()">⏹️ Stop</button>
       <label>Speed: <input type="range" id="speed-slider" min="1" max="30" step="5" value="15"
           oninput="updateSpeedTextbox()"></label>
-      <label>Min/Sec: <input type="number" id="playback-minutes" min="1" max="30" step="5" value="15"
+      <label>No. of minutes per second: <input type="number" id="playback-minutes" min="1" max="30" step="5" value="15"
           oninput="updateSpeedSlider()"></label>
     </div>
     <p id="time-range" class="status-info"></p>
@@ -5301,6 +5302,8 @@
           control.classList.add('off');
         }
       });
+      document.getElementById('history-label').innerText = formatTimeAgo(minutesBack);
+      document.getElementById('history-time').innerText = `${start.toLocaleString()} - ${end.toLocaleString()}`;
       // Initialize glow for all switch controls
       document.querySelectorAll('.switch-control').forEach(control => {
         const checkbox = control.querySelector('input[type="checkbox"]');
@@ -7217,13 +7220,13 @@
     }
 
     function formatTimeAgo(minutesBack) {
-      if (minutesBack === 0) return 'Now';
+      if (minutesBack === 0) return '⏱️ Now | ';
       const hours = Math.floor(minutesBack / 60);
       const minutes = minutesBack % 60;
       let result = '';
       if (hours > 0) result += `${hours}h `;
       if (minutes > 0 || hours === 0) result += `${minutes}m`;
-      return result.trim() + ' ago';
+      return '⏱️ ' + result.trim() + ' ago | ';
     }
 
     function updateHistory() {
