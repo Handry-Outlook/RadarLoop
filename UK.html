@@ -28,6 +28,25 @@
   </script>
 
   <style>
+    /* Move the entire attribution container to bottom-left */
+    .leaflet-bottom.leaflet-right {
+      right: auto !important;
+      left: 0px !important;
+      /* distance from left edge */
+      bottom: 0px !important;
+      /* distance from bottom */
+
+    }
+
+    /* Optional: style the text box */
+    .leaflet-control-attribution {
+      background: rgba(255, 255, 255, 0.8) !important;
+      padding: 2px 8px !important;
+      border-radius: 2px !important;
+      font-size: 11px !important;
+
+    }
+
     /* Auto-Refresh Dropdown - neutral like Map Style */
     .refresh-control {
       background: rgba(255, 255, 255, 0.85);
@@ -730,20 +749,6 @@
       }
     }
 
-    #map,
-    #map-3d {
-      position: fixed;
-      top: 60;
-      left: 0;
-      width: 100%;
-      height: calc(100vh - 60px);
-      z-index: 1;
-      border-radius: 8px;
-    }
-
-    #map-3d {
-      display: none;
-    }
 
     #control-panel {
       background: #ffffff;
@@ -2380,17 +2385,7 @@
         </div>
 
       </div>
-      <label class="pretty-slider">
-        Heatmap Blur
-        <input type="range" id="blur-slider" min="1" max="50" value="30" onchange="updateHeatmap(currentFiltered)">
-        <span class="tooltip">Adjust heatmap spread</span>
-      </label>
 
-      <label class="pretty-slider">
-        Number Resolution
-        <input type="range" id="density-slider" min="1" max="100" value="50" onchange="updateOverlay(currentFiltered)">
-        <span class="tooltip">Adjust overlay grid size</span>
-      </label>
     </div>
     <div class="section">
       <h4>➕ Extras & Nowcasting</h4>
@@ -3143,14 +3138,14 @@
       },
       'radar-reflectivity-mosaic-global-contours': {
         url: 'https://tiles.meteoguard.dtn.com/tiles/radar-reflectivity-mosaic-global-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
-        interval: 10 * 60 * 1000,
+        interval: 5 * 60 * 1000,
         type: 'vector-tile',
         bounds: null,
         attribution: 'dtn'
       },
       'radar-reflectivity-mosaic-global-raster': {
         url: 'https://tiles.meteoguard.dtn.com/tiles/radar-reflectivity-mosaic-global-raster/${iso}/${iso}/{z}/{x}/{y}.pbf',
-        interval: 10 * 60 * 1000,
+        interval: 5 * 60 * 1000,
         type: 'tile-layer',
         bounds: null,
         attribution: 'dtn'
@@ -3995,15 +3990,17 @@
     // ==========================================
 
     // --- DEBOUNCE FUNCTION (UNCHANGED) ---
+    // ==========================================
+    // 2. HELPER FUNCTIONS
+    // ==========================================
+    // --- DEBOUNCE FUNCTION (UNCHANGED) ---
     function debounce(func, delay) {
       let timeoutId;
       return function (/* timestamp */ ...args) {
         const context = this;
         // Check if the second argument is explicitly passed as true
         const forceExecute = args.length > 1 && args[1] === true;
-
         clearTimeout(timeoutId);
-
         if (forceExecute) {
           func.apply(context, [args[0]]); // Execute immediately
           timeoutId = null;
@@ -4014,7 +4011,6 @@
         }
       };
     }
-
     function updateSwitchGlow(checkbox, controlClass) {
       const control = checkbox.closest('.switch-control');
       if (control) {
@@ -4039,7 +4035,6 @@
       const observationOpacity = parseFloat(document.getElementById('observationOpacity')?.value || 0.8);
       const nowcastOpacity = parseFloat(document.getElementById('nowcastOpacity')?.value || 0.8);
       const warningOpacity = parseFloat(document.getElementById('warningOpacity')?.value || 0.8);
-
       document.getElementById('opacity-value-radar').textContent = `Radar Opacity: ${radarOpacity.toFixed(1)}`;
       document.getElementById('opacity-value-satellite').textContent = `Satellite Opacity: ${satelliteOpacity.toFixed(1)}`;
       if (document.getElementById('opacity-value-isobar')) document.getElementById('opacity-value-isobar').textContent = `Isobar Opacity: ${isobarOpacity.toFixed(1)}`;
@@ -4081,14 +4076,11 @@
     function toggleLayer(layerKey, enabled) {
       const layer = layerMap[layerKey];
       if (!layer) return;
-
       const select = document.getElementById(layer.select);
       const container = select?.closest('.layer-control');
-
       if (select) {
         select.disabled = !enabled;
       }
-
       if (container) {
         if (enabled) {
           container.classList.remove('off');
@@ -4096,20 +4088,16 @@
           container.classList.add('off');
         }
       }
-
       const handler = window[layer.handler];
       if (typeof handler === 'function') {
         handler();
       }
-
       updateLegend();
     }
     // ==========================================
     // 3. IMAGE/TILE FETCHING LOGIC (MODIFIED)
     // ==========================================
-
     const recentTimeThreshold = 15 * 60 * 1000;
-
     async function fetchTileUrl(timestamp, layerConfig) {
       let layerTypeKey;
       if (Object.values(radarOptions).includes(layerConfig)) {
@@ -4138,14 +4126,12 @@
         console.warn("Unknown layer config passed to fetchTileUrl", layerConfig);
         return null;
       }
-
       if (layerConfig.type === 'tile-layer') {
         const date = new Date(timestamp);
         const formatISO = (d) => d.toISOString().replace(/\.\d{3}Z$/, 'Z');
         // No validation check needed for standard tile layers, just construct the URL
         return layerConfig.url.replace(/\${iso}/g, formatISO(date));
       }
-
       // --- Validation/Cache Logic for Image and Vector-Tile Layers ---
       const cacheKey = `${layerTypeKey}_${timestamp}`;
       if (Date.now() - timestamp < recentTimeThreshold) {
@@ -4154,53 +4140,41 @@
       if (radarValidationCache.has(cacheKey)) {
         return radarValidationCache.get(cacheKey);
       }
-
       const cacheAndReturn = (result) => {
         if (Date.now() - timestamp >= recentTimeThreshold) {
           radarValidationCache.set(cacheKey, result);
         }
         return result;
       };
-
       if (typeof timestamp !== 'number' || isNaN(timestamp)) {
         return cacheAndReturn(lastValidTileUrls[layerTypeKey] || null);
       }
-
       const date = new Date(timestamp);
       const interval = layerConfig.interval || 5 * 60 * 1000;
-
       date.setMinutes(Math.floor(date.getMinutes() / (interval / 60 / 1000)) * (interval / 60 / 1000));
       date.setSeconds(0);
       date.setMilliseconds(0);
-
       let minTime = new Date(Date.now() - sixDaysInMs);
       const formatISO = (d) => d.toISOString().replace(/\.\d{3}Z$/, 'Z');
-
-
       // --- ENFORCED LOGIC: Determine search bounds based on current filter time ---
       let maxAttempts = layerConfig.type === 'image' ? 4 : 288;
       let isHistoricalView = currentFilterTimestamp && (Date.now() - currentFilterTimestamp) > recentTimeThreshold;
       let currentTimeCheck = new Date(date);
-
       if (isHistoricalView) {
         maxAttempts = 3;
       } else {
         maxAttempts = layerConfig.type === 'image' ? 4 : 288;
       }
-
-
       if (layerConfig.type === 'image') {
         for (let attempt = 0; attempt < maxAttempts && currentTimeCheck >= minTime; attempt++) {
           const url = layerConfig.url.replace(/\${iso}/g, formatISO(currentTimeCheck));
           const img = new Image();
           img.src = url;
-
           const isValid = await new Promise((resolve) => {
             img.onload = () => resolve(true);
             img.onerror = () => resolve(false);
             setTimeout(() => resolve(false), 5000);
           });
-
           if (isValid) {
             lastValidTileUrls[layerTypeKey] = url;
             return cacheAndReturn(url);
@@ -4214,18 +4188,15 @@
           if (checkTime < minTime) return null;
           const iso = formatISO(checkTime);
           const tileUrl = layerConfig.url.replace(/\${iso}/g, iso);
-
           // FIX: Use a higher, central zoom tile (6/32/32) instead of the problematic 0/0/0
           const checkUrl = tileUrl.replace('{z}/{x}/{y}', '0/0/0');
-
           for (let retry = 0; retry < 2; retry++) {
             try {
               const response = await fetch(checkUrl, { method: 'GET' });
-
               if (response.ok) {
                 // REMOVE THE arrayBuffer.byteLength CHECK for vector tiles
                 // const arrayBuffer = await response.arrayBuffer();
-                // if (arrayBuffer.byteLength > 0) { 
+                // if (arrayBuffer.byteLength > 0) {
                 return tileUrl.replace(/\${iso}/g, iso);
                 // }
               }
@@ -4235,7 +4206,6 @@
           }
           return null;
         }
-
         for (let i = 0; i < maxAttempts; i++) {
           const checkTime = new Date(date.getTime() - i * interval);
           const tileUrl = await validateTile(checkTime);
@@ -4244,19 +4214,15 @@
             return cacheAndReturn(tileUrl);
           }
         }
-
         if (lastValidTileUrls[layerTypeKey]) {
           return cacheAndReturn(lastValidTileUrls[layerTypeKey]);
         }
-
         return cacheAndReturn(null);
       }
     }
-
     // ==========================================
     // 4. MAIN UPDATE FUNCTIONS (UNIFIED)
     // ==========================================
-
     /**
      * Plots either the Radar, Satellite, Isobar, or Wind layer with an atomic fade-swap.
      * @param {string} finalUrl - The pre-validated tile URL.
@@ -4266,7 +4232,6 @@
      */
     async function plotMainLayer(finalUrl, layerType, timestamp, layerKey) {
       let layerOptions, zIndex, currentLayerRef, lastTimestampRef, lastTypeRef, isAnimatingRef;
-
       switch (layerKey) {
         case 'satellite':
           layerOptions = satelliteOptions[layerType];
@@ -4344,7 +4309,7 @@
         case 'nowcast':
           layerOptions = nowcastOptions[layerType];
           zIndex = NOWCAST_Z_INDEX;
-          currentLayerRef = NowcastLayer;  // Fixed typo
+          currentLayerRef = NowcastLayer; // Fixed typo
           lastTimestampRef = 'lastNowcastTimestamp';
           lastTypeRef = 'lastNowcastType';
           isAnimatingRef = 'isNowcastAnimating';
@@ -4360,16 +4325,12 @@
         default:
           return;
       }
-
       // Note: Direct use of global variables for comparison before the switch is safer for complex state
       const lastPlottedTimestamp = eval(lastTimestampRef);
       const lastPlottedType = eval(lastTypeRef);
-
       const currentOpacity = parseFloat(document.getElementById(`${layerKey}Opacity`)?.value || 0.8);
-
       let layerToDispose = currentLayerRef;
       let newLayer = null;
-
       try {
         // --- Layer Creation (Unified Logic) --- (unchanged)
         if (layerOptions.type === 'image') {
@@ -4384,7 +4345,6 @@
             const defaultStyle = { fill: true, opacity: 0.01, fillOpacity: 0.01, weight: 0, color: 'inherit' };
             let vectorStyles = {};
             const baseOpacity = 0.01;
-
             if (layerKey === 'isobar') {
               vectorStyles = {
                 'default': { stroke: true, color: '#FFFFFF', weight: 2, opacity: baseOpacity, fill: false },
@@ -4398,7 +4358,6 @@
             } else {
               vectorStyles = { 'default': defaultStyle, 'features': defaultStyle };
             }
-
             newLayer = L.vectorGrid.protobuf(finalUrl, {
               opacity: 0.01,
               vectorTileLayerStyles: vectorStyles,
@@ -4420,20 +4379,15 @@
             className: 'seamless-layer'
           });
         }
-
         if (!newLayer) return;
-
         newLayer.addTo(map);
-
         // --- Wait for Layer Load ---
         const layerLoadedPromise = new Promise(resolve => {
           const timeout = setTimeout(() => resolve(true), 1000);
           newLayer.once('load', () => { clearTimeout(timeout); resolve(true); });
           newLayer.once('error', () => { clearTimeout(timeout); resolve(false); });
         });
-
         const success = await layerLoadedPromise;
-
         // --- Robustness Check: Requested Timestamp and Layer Type ---
         // Accessing lastRequested timestamps
         let requestedTimestamp;
@@ -4450,19 +4404,16 @@
           case 'nowcast': requestedTimestamp = lastRequestedNowcastTimestamp; break;
           case 'warning': requestedTimestamp = lastRequestedWarningTimestamp; break;
         }
-
         const currentType = (
           document.getElementById(`${layerKey}LayerSelect`) ||
           document.getElementById(`${layerKey}Layer`)
         )?.value || 'none';
-
         if (currentType !== layerType || (timestamp !== null && lastPlottedTimestamp === timestamp)) {
           if (newLayer && map.hasLayer(newLayer)) {
             map.removeLayer(newLayer);
           }
           return;
         }
-
         if (success) {
           // 1. Update active layer and state variables (Direct variable modification)
           switch (layerKey) {
@@ -4522,7 +4473,6 @@
               lastWarningType = layerType;
               break;
           }
-
           // 2. Fade In
           if (newLayer.getElement) {
             const imgElement = newLayer.getElement();
@@ -4530,7 +4480,6 @@
           } else if (newLayer.setOpacity) {
             newLayer.setOpacity(currentOpacity);
           }
-
           // 3. Fade Out & Remove Old Layer
           if (layerToDispose && map.hasLayer(layerToDispose)) {
             if (layerToDispose.getElement) {
@@ -4539,22 +4488,18 @@
             } else if (layerToDispose.setOpacity) {
               layerToDispose.setOpacity(0);
             }
-
             setTimeout(() => {
               if (map.hasLayer(layerToDispose)) {
                 map.removeLayer(layerToDispose);
               }
             }, 350);
           }
-
           lastValidTileUrls[layerType] = finalUrl;
-
         } else {
           if (newLayer && map.hasLayer(newLayer)) {
             map.removeLayer(newLayer);
           }
         }
-
       } catch (error) {
         console.error(`Critical plotting error during ${layerKey} layer creation/swap:`, error);
         if (newLayer && map.hasLayer(newLayer)) {
@@ -4577,13 +4522,10 @@
         }
       }
     }
-
-
     /**
      * Main function to coordinate updating the map layers.
      * @param {number} timestamp - The target timestamp from the slider/current time.
      */
-
     // ==========================================
     // DEBOUNCED TRIGGER (CLEARS ALL IF NOTHING ENABLED)
     // ==========================================
@@ -4592,7 +4534,6 @@
     // ==========================================
     const triggerMapUpdate = debounce((timestamp) => {
       currentFilterTimestamp = timestamp;
-
       const anyEnabled = [
         'radarLayer', 'satelliteLayerSelect', 'isobarLayerSelect', 'windLayerSelect',
         'lightningLayerSelect', 'tropicalStormsLayerSelect', 'rotationLayerSelect',
@@ -4601,7 +4542,6 @@
         const el = document.getElementById(id);
         return el && !el.disabled && el.value;
       });
-
       if (!anyEnabled) {
         clearRadarLayers();
         clearSatelliteLayers();
@@ -4617,12 +4557,8 @@
         updateLegend();
         return;
       }
-
       updateMapLayers(timestamp);
     }, 100);
-
-
-
     /**
      * Main function to coordinate updating the map layers.
      * @param {number} timestamp - The target timestamp from the slider/current time.
@@ -4630,19 +4566,16 @@
     async function updateMapLayers(timestamp) {
       if (isPlotting) return;
       isPlotting = true;
-
       const PROCESSING_DELAY_MS = 5 * 60 * 1000;
       let targetTimestamp = timestamp;
       const timeSlider = document.getElementById('history-slider');
       if (timeSlider && timeSlider.value === timeSlider.max) {
         targetTimestamp = Date.now() - PROCESSING_DELAY_MS;
       }
-
       const getLayerType = (id) => {
         const el = document.getElementById(id);
         return el && !el.disabled ? el.value : null;
       };
-
       const radarType = getLayerType('radarLayer');
       const satelliteType = getLayerType('satelliteLayerSelect');
       const isobarType = getLayerType('isobarLayerSelect');
@@ -4654,7 +4587,6 @@
       const observationType = getLayerType('observationLayerSelect');
       const nowcastType = getLayerType('nowcastLayerSelect');
       const warningType = getLayerType('warningLayerSelect');
-
       if (radarType) await plotLayerIfNecessary(radarType, radarOptions, targetTimestamp, 'radar');
       if (satelliteType) await plotLayerIfNecessary(satelliteType, satelliteOptions, targetTimestamp, 'satellite');
       if (isobarType) await plotLayerIfNecessary(isobarType, isobarOptions, targetTimestamp, 'isobar');
@@ -4666,12 +4598,9 @@
       if (observationType) await plotLayerIfNecessary(observationType, observationOptions, targetTimestamp, 'observation');
       if (nowcastType) await plotLayerIfNecessary(nowcastType, nowcastOptions, targetTimestamp, 'nowcast');
       if (warningType) await plotLayerIfNecessary(warningType, warningOptions, targetTimestamp, 'warning');
-
       isPlotting = false;
       updateLegend();
     }
-
-
     /**
      * Generic logic to check state, fetch URLs, and call the plotting function.
      * @param {string} layerType - The specific layer key.
@@ -4681,21 +4610,17 @@
      */
     async function plotLayerIfNecessary(layerType, optionsMap, targetTimestamp, layerKey) {
       const layerConfig = optionsMap[layerType];
-
       if (!layerConfig) {
         console.error(`Layer configuration not found for type: ${layerType}`);
         // ... (Layer cleanup logic omitted for brevity, assuming it's correct from your snippet) ...
         return;
       }
-
       const interval = layerConfig.interval || 5 * 60 * 1000;
-
       const roundedDate = new Date(targetTimestamp);
       roundedDate.setMinutes(Math.floor(roundedDate.getMinutes() / (interval / 60 / 1000)) * (interval / 60 / 1000));
       roundedDate.setSeconds(0);
       roundedDate.setMilliseconds(0);
       const roundedTimestampMs = roundedDate.getTime();
-
       // Get current state variables based on layerKey
       let lastTimestamp, lastType, isAnimating;
       switch (layerKey) {
@@ -4712,16 +4637,12 @@
         case 'warning': lastTimestamp = lastWarningTimestamp; lastType = lastWarningType; isAnimating = isWarningAnimating; break;
         default: return;
       }
-
-      // Prevent unnecessary re-plotting (redundant, if timestamp/type haven't changed)
-      // Only skip if timestamp hasn't changed (type change from dropdown always forces plot)
-      if (lastTimestamp === roundedTimestampMs) {
-        return;
+      // Prevent unnecessary re-plotting only when BOTH timestamp AND layer type are unchanged
+      if (lastTimestamp === roundedTimestampMs && lastType === layerType) {
+        return; // Nothing changed — safe to skip
       }
-
       // Prevent concurrent animations
       if (isAnimating) return;
-
       // Set animating flag and requested timestamp
       switch (layerKey) {
         case 'satellite': isSatelliteAnimating = true; lastRequestedSatelliteTimestamp = roundedTimestampMs; break;
@@ -4736,18 +4657,15 @@
         case 'nowcast': isNowcastAnimating = true; lastRequestedNowcastTimestamp = roundedTimestampMs; break;
         case 'warning': isWarningAnimating = true; lastRequestedWarningTimestamp = roundedTimestampMs; break;
       }
-
       try {
         let finalUrl = null;
         let finalTimestamp = roundedTimestampMs;
-
         // Optimized Fetch Logic (fetches up to 3 tiles back)
         const urls = await Promise.all(Array.from({ length: 6 }, (_, i) =>
           fetchTileUrl(roundedTimestampMs - i * interval, layerConfig).catch(() => null)
         ));
         finalUrl = urls.find(url => url);
-        const [currentUrl, previousUrl1, previousUrl2] = urls;
-
+        const [currentUrl, previousUrl1, previousUrl2, previousUrl3, previousUrl4] = urls;
         // Find the most recent valid URL and update the effective timestamp
         if (currentUrl) {
           finalUrl = currentUrl;
@@ -4758,12 +4676,17 @@
         } else if (previousUrl2) {
           finalUrl = previousUrl2;
           finalTimestamp = roundedTimestampMs - 2 * interval;
+        } else if (previousUrl3) {
+          finalUrl = previousUrl3;
+          finalTimestamp = roundedTimestampMs - 3 * interval;
+        } else if (previousUrl4) {
+          finalUrl = previousUrl4;
+          finalTimestamp = roundedTimestampMs - 4 * interval;
         } else if (lastValidTileUrls[layerType]) {
           // Fallback to the last successfully plotted URL (no timestamp update)
           finalUrl = lastValidTileUrls[layerType];
           finalTimestamp = null;
         }
-
         if (finalUrl) {
           await plotMainLayer(finalUrl, layerType, finalTimestamp, layerKey);
         } else {
@@ -4782,12 +4705,10 @@
             case 'nowcast': currentLayer = NowcastLayer; NowcastLayer = null; break;
             case 'warning': currentLayer = warningLayer; warningLayer = null; break;
           }
-
           if (currentLayer && map.hasLayer(currentLayer)) {
             map.removeLayer(currentLayer);
           }
         }
-
         if (!finalUrl) {
           console.warn(`No valid URL for ${layerKey} ${layerType} at ${new Date(targetTimestamp).toISOString()}`);
         }
@@ -4842,25 +4763,22 @@
         nowcast: parseFloat(document.getElementById('nowcastOpacity')?.value || 0.8),
         warning: parseFloat(document.getElementById('warningOpacity')?.value || 0.8)
       };
-
       // Define all layers with their associated color (for vector-tile styling)
       const layerList = [
-        { layer: radarLayer, opacity: opacities.radar, color: '#FF8C00', key: 'radar' },         // Orange for precipitation
-        { layer: satelliteLayer, opacity: opacities.satellite, color: null, key: 'satellite' },     // Satellite usually image/tile, no vector color needed
-        { layer: isobarLayer, opacity: opacities.isobar, color: '#FFFFFF', key: 'isobar' },        // White lines
-        { layer: windLayer, opacity: opacities.wind, color: '#88E0FF', key: 'wind' },          // Light blue
-        { layer: lightningLayer, opacity: opacities.lightning, color: '#FFFF00', key: 'lightning' },     // Yellow
+        { layer: radarLayer, opacity: opacities.radar, color: '#FF8C00', key: 'radar' }, // Orange for precipitation
+        { layer: satelliteLayer, opacity: opacities.satellite, color: null, key: 'satellite' }, // Satellite usually image/tile, no vector color needed
+        { layer: isobarLayer, opacity: opacities.isobar, color: '#FFFFFF', key: 'isobar' }, // White lines
+        { layer: windLayer, opacity: opacities.wind, color: '#88E0FF', key: 'wind' }, // Light blue
+        { layer: lightningLayer, opacity: opacities.lightning, color: '#FFFF00', key: 'lightning' }, // Yellow
         { layer: tropicalStormsLayer, opacity: opacities.tropicalStorms, color: '#FF00FF', key: 'tropicalStorms' },// Magenta
-        { layer: rotationLayer, opacity: opacities.rotation, color: '#00FFFF', key: 'rotation' },      // Cyan
-        { layer: surfaceFrontLayer, opacity: opacities.surfaceFront, color: '#FFFFFF', key: 'surfaceFront' },  // White (or customize)
-        { layer: observationLayer, opacity: opacities.observation, color: '#00FF00', key: 'observation' },   // Green
-        { layer: NowcastLayer, opacity: opacities.nowcast, color: '#FFA500', key: 'nowcast' },       // Orange
-        { layer: warningLayer, opacity: opacities.warning, color: '#FF0000', key: 'warning' }        // Red
+        { layer: rotationLayer, opacity: opacities.rotation, color: '#00FFFF', key: 'rotation' }, // Cyan
+        { layer: surfaceFrontLayer, opacity: opacities.surfaceFront, color: '#FFFFFF', key: 'surfaceFront' }, // White (or customize)
+        { layer: observationLayer, opacity: opacities.observation, color: '#00FF00', key: 'observation' }, // Green
+        { layer: NowcastLayer, opacity: opacities.nowcast, color: '#FFA500', key: 'nowcast' }, // Orange
+        { layer: warningLayer, opacity: opacities.warning, color: '#FF0000', key: 'warning' } // Red
       ];
-
       layerList.forEach(({ layer, opacity, color, key }) => {
         if (!layer) return;
-
         // Special handling for satellite: it's usually a tile-layer or image, rarely vector
         if (key === 'satellite') {
           const satelliteType = document.getElementById('satelliteLayerSelect')?.value;
@@ -4875,12 +4793,9 @@
           }
           return;
         }
-
         // Special handling for radar: may be vector-tile with complex styling
-
         const radarType = document.getElementById('radarLayer')?.value;
         const config = radarOptions[radarType];
-
         if (config?.type === 'vector-tile' && layer.setStyle && color) {
           // For vector radar, apply custom style with opacity
           const newStyles = createVectorLayerStyles(opacity, color);
@@ -4888,8 +4803,6 @@
           return;
         }
         // Fall through to general opacity handling below
-
-
         // General case: vector-tile (setStyle) > standard setOpacity > image overlay (getElement)
         if (layer.setStyle && color) {
           // Vector tile layer — update stroke/fill opacity using predefined color
@@ -4903,7 +4816,6 @@
           if (el) el.style.opacity = opacity;
         }
       });
-
       // Update legend with current values
       updateLegend();
     }
@@ -4920,26 +4832,20 @@
       };
     }
     // Debounced function that actually calls the heavy updateMapLayers
-
     function getCurrentSliderTimestamp() {
       const historySlider = document.getElementById('history-slider');
       if (!historySlider) return Date.now();
-
       const rawValue = historySlider.value;
       const sliderMax = parseInt(historySlider.getAttribute('max') || 100, 10);
       const sliderValue = parseFloat(rawValue);
-
       const maxHistoryHours = 6;
       const maxHistoryMs = maxHistoryHours * 60 * 60 * 1000;
       const normalizedValue = (sliderMax - sliderValue) / sliderMax;
       return Date.now() - normalizedValue * maxHistoryMs;
     }
-
-
     function handleTimeSliderChange(event) {
       const historySlider = event.target;
       const timestamp = getCurrentSliderTimestamp();
-
       const timeDisplay = document.getElementById('history-time');
       if (timeDisplay) {
         timeDisplay.innerText = new Date(timestamp).toLocaleString('en-GB', {
@@ -4951,147 +4857,135 @@
           minute: '2-digit'
         }) + ' BST';
       }
-
       triggerMapUpdate(timestamp);
     }
-
     function radarLayerTypeHandler() {
       const select = document.getElementById('radarLayer');
       if (select?.disabled) {
         clearRadarLayers();
         return;
       }
-
+      fetchData();
       const newType = select.value;
       clearRadarLayers();
       const timestamp = getCurrentSliderTimestamp();
       plotLayerIfNecessary(newType, radarOptions, timestamp, 'radar');
     }
-
     function satelliteLayerTypeHandler() {
       const select = document.getElementById('satelliteLayerSelect');
       if (select?.disabled) {
         clearSatelliteLayers();
         return;
       }
-
+      fetchData();
       const newType = select.value;
       clearSatelliteLayers();
       const timestamp = getCurrentSliderTimestamp();
       plotLayerIfNecessary(newType, satelliteOptions, timestamp, 'satellite');
     }
-
     function isobarLayerTypeHandler() {
       const select = document.getElementById('isobarLayerSelect');
       if (select?.disabled) {
         clearIsobarLayers();
         return;
       }
-
+      fetchData();
       const newType = select.value;
       clearIsobarLayers();
       const timestamp = getCurrentSliderTimestamp();
       plotLayerIfNecessary(newType, isobarOptions, timestamp, 'isobar');
     }
-
     function windLayerTypeHandler() {
       const select = document.getElementById('windLayerSelect');
       if (select?.disabled) {
         clearWindLayers();
         return;
       }
-
+      fetchData();
       const newType = select.value;
       clearWindLayers();
       const timestamp = getCurrentSliderTimestamp();
       plotLayerIfNecessary(newType, windOptions, timestamp, 'wind');
     }
-
     function tropicalStormsLayerTypeHandler() {
       const select = document.getElementById('tropicalStormsLayerSelect');
       if (select?.disabled) {
         clearTropicalStormsLayers();
         return;
       }
-
+      fetchData();
       const newType = select.value;
       clearTropicalStormsLayers();
       const timestamp = getCurrentSliderTimestamp();
       plotLayerIfNecessary(newType, tropicalStormsOptions, timestamp, 'tropicalStorms');
     }
-
     function rotationLayerTypeHandler() {
       const select = document.getElementById('rotationLayerSelect');
       if (select?.disabled) {
         clearRotationLayers();
         return;
       }
-
+      fetchData();
       const newType = select.value;
       clearRotationLayers();
       const timestamp = getCurrentSliderTimestamp();
       plotLayerIfNecessary(newType, rotationOptions, timestamp, 'rotation');
     }
-
     function surfaceFrontLayerTypeHandler() {
       const select = document.getElementById('surfaceFrontLayerSelect');
       if (select?.disabled) {
         clearSurfaceFrontLayers();
         return;
       }
-
+      fetchData();
       const newType = select.value;
       clearSurfaceFrontLayers();
       const timestamp = getCurrentSliderTimestamp();
       plotLayerIfNecessary(newType, surfaceFrontOptions, timestamp, 'surfaceFront');
     }
-
     function lightningLayerTypeHandler() {
       const select = document.getElementById('lightningLayerSelect');
       if (select?.disabled) {
         clearLightningLayers();
         return;
       }
-
+      fetchData();
       const newType = select.value;
       clearLightningLayers();
       const timestamp = getCurrentSliderTimestamp();
       plotLayerIfNecessary(newType, lightningOptions, timestamp, 'lightning');
     }
-
     function observationLayerTypeHandler() {
       const select = document.getElementById('observationLayerSelect');
       if (select?.disabled) {
         clearObservationLayers();
         return;
       }
-
+      fetchData();
       const newType = select.value;
       clearObservationLayers();
       const timestamp = getCurrentSliderTimestamp();
       plotLayerIfNecessary(newType, observationOptions, timestamp, 'observation');
     }
-
     function warningLayerTypeHandler() {
       const select = document.getElementById('warningLayerSelect');
       if (select?.disabled) {
         clearWarningLayers();
         return;
       }
-
+      fetchData();
       const newType = select.value;
       clearWarningLayers();
       const timestamp = getCurrentSliderTimestamp();
       plotLayerIfNecessary(newType, warningOptions, timestamp, 'warning');
     }
-
     function nowcastLayerTypeHandler() {
       const select = document.getElementById('nowcastLayerSelect');
       if (select?.disabled) {
         clearNowcastLayers();
         return;
       }
-
+      fetchData();
       const newType = select.value;
       clearNowcastLayers();
       const timestamp = getCurrentSliderTimestamp();
@@ -5132,7 +5026,6 @@
         }
       });
       const timeSlider = document.getElementById('history-slider');
-
       // Opacity sliders
       const radarOpacitySlider = document.getElementById('radarOpacity');
       const satelliteOpacitySlider = document.getElementById('satelliteOpacity');
@@ -5145,7 +5038,6 @@
       const observationOpacitySlider = document.getElementById('observationOpacity');
       const nowcastOpacitySlider = document.getElementById('nowcastOpacity');
       const warningOpacitySlider = document.getElementById('warningOpacity');
-
       // Layer select elements
       const radarSelect = document.getElementById('radarLayer');
       const satelliteSelect = document.getElementById('satelliteLayerSelect');
@@ -5158,7 +5050,6 @@
       const observationSelect = document.getElementById('observationLayerSelect');
       const nowcastSelect = document.getElementById('nowcastLayerSelect');
       const warningSelect = document.getElementById('warningLayerSelect');
-
       // Attach change handlers for layer dropdowns
       if (radarSelect) radarSelect.addEventListener('change', radarLayerTypeHandler);
       if (satelliteSelect) satelliteSelect.addEventListener('change', satelliteLayerTypeHandler);
@@ -5171,7 +5062,6 @@
       if (observationSelect) observationSelect.addEventListener('change', observationLayerTypeHandler);
       if (nowcastSelect) nowcastSelect.addEventListener('change', nowcastLayerTypeHandler);
       if (warningSelect) warningSelect.addEventListener('change', warningLayerTypeHandler);
-
       // Attach opacity sliders
       if (radarOpacitySlider) radarOpacitySlider.addEventListener('input', updateLayerOpacities);
       if (satelliteOpacitySlider) satelliteOpacitySlider.addEventListener('input', updateLayerOpacities);
@@ -5184,20 +5074,15 @@
       if (observationOpacitySlider) observationOpacitySlider.addEventListener('input', updateLayerOpacities);
       if (nowcastOpacitySlider) nowcastOpacitySlider.addEventListener('input', updateLayerOpacities);
       if (warningOpacitySlider) warningOpacitySlider.addEventListener('input', updateLayerOpacities);
-
       // Time slider
       if (timeSlider) {
         timeSlider.addEventListener('input', handleTimeSliderChange);
       }
-
       // === CRITICAL: Force initial plot of all currently enabled layers ===
       updateLegend(); // Update opacity labels first
-
       const initialTimestamp = timeSlider ? getCurrentSliderTimestamp() : Date.now();
-
       // Force immediate execution (bypasses debounce delay)
       triggerMapUpdate(initialTimestamp, true);
-
       // Update the time display to match the initial timestamp
       const timeDisplay = document.getElementById('history-time');
       if (timeDisplay) {
@@ -5210,15 +5095,12 @@
           minute: '2-digit'
         }) + ' BST';
       }
-
-
       if (radarSelect && radarSelect.value === '') radarSelect.value = 'uk-precip-intensity';
       if (satelliteSelect && satelliteSelect.value === '') satelliteSelect.value = 'global-ir';
       if (isobarSelect && isobarSelect.value === '') isobarSelect.value = 'pressure_two';
       if (windSelect && windSelect.value === '') windSelect.value = 'wind-direction';
       if (surfaceFrontSelect && surfaceFrontSelect.value === '') surfaceFrontSelect.value = 'fcst-surface-fronts-isolines';
       if (nowcastSelect && nowcastSelect.value === '') nowcastSelect.value = 'sevwx-global-storm-corridors-plot';
-
       // Trigger handlers to apply defaults immediately
       radarLayerTypeHandler();
       satelliteLayerTypeHandler();
@@ -5226,9 +5108,7 @@
       windLayerTypeHandler();
       surfaceFrontLayerTypeHandler();
       nowcastLayerTypeHandler();
-
     });
-
 
 
 
