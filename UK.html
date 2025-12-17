@@ -28,6 +28,362 @@
   </script>
 
   <style>
+    /* ==================== BEAUTIFUL ADDITIONAL CONTROLS ==================== */
+    /* ==================== GLOW EFFECT FOR SWITCH CONTROLS WHEN ON ==================== */
+
+    /* ==================== UNIFIED ACTIVE/GLOW STYLES FOR LAYER & SWITCH CONTROLS ==================== */
+    .map-style-control {
+      background: rgba(255, 255, 255, 0.9);
+      border-color: #d0d0d0;
+    }
+
+    /* Prevent glow/dimming on Map Style control */
+    .map-style-control,
+    .map-style-control:hover {
+      background: rgba(255, 255, 255, 0.85) !important;
+      box-shadow: none !important;
+      border-color: #e0e0e0 !important;
+      transform: none !important;
+    }
+
+    body.dark-mode .map-style-control,
+    body.dark-mode .map-style-control:hover {
+      background: rgba(45, 45, 45, 0.9) !important;
+      border-color: #555 !important;
+      box-shadow: none !important;
+      transform: none !important;
+    }
+
+    body.dark-mode .map-style-control {
+      background: rgba(50, 50, 50, 0.95);
+      border-color: #666;
+    }
+
+    /* No hover lift or glow — keep it calm */
+    .map-style-control:hover {
+      background: rgba(255, 255, 255, 0.95);
+      transform: none;
+      box-shadow: none;
+    }
+
+    body.dark-mode .map-style-control:hover {
+      background: rgba(55, 55, 55, 0.95);
+    }
+
+    /* Base styles for both control types */
+    .layer-control,
+    .switch-control {
+      padding: 10px 12px;
+      margin-bottom: 10px;
+      border-radius: 10px;
+      border: 1px solid #e0e0e0;
+      transition: all 0.3s ease;
+      position: relative;
+    }
+
+    body.dark-mode .layer-control,
+    body.dark-mode .switch-control {
+      border-color: #555;
+    }
+
+    /* Default (OFF) state - dimmed */
+    .layer-control.off,
+    .switch-control.glow-off {
+      opacity: 0.48;
+      transform: none;
+    }
+
+    body.dark-mode .layer-control.off,
+    body.dark-mode .switch-control.glow-off {
+      opacity: 0.45;
+    }
+
+    /* Active (ON) state - brighter background + subtle glow */
+    .layer-control:not(.off),
+    .switch-control.glow-on {
+      background: rgba(255, 255, 255, 0.95);
+      box-shadow:
+        0 2px 8px rgba(33, 150, 243, 0.15),
+        0 0 12px rgba(33, 150, 243, 0.25);
+      border-color: rgba(33, 150, 243, 0.4);
+      transform: translateY(-1px);
+    }
+
+    body.dark-mode .layer-control:not(.off),
+    body.dark-mode .switch-control.glow-on {
+      background: rgba(50, 55, 70, 0.95);
+      box-shadow:
+        0 2px 10px rgba(75, 155, 255, 0.2),
+        0 0 14px rgba(75, 155, 255, 0.35);
+      border-color: rgba(75, 155, 255, 0.5);
+    }
+
+    /* Hover enhancement when ON */
+    .layer-control:not(.off):hover,
+    .switch-control.glow-on:hover {
+      background: white;
+      box-shadow:
+        0 4px 16px rgba(33, 150, 243, 0.3),
+        0 0 18px rgba(33, 150, 243, 0.45);
+      transform: translateY(-2px);
+    }
+
+    body.dark-mode .layer-control:not(.off):hover,
+    body.dark-mode .switch-control.glow-on:hover {
+      background: rgba(60, 65, 80, 0.98);
+      box-shadow:
+        0 4px 20px rgba(75, 155, 255, 0.4),
+        0 0 20px rgba(75, 155, 255, 0.5);
+    }
+
+    /* Default background (when no state class) */
+    .layer-control,
+    .switch-control {
+      background: rgba(255, 255, 255, 0.85);
+    }
+
+    body.dark-mode .layer-control,
+    body.dark-mode .switch-control {
+      background: rgba(45, 45, 45, 0.95);
+    }
+
+    /* Hover when OFF (gentle lift) */
+    .layer-control.off:hover,
+    .switch-control.glow-off:hover {
+      background: rgba(255, 255, 255, 0.9);
+      transform: translateY(-1px);
+    }
+
+    body.dark-mode .layer-control.off:hover,
+    body.dark-mode .switch-control.glow-off:hover {
+      background: rgba(50, 50, 50, 0.95);
+    }
+
+    /* ==================== SWITCH-CONTROL SPECIFIC LAYOUT ==================== */
+
+    .switch-control {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .switch-control .label-group {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .switch-control .label-text {
+      font-weight: 600;
+      font-size: 0.94em;
+      color: #1a2a44;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    body.dark-mode .switch-control .label-text {
+      color: #e0e0e0;
+    }
+
+    .switch-control .tooltip {
+      font-size: 0.78em;
+      color: #777;
+      opacity: 0;
+      max-height: 0;
+      overflow: hidden;
+      transition: opacity 0.3s ease, max-height 0.3s ease;
+      margin-top: 2px;
+    }
+
+    body.dark-mode .switch-control .tooltip {
+      color: #bbb;
+    }
+
+    .switch-control:hover .tooltip {
+      opacity: 0.9;
+      max-height: 28px;
+    }
+
+    .switch-control .toggle-switch {
+      width: 54px;
+      height: 30px;
+      flex-shrink: 0;
+    }
+
+    /* ==================== LEGACY PRETTY CHECKBOX (if still used anywhere) ==================== */
+
+    body.dark-mode .pretty-checkbox .checkmark {
+      background: #333;
+      border-color: #555;
+    }
+
+    .pretty-checkbox input:checked~.checkmark {
+      background: #2196F3;
+      border-color: #2196F3;
+    }
+
+    body.dark-mode .pretty-checkbox input:checked~.checkmark {
+      background: #4b9bff;
+      border-color: #4b9bff;
+    }
+
+    .pretty-checkbox input:checked~.checkmark:after {
+      content: "✓";
+      position: absolute;
+      color: white;
+      font-weight: bold;
+      font-size: 14px;
+      left: 5px;
+      top: 1px;
+    }
+
+    body.dark-mode .pretty-checkbox input:checked~.checkmark {
+      background: #4b9bff;
+      border-color: #4b9bff;
+    }
+
+    .pretty-checkbox input:checked~.checkmark:after {
+      content: "✓";
+      position: absolute;
+      color: white;
+      font-weight: bold;
+      font-size: 14px;
+      left: 5px;
+      top: 1px;
+    }
+
+    /* Slider with live value */
+    .pretty-slider {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .pretty-slider input[type="range"] {
+      height: 8px;
+      border-radius: 4px;
+      background: #ddd;
+      -webkit-appearance: none;
+      outline: none;
+    }
+
+    .pretty-slider input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 20px;
+      height: 20px;
+      background: #2196F3;
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+    }
+
+    body.dark-mode .pretty-slider input[type="range"] {
+      background: #444;
+    }
+
+    body.dark-mode .pretty-slider input[type="range"]::-webkit-slider-thumb {
+      background: #4b9bff;
+    }
+
+    .slider-value {
+      font-size: 0.88em;
+      font-weight: 600;
+      color: #2196F3;
+      align-self: flex-end;
+    }
+
+    body.dark-mode .slider-value {
+      color: #6fb3ff;
+    }
+
+    /* Styled text/number/datetime inputs */
+    .pretty-input input {
+      padding: 9px 11px;
+      font-size: 0.92em;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      background: white;
+      color: #333;
+      outline: none;
+      transition: border 0.2s ease;
+    }
+
+    .pretty-input input:focus {
+      border-color: #2196F3;
+      box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
+    }
+
+    body.dark-mode .pretty-input input {
+      background: #333;
+      color: #e0e0e0;
+      border-color: #555;
+    }
+
+    body.dark-mode .pretty-input input:focus {
+      border-color: #4b9bff;
+      box-shadow: 0 0 0 2px rgba(75, 155, 255, 0.3);
+    }
+
+    .unit {
+      font-size: 0.85em;
+      color: #666;
+      margin-top: 4px;
+    }
+
+    body.dark-mode .unit {
+      color: #aaa;
+    }
+
+    /* Button group */
+    .button-group {
+      display: flex;
+      gap: 10px;
+      margin: 12px 0;
+    }
+
+    .button-group button {
+      flex: 1;
+      padding: 10px;
+      font-size: 0.92em;
+      font-weight: 600;
+      border: none;
+      border-radius: 8px;
+      background: #2196F3;
+      color: white;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .button-group button:hover {
+      background: #1976D2;
+      transform: translateY(-1px);
+    }
+
+    .button-group button:active {
+      transform: translateY(0);
+    }
+
+    body.dark-mode .button-group button {
+      background: #4b9bff;
+    }
+
+    body.dark-mode .button-group button:hover {
+      background: #3578d6;
+    }
+
+    #remove-filter {
+      background: #f44336 !important;
+    }
+
+    #remove-filter:hover {
+      background: #d32f2f !important;
+    }
+
+    body.dark-mode #remove-filter {
+      background: #f66 !important;
+    }
+
     .smooth-raster {
       image-rendering: optimizeSpeed;
       image-rendering: -webkit-optimize-contrast;
@@ -988,6 +1344,294 @@
       transition: opacity 0.3s ease;
     }
 
+    /* ==================== FINAL COMPACT LAYER CONTROL WITH OPACITY ==================== */
+
+    .layer-control {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      padding: 11px;
+      margin-bottom: 9px;
+      background: rgba(255, 255, 255, 0.85);
+      border-radius: 12px;
+      border: 1px solid #e0e0e0;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+      transition: all 0.25s ease;
+    }
+
+    body.dark-mode .layer-control {
+      background: rgba(45, 45, 45, 0.95);
+      border-color: #555;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    /* Dimmed state when layer is toggled off */
+    .layer-control.off {
+      opacity: 0.48;
+    }
+
+    /* Hover effect for better interactivity */
+    .layer-control:hover {
+      background: rgba(255, 255, 255, 0.95);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+    }
+
+    body.dark-mode .layer-control:hover {
+      background: rgba(55, 55, 55, 0.95);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Top row: Layer name + Toggle switch */
+    .top-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 34px;
+    }
+
+    .label-group {
+      flex: 1;
+      min-width: 0;
+      /* Essential for text truncation */
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .label-text {
+      font-weight: 600;
+      font-size: 0.96em;
+      color: #1a2a44;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    body.dark-mode .label-text {
+      color: #f0f0f0;
+    }
+
+    /* Tooltip (description) - appears on hover */
+    .tooltip {
+      font-size: 0.79em;
+      color: #777;
+      font-weight: 400;
+      opacity: 0;
+      max-height: 0;
+      overflow: hidden;
+      transition: opacity 0.35s ease, max-height 0.35s ease;
+    }
+
+    body.dark-mode .tooltip {
+      color: #bbb;
+    }
+
+    .layer-control:hover .tooltip {
+      opacity: 0.9;
+      max-height: 28px;
+    }
+
+    /* Compact toggle switch */
+    .toggle-switch {
+      position: relative;
+      width: 54px;
+      height: 30px;
+      flex-shrink: 0;
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-switch .switch {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #bbb;
+      border-radius: 30px;
+      transition: background-color 0.3s ease;
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.15);
+    }
+
+    .toggle-switch .switch:before {
+      content: "";
+      position: absolute;
+      width: 26px;
+      height: 26px;
+      left: 2px;
+      bottom: 2px;
+      background-color: white;
+      border-radius: 50%;
+      transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25);
+    }
+
+    .toggle-switch input:checked+.switch {
+      background-color: #2196F3;
+    }
+
+    .toggle-switch input:checked+.switch:before {
+      transform: translateX(24px);
+    }
+
+    /* ON/OFF labels inside switch */
+    .toggle-switch .switch::after {
+      content: "OFF";
+      position: absolute;
+      top: 50%;
+      left: 8px;
+      transform: translateY(-50%);
+      font-size: 0.62em;
+      font-weight: bold;
+      color: white;
+      opacity: 0.9;
+    }
+
+    .toggle-switch input:checked+.switch::after {
+      content: "ON";
+      left: auto;
+      right: 7px;
+    }
+
+    /* Dropdown - full width */
+    .layer-control select {
+      width: 100%;
+      padding: 9px 11px;
+      font-size: 0.89em;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      background: white;
+      color: #333;
+      outline: none;
+      transition: border-color 0.2s ease;
+    }
+
+    .layer-control select:focus {
+      border-color: #2196F3;
+      box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
+    }
+
+    body.dark-mode .layer-control select {
+      background: #333;
+      color: #e0e0e0;
+      border-color: #555;
+    }
+
+    body.dark-mode .layer-control select:focus {
+      border-color: #4b9bff;
+      box-shadow: 0 0 0 2px rgba(75, 155, 255, 0.3);
+    }
+
+    .layer-control select:disabled {
+      opacity: 0.4;
+      background: #f8f8f8;
+      cursor: not-allowed;
+    }
+
+    body.dark-mode .layer-control select:disabled {
+      background: #2a2a2a;
+    }
+
+    /* Opacity control with live percentage */
+    .opacity-control {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 6px;
+    }
+
+    .opacity-control input[type="range"] {
+      flex: 1;
+      height: 7px;
+      border-radius: 4px;
+      background: #d0d0d0;
+      outline: none;
+      -webkit-appearance: none;
+    }
+
+    .opacity-control input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      background: #2196F3;
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+      transition: transform 0.2s ease;
+    }
+
+    .opacity-control input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+    }
+
+    .opacity-control input[type="range"]::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      background: #2196F3;
+      border-radius: 50%;
+      cursor: pointer;
+      border: none;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+    }
+
+    body.dark-mode .opacity-control input[type="range"] {
+      background: #555;
+    }
+
+    body.dark-mode .opacity-control input[type="range"]::-webkit-slider-thumb,
+    body.dark-mode .opacity-control input[type="range"]::-moz-range-thumb {
+      background: #4b9bff;
+    }
+
+    .opacity-value {
+      font-size: 0.84em;
+      font-weight: 600;
+      color: #444;
+      min-width: 44px;
+      text-align: right;
+    }
+
+    body.dark-mode .opacity-value {
+      color: #ddd;
+    }
+
+    /* Dim opacity control when layer is off */
+    .layer-control.off .opacity-control {
+      opacity: 0.55;
+    }
+
+    /* Optional: Slightly larger touch targets on mobile */
+    @media (max-width: 768px) {
+      .layer-control {
+        padding: 12px;
+      }
+
+      .toggle-switch {
+        width: 58px;
+        height: 32px;
+      }
+
+      .toggle-switch .switch:before {
+        width: 28px;
+        height: 28px;
+      }
+
+      .toggle-switch input:checked+.switch:before {
+        transform: translateX(26px);
+      }
+
+      .opacity-control input[type="range"]::-webkit-slider-thumb {
+        width: 20px;
+        height: 20px;
+      }
+    }
+
     body.three-d-mode #map {
       opacity: 0;
       /* Hide 2D map but keep it functional */
@@ -1199,7 +1843,15 @@
 
     <div class="section">
       <h4>🗺️ Map Style</h4>
-      <label>Map Style: <select id="map-style" onchange="switchBaseMap(this.value)">
+      <div class="layer-control map-style-control">
+        <div class="top-row">
+          <div class="label-group">
+            <span class="label-text">Map Background</span>
+            <span class="tooltip">Choose map background style</span>
+          </div>
+        </div>
+
+        <select id="map-style" onchange="switchBaseMap(this.value)">
           <option value="mapbox-streets-satellite">Mapbox Streets-Satellite</option>
           <option value="mapbox-navigation">Mapbox Navigation</option>
           <option value="mapbox-traffic-night">Mapbox Traffic Night</option>
@@ -1217,11 +1869,24 @@
           <option value="maptiler-outdoor">MapTiler Outdoor</option>
           <option value="maptiler-light">MapTiler Light</option>
           <option value="maptiler-dark">MapTiler Dark</option>
-        </select><span class="tooltip">Choose map background</span></label>
+        </select>
+      </div>
 
       <div class="section"></div>
       <h4>⛈️ Weather Layers</h4>
-      <label>Radar Layer:
+
+      <!-- Radar Layer - ON -->
+      <div class="layer-control" id="radar-control">
+        <div class="top-row">
+          <div class="label-group">
+            <span class="label-text">Radar Layer</span>
+            <span class="tooltip">Select radar data layer</span>
+          </div>
+          <div class="toggle-switch">
+            <input type="checkbox" id="radarToggle" checked onchange="toggleLayer('radar', this.checked);">
+            <label for="radarToggle" class="switch"></label>
+          </div>
+        </div>
         <select id="radarLayer" onchange="radarLayerTypeHandler();">
           <option value="uk-precip-intensity">UK High Resolution Rainfall Intensity (Smoothed)</option>
           <option value="uk-precip-intensity-pixelated">UK High Resolution Rainfall Intensity (Pixelated)</option>
@@ -1229,13 +1894,12 @@
           <option value="uk-precip-type">UK High Resolution Precipitation Type</option>
           <option value="europe-precip-intensity">Europe Low Resolution Rainfall Intensity</option>
           <option value="europe-precip-type">Europe Low Resolution Precipitation Type</option>
-
-          <option value="placeholder">-------------------------------------------------------------------------</option>
-
+          <option value="radar-precip-intensity-global-raster">Global Rainfall Intensity</option>
+          <option value="placeholder" disabled>-------------------------------------------------------------------------
+          </option>
           <option value="global-precip-intensity">Precipitation - NASA global precipitation intensity</option>
-
-          <option value="placeholder">-------------------------------------------------------------------------</option>
-
+          <option value="placeholder" disabled>-------------------------------------------------------------------------
+          </option>
           <option value="radar-base-ref-precip-type-na-contours">North America Base Reflectivity Precip - Contour
           </option>
           <option value="radar-base-ref-precip-type-europe-contours">Europe Base Reflectivity Precip - Contour</option>
@@ -1249,15 +1913,26 @@
           <option value="radar-precip-rate-europe-raster">Radar Precipitation Rate - Grid (Europe)</option>
           <option value="radar-reflectivity-mosaic-global-contours">Synthetic Radar - Contour (Global)</option>
           <option value="radar-reflectivity-mosaic-global-raster">Synthetic Radar - Grid (Global)</option>
-          <option value="placeholder">-------------------------------------------------------------------------</option>
-
-          
-
-          <option value="none">None</option>
         </select>
-        <span class="tooltip">Select radar data layer</span>
-      </label>
-      <label>Satellite Layer:
+        <div class="opacity-control">
+          <input type="range" id="radarOpacity" min="0" max="1" step="0.05" value="0.9"
+            oninput="updateLayerOpacities()">
+          <span class="opacity-value">90%</span>
+        </div>
+      </div>
+
+      <!-- Satellite Layer - ON -->
+      <div class="layer-control" id="satellite-control">
+        <div class="top-row">
+          <div class="label-group">
+            <span class="label-text">Satellite Layer</span>
+            <span class="tooltip">Select satellite data layer</span>
+          </div>
+          <div class="toggle-switch">
+            <input type="checkbox" id="satelliteToggle" checked onchange="toggleLayer('satellite', this.checked);">
+            <label for="satelliteToggle" class="switch"></label>
+          </div>
+        </div>
         <select id="satelliteLayerSelect" onchange="satelliteLayerTypeHandler();">
           <option value="global-ir">Satellite - Global infrared (GOES)</option>
           <option value="europe-vis">Satellite - Europe visible (MeteoSat)</option>
@@ -1269,80 +1944,199 @@
           <option value="satellite-visible-global-raster">Global Visible</option>
           <option value="satellite-water-vapor-global-raster">Global Water Vapor</option>
           <option value="satellite-night-fog-global-raster">Global Night Fog</option>
-          <option value="none">None</option>
         </select>
-        <span class="tooltip">Select satellite data layer</span>
-      </label>
-      <label>Isobar Layer:
-        <select id="isobarLayerSelect">
-          <option value="pressure_two">Mean Sea level Pressure (every 2 hPa)</option>
-          <option value="pressure_four">Mean Sea level Pressure (every 4 hPa)</option>
-          <option value="none">None</option>
+        <div class="opacity-control">
+          <input type="range" id="satelliteOpacity" min="0" max="1" step="0.05" value="0.5"
+            oninput="updateLayerOpacities()">
+          <span class="opacity-value">50%</span>
+        </div>
+      </div>
+
+      <!-- Isobar Layer - ON -->
+      <div class="layer-control" id="isobar-control">
+        <div class="top-row">
+          <div class="label-group">
+            <span class="label-text">Isobar Layer</span>
+            <span class="tooltip">Select isobar data layer</span>
+          </div>
+          <div class="toggle-switch">
+            <input type="checkbox" id="isobarToggle" checked onchange="toggleLayer('isobar', this.checked);">
+            <label for="isobarToggle" class="switch"></label>
+          </div>
+        </div>
+        <select id="isobarLayerSelect" onchange="isobarLayerTypeHandler();">
+          <option value="pressure_two">Mean Sea Level Pressure (every 2 hPa)</option>
+          <option value="pressure_four">Mean Sea Level Pressure (every 4 hPa)</option>
         </select>
-        <span class="tooltip">Select isobar data layer</span>
-      </label>
-      <label>Wind Direction Layer:
-        <select id="windLayerSelect">
+        <div class="opacity-control">
+          <input type="range" id="isobarOpacity" min="0" max="1" step="0.05" value="0.8"
+            oninput="updateLayerOpacities()">
+          <span class="opacity-value">80%</span>
+        </div>
+      </div>
+      <!-- Surface Front Layer - ON -->
+      <div class="layer-control" id="surfaceFront-control">
+        <div class="top-row">
+          <div class="label-group">
+            <span class="label-text">Surface Front Layer</span>
+            <span class="tooltip">Select Surface Fronts layer</span>
+          </div>
+          <div class="toggle-switch">
+            <input type="checkbox" id="surfaceFrontToggle" checked
+              onchange="toggleLayer('surfaceFront', this.checked);">
+            <label for="surfaceFrontToggle" class="switch"></label>
+          </div>
+        </div>
+        <select id="surfaceFrontLayerSelect" onchange="surfaceFrontLayerTypeHandler();">
+          <option value="fcst-surface-fronts-isolines">Surface Fronts</option>
+        </select>
+        <div class="opacity-control">
+          <input type="range" id="surfaceFrontOpacity" min="0" max="1" step="0.05" value="0.8"
+            oninput="updateLayerOpacities()">
+          <span class="opacity-value">80%</span>
+        </div>
+      </div>
+      <!-- Wind Direction Layer - ON -->
+      <div class="layer-control" id="wind-control">
+        <div class="top-row">
+          <div class="label-group">
+            <span class="label-text">Wind Direction Layer</span>
+            <span class="tooltip">Select wind direction data layer</span>
+          </div>
+          <div class="toggle-switch">
+            <input type="checkbox" id="windToggle" checked onchange="toggleLayer('wind', this.checked);">
+            <label for="windToggle" class="switch"></label>
+          </div>
+        </div>
+        <select id="windLayerSelect" onchange="windLayerTypeHandler();">
           <option value="wind-direction">Wind direction</option>
           <option value="fcst-manta-current-direction-grid">Current Direction</option>
           <option value="fcst-manta-mean-wave-direction-grid">Mean Wave Direction</option>
           <option value="fcst-manta-significant-wave-symbol-grid">Significant Wave Height Direction</option>
-          
           <option value="fcst-manta-swell-wave-symbol-grid">Swell Wave Direction</option>
           <option value="fcst-sea-wave-height-swell-waves-period-grid">Swell Waves Period Direction</option>
           <option value="fcst-manta-wind-wave-symbol-grid">Wind Wave Directions</option>
           <option value="fcst-sea-wave-height-wind-waves-period-grid">Wind Waves Period Direction</option>
-          <option value="none">None</option>
         </select>
-        <span class="tooltip">Select wind direction data layer</span>
-      </label>
-      <label>Tropical Storms Layer:
-        <select id="tropicalStormsLayerSelect">
+        <div class="opacity-control">
+          <input type="range" id="windOpacity" min="0" max="1" step="0.05" value="0.8" oninput="updateLayerOpacities()">
+          <span class="opacity-value">80%</span>
+        </div>
+      </div>
+      <!-- Global Nowcast Layer - ON -->
+      <div class="layer-control" id="nowcast-control">
+        <div class="top-row">
+          <div class="label-group">
+            <span class="label-text">Global Nowcast Layer</span>
+            <span class="tooltip">Select Global Nowcast data layer</span>
+          </div>
+          <div class="toggle-switch">
+            <input type="checkbox" id="nowcastToggle" checked onchange="toggleLayer('nowcast', this.checked);">
+            <label for="nowcastToggle" class="switch"></label>
+          </div>
+        </div>
+        <select id="nowcastLayerSelect" onchange="nowcastLayerTypeHandler();">
+          <option value="sevwx-global-storm-corridors-plot">Storm Nowcasts</option>
+          <option value="sevwx-storm-corridors-plot">Storm Corridors</option>
+        </select>
+        <div class="opacity-control">
+          <input type="range" id="nowcastOpacity" min="0" max="1" step="0.05" value="0.8"
+            oninput="updateLayerOpacities()">
+          <span class="opacity-value">80%</span>
+        </div>
+      </div>
+      <!-- Tropical Storms Layer - OFF -->
+      <div class="layer-control" id="tropicalStorms-control">
+        <div class="top-row">
+          <div class="label-group">
+            <span class="label-text">Tropical Storms Layer</span>
+            <span class="tooltip">Select Tropical Storms data layer</span>
+          </div>
+          <div class="toggle-switch">
+            <input type="checkbox" id="tropicalStormsToggle" onchange="toggleLayer('tropicalStorms', this.checked);">
+            <label for="tropicalStormsToggle" class="switch"></label>
+          </div>
+        </div>
+        <select id="tropicalStormsLayerSelect" onchange="tropicalStormsLayerTypeHandler();" disabled>
           <option value="sevwx-dtn-tropical-cyclones-plot">Tropical Storms</option>
           <option value="sevwx-agency-tropical-cyclones-plot">Agency Tropical Storms</option>
           <option value="sevwx-tropical-cyclone-tracks">Tropical Storm Model Tracks</option>
-          <option value="none">None</option>
         </select>
-        <span class="tooltip">Select Tropical Storms data layer</span>
-      </label>
+        <div class="opacity-control">
+          <input type="range" id="tropicalStormsOpacity" min="0" max="1" step="0.05" value="0.8"
+            oninput="updateLayerOpacities()">
+          <span class="opacity-value">80%</span>
+        </div>
+      </div>
 
-      <label>Rotation Layer (US Only):
-        <select id="rotationLayerSelect">
-          <option value="none">None</option>
+      <!-- Rotation Layer - OFF -->
+      <div class="layer-control" id="rotation-control">
+        <div class="top-row">
+          <div class="label-group">
+            <span class="label-text">Rotation Layer (US Only)</span>
+            <span class="tooltip">Select Rotation Tracks layer</span>
+          </div>
+          <div class="toggle-switch">
+            <input type="checkbox" id="rotationToggle" onchange="toggleLayer('rotation', this.checked);">
+            <label for="rotationToggle" class="switch"></label>
+          </div>
+        </div>
+        <select id="rotationLayerSelect" onchange="rotationLayerTypeHandler();" disabled>
           <option value="sevwx-rotation-track-contours">Rotation Tracks</option>
           <option value="avwx-echo-tops-plot">Echo Tops</option>
           <option value="avwx-echo-tops-contours">Echo Top Contours</option>
         </select>
-        <span class="tooltip">Select Rotation Tracks layer</span>
-      </label>
+        <div class="opacity-control">
+          <input type="range" id="rotationOpacity" min="0" max="1" step="0.05" value="0.8"
+            oninput="updateLayerOpacities()">
+          <span class="opacity-value">80%</span>
+        </div>
+      </div>
 
-      <label>Surface Front Layer:
-        <select id="surfaceFrontLayerSelect">
-          <option value="fcst-surface-fronts-isolines">Surface Fronts</option>
-          <option value="none">None</option>
-        </select>
-        <span class="tooltip">Select Surface Fronts layer</span>
-      </label>
-      <label>Global Lightning Layer:
-        <select id="lightningLayerSelect">
+
+
+      <!-- Global Lightning Layer - OFF -->
+      <div class="layer-control" id="lightning-control">
+        <div class="top-row">
+          <div class="label-group">
+            <span class="label-text">Global Lightning Layer</span>
+            <span class="tooltip">Select Global Lightning data layer</span>
+          </div>
+          <div class="toggle-switch">
+            <input type="checkbox" id="lightningToggle" onchange="toggleLayer('lightning', this.checked);">
+            <label for="lightningToggle" class="switch"></label>
+          </div>
+        </div>
+        <select id="lightningLayerSelect" onchange="lightningLayerTypeHandler();" disabled>
           <option value="sevwx-lightning-global-plot">Global Lightning</option>
-          <option value="none">None</option>
         </select>
-        <span class="tooltip">Select Global Lightning data layer</span>
-      </label>
-      <label>Observation Layer:
-        <select id="observationLayerSelect">
-          <option value="none">None</option>
+        <div class="opacity-control">
+          <input type="range" id="lightningOpacity" min="0" max="1" step="0.05" value="0.8"
+            oninput="updateLayerOpacities()">
+          <span class="opacity-value">80%</span>
+        </div>
+      </div>
+
+      <!-- Observation Layer - OFF -->
+      <div class="layer-control" id="observation-control">
+        <div class="top-row">
+          <div class="label-group">
+            <span class="label-text">Observation Layer</span>
+            <span class="tooltip">Select Observation data layer</span>
+          </div>
+          <div class="toggle-switch">
+            <input type="checkbox" id="observationToggle" onchange="toggleLayer('observation', this.checked);">
+            <label for="observationToggle" class="switch"></label>
+          </div>
+        </div>
+        <select id="observationLayerSelect" onchange="observationLayerTypeHandler();" disabled>
           <option value="sfcanlys-temperature-contours">Surface Temperature</option>
           <option value="sfcanlys-wind-speed-contours">Wind Speed</option>
           <option value="global-wind-speed">Wind Speed (Alternative)</option>
           <option value="sfcanlys-dew-point-contours">Dew Point Temperature</option>
           <option value="sfcanlys-wet-bulb-temperature-globe-contours">Wet Bulb Globe Temperature</option>
           <option value="sfcanlys-relative-humidity-contours">Relative Humidity</option>
-          
           <option value="global-visibility">Visibility</option>
-          
-
           <option value="sfcanlys-snow-depth-contours">Snow Depth</option>
           <option value="sfcanlys-sea-surface-temp-contours">Sea Surface Temperature</option>
           <option value="sfcanlys-uv-radiation-index-contours">UV Radiation Index</option>
@@ -1350,7 +2144,6 @@
           <option value="fcst-onefx-snowfall-last-24hrs-contours">Snowfall Last 24 Hours</option>
           <option value="fcst-onefx-ice-accretion-last-hour-contours">Ice Accretion Last 1 Hour</option>
           <option value="fcst-onefx-wet-snow-last-1hr-contours">Wet Snow Index</option>
-          <option value="placeholder">-------------------------------------------------------------------------</option>
           <option value="precip-qpe-168hrs-eu-contours">Observed Precipitation – Past 7 days Contour (Europe)</option>
           <option value="precip-qpe-168hrs-eu-raster">Observed Precipitation – Past 7 days Grid (Europe)</option>
           <option value="precip-qpe-72hrs-eu-contours">Observed Precipitation – Past 3 days Contour (Europe)</option>
@@ -1362,7 +2155,7 @@
           <option value="precip-qpe-1hr-eu-contours">Observed Precipitation – Past 1h Contour (Europe)</option>
           <option value="precip-qpe-1hr-eu-raster">Observed Precipitation – Past 1h Grid (Europe)</option>
           <option value="placeholder">-------------------------------------------------------------------------</option>
-         
+
           <option value="precip-qpe-168hrs-gm-contours">Observed Precipitation – Past 7 days Contour (Global)</option>
           <option value="precip-qpe-168hrs-gm-raster">Observed Precipitation – Past 7 days Grid (Global)</option>
           <option value="precip-qpe-72hrs-gm-contours">Observed Precipitation – Past 3 days Contour (Global)</option>
@@ -1373,7 +2166,7 @@
           <option value="precip-qpe-24hrs-gm-raster">Observed Precipitation – Past 24h Grid (Global)</option>
           <option value="precip-qpe-1hr-gm-contours">Observed Precipitation – Past 1h Contour (Global)</option>
           <option value="precip-qpe-1hr-gm-raster">Observed Precipitation – Past 1h Grid (Global)</option>
-          
+
           <option value="placeholder">-------------------------------------------------------------------------</option>
 
           <option value="global-current-speed">Current Speed</option>
@@ -1384,88 +2177,194 @@
           <option value="fcst-sea-wave-height-wind-waves-contours">Wind Waves</option>
           <option value="fcst-sea-wave-height-wind-waves-period-contours">Wind Waves Period</option>
         </select>
-        <span class="tooltip">Select Observation data layer</span>
-      </label>
-      <label>Global Warning Layer:
-        <select id="warningLayerSelect">
-          <option value="none">None</option>
+        <div class="opacity-control">
+          <input type="range" id="observationOpacity" min="0" max="1" step="0.05" value="0.5"
+            oninput="updateLayerOpacities()">
+          <span class="opacity-value">50%</span>
+        </div>
+      </div>
+
+      <!-- Global Warning Layer - OFF -->
+      <div class="layer-control" id="warning-control">
+        <div class="top-row">
+          <div class="label-group">
+            <span class="label-text">Global Warning Layer</span>
+            <span class="tooltip">Select Global Warning data layer</span>
+          </div>
+          <div class="toggle-switch">
+            <input type="checkbox" id="warningToggle" onchange="toggleLayer('warning', this.checked);">
+            <label for="warningToggle" class="switch"></label>
+          </div>
+        </div>
+        <select id="warningLayerSelect" onchange="warningLayerTypeHandler();" disabled>
           <option value="sevwx-agency-bulletin-zones">Global Weather Bulletins</option>
         </select>
-        <span class="tooltip">Select Global Warning data layer</span>
+        <div class="opacity-control">
+          <input type="range" id="warningOpacity" min="0" max="1" step="0.05" value="0.8"
+            oninput="updateLayerOpacities()">
+          <span class="opacity-value">80%</span>
+        </div>
+      </div>
+
+
+      <!-- Additional Lightning Controls (kept simple but styled consistently) -->
+      <div class="section">
+        <h4>⚡ UK Lightning Controls</h4>
+
+        <div class="switch-control lightning-layer-control"> <!-- Added unique class -->
+          <div class="label-group">
+            <span class="label-text">UK Lightning Layer</span>
+            <span class="tooltip">Show lightning strikes</span>
+          </div>
+          <div class="toggle-switch">
+            <input type="checkbox" id="lightning-layer-toggle" checked
+              onchange="toggleLightningLayer(); updateSwitchGlow(this, 'lightning-layer-control')">
+            <label for="lightning-layer-toggle" class="switch"></label>
+          </div>
+        </div>
+
+        <div class="switch-control color-mode-control"> <!-- Added unique class -->
+          <div class="label-group">
+            <span class="label-text">Lightning Color by Age</span>
+            <span class="tooltip">Color strikes by age</span>
+          </div>
+          <div class="toggle-switch">
+            <input type="checkbox" id="color-mode" checked
+              onchange="updateStrikeColors(); updateSwitchGlow(this, 'color-mode-control')">
+            <label for="color-mode" class="switch"></label>
+          </div>
+        </div>
+
+        <!-- Lightning Heatmap + Blur Slider -->
+        <div class="layer-control heatmap-control"> <!-- Added heatmap-control class -->
+          <div class="top-row">
+            <div class="label-group">
+              <span class="label-text">Lightning Heatmap</span>
+              <span class="tooltip">Show 2D heatmap of strike density</span>
+            </div>
+            <div class="toggle-switch">
+              <input type="checkbox" id="heatmap-toggle"
+                onchange="toggleHeatmap(); updateControlDimming(this, 'heatmap-control')">
+              <label for="heatmap-toggle" class="switch"></label>
+            </div>
+          </div>
+
+          <div class="opacity-control">
+            <input type="range" id="blur-slider" min="1" max="50" value="30"
+              oninput="updateHeatmap(currentFiltered); this.closest('.opacity-control').querySelector('.slider-value').textContent = this.value">
+          </div>
+        </div>
+
+        <div class="layer-control counter-control">
+          <div class="top-row">
+            <div class="label-group">
+              <span class="label-text">Lightning Counter</span>
+              <span class="tooltip">Show strike counts in grid cells</span>
+            </div>
+            <div class="toggle-switch">
+              <input type="checkbox" id="number-overlay-toggle"
+                onchange="updateOverlay(currentFiltered); updateControlDimming(this, 'counter-control')">
+              <label for="number-overlay-toggle" class="switch"></label>
+            </div>
+          </div>
+
+          <div class="opacity-control">
+            <input type="range" id="density-slider" min="1" max="100" value="50"
+              oninput="updateOverlay(currentFiltered); this.closest('.opacity-control').querySelector('.slider-value').textContent = this.value">
+          </div>
+        </div>
+      </div>
+
+
+      <h4>✨ Lightning Heatmap Opacity & Detail</h4>
+
+      <label class="pretty-slider">
+        Heatmap Blur
+        <input type="range" id="blur-slider" min="1" max="50" value="30" onchange="updateHeatmap(currentFiltered)">
+        <span class="tooltip">Adjust heatmap spread</span>
       </label>
-      <label>Global Nowcast Layer:
-        <select id="nowcastLayerSelect">
-          <option value="sevwx-global-storm-corridors-plot">Storm Nowcasts</option>
-          <option value="sevwx-storm-corridors-plot">Storm Corridors</option>
-          <option value="none">None</option>
-        </select>
-        <span class="tooltip">Select Global Nowcast data layer</span>
+
+      <label class="pretty-slider">
+        Number Resolution
+        <input type="range" id="density-slider" min="1" max="100" value="50" onchange="updateOverlay(currentFiltered)">
+        <span class="tooltip">Adjust overlay grid size</span>
       </label>
-      <label>UK Lightning Layer: <input type="checkbox" id="lightning-layer-toggle" checked
-          onchange="toggleLightningLayer()"><span class="tooltip">Show lightning strikes</span></label>
-      <label>Lightning Color by Age: <input type="checkbox" id="color-mode" checked
-          onchange="updateStrikeColors()"><span class="tooltip">Color strikes by age</span></label>
-
-      <label>Lightning Heatmap: <input type="checkbox" id="heatmap-toggle" onchange="toggleHeatmap()"><span
-          class="tooltip">Show
-          2D heatmap</span></label>
-      <label>Lightning counter: <input type="checkbox" id="number-overlay-toggle"
-          onchange="updateOverlay(currentFiltered)"><span class="tooltip">Show strike counts</span></label>
-
-
-      <div class="section"></div>
-      <h4>✨ Layer Opacity & Detail</h4>
-      <label>Radar Opacity: <input type="range" id="radarOpacity" min="0" max="1" step="0.1" value="0.9"></label>
-      <label>Satellite Opacity: <input type="range" id="satelliteOpacity" min="0" max="1" step="0.1"
-          value="0.5"></label>
-      <label>Isobar Opacity: <input type="range" id="isobarOpacity" min="0" max="1" step="0.1" value="0.8"></label>
-      <label>Wind Direction Opacity: <input type="range" id="windOpacity" min="0" max="1" step="0.1"
-          value="0.8"></label>
-
-      <label>Tropical Storms Opacity: <input type="range" id="tropicalStormsOpacity" min="0" max="1" step="0.1"
-          value="0.8"></label>
-      <label>Rotation Opacity: <input type="range" id="rotationOpacity" min="0" max="1" step="0.1" value="0.8"></label>
-      <label>Surface Front Opacity: <input type="range" id="surfaceFrontOpacity" min="0" max="1" step="0.1"
-          value="0.8"></label>
-      <label>Global Lightning Opacity: <input type="range" id="lightningOpacity" min="0" max="1" step="0.1"
-          value="0.8"></label>
-      <label>Observation layer Opacity: <input type="range" id="observationOpacity" min="0" max="1" step="0.1"
-          value="0.5"></label>
-      <label>Global Warning layer Opacity: <input type="range" id="warningOpacity" min="0" max="1" step="0.1"
-          value="0.8"></label>
-      <label>Global Nowcast layer Opacity: <input type="range" id="nowcastOpacity" min="0" max="1" step="0.1"
-          value="0.8"></label>
-
-      <label>Heatmap Blur: <input type="range" id="blur-slider" min="1" max="50" value="30"
-          onchange="updateHeatmap(currentFiltered)"><span class="tooltip">Adjust heatmap spread</span></label>
-      <label>Number Resolution: <input type="range" id="density-slider" min="1" max="100" value="50"
-          onchange="updateOverlay(currentFiltered)"><span class="tooltip">Adjust overlay grid size</span></label>
     </div>
     <div class="section">
       <h4>➕ Extras & Nowcasting</h4>
-      <label>Sound: <input type="checkbox" id="sound-toggle" onchange="toggleSound()"><span class="tooltip">Play thunder
-          sound</span></label>
-      <label>Nowcast: <input type="checkbox" id="nowcast-toggle" checked onchange="toggleAllNowcast()"><span
-          class="tooltip">Show lightning predictions</span></label>
+      <div class="switch-control sound-control">
+        <div class="label-group">
+          <span class="label-text">Sound Effects</span>
+          <span class="tooltip">Play thunder sound on strikes</span>
+        </div>
+        <div class="toggle-switch">
+          <input type="checkbox" id="sound-toggle" onchange="toggleSound(); updateSwitchGlow(this, 'sound-control')">
+          <label for="sound-toggle" class="switch"></label>
+        </div>
+      </div>
 
-      <label>Nowcast Confidence: <input type="range" id="min-nowcast-confidence" min="0" max="1" step="0.01" value="0.1"
-          onchange="is3DMode ? update3DView() : toggleNowcast()"><span class="tooltip">Minimum confidence for nowcast
-          cones to be displayed</span></label>
+      <div class="switch-control nowcast-control">
+        <div class="label-group">
+          <span class="label-text">Nowcast Predictions</span>
+          <span class="tooltip">Show lightning predictions</span>
+        </div>
+        <div class="toggle-switch">
+          <input type="checkbox" id="nowcast-toggle" checked
+            onchange="toggleAllNowcast(); updateSwitchGlow(this, 'nowcast-control')">
+          <label for="nowcast-toggle" class="switch"></label>
+        </div>
+      </div>
+
+      <label class="pretty-slider">
+        Nowcast Confidence
+        <input type="range" id="min-nowcast-confidence" min="0" max="1" step="0.01" value="0.1"
+          onchange="is3DMode ? update3DView() : toggleNowcast()">
+        <span class="tooltip">Minimum confidence for nowcast cones</span>
+      </label>
     </div>
     <div class="section">
       <h4>⏳ Time Filter</h4>
-      <label>Start Time: <input type="datetime-local" id="start-time"><span class="tooltip">Filter strikes from this
-          time</span></label>
-      <label>End Time: <input type="datetime-local" id="end-time"><span class="tooltip">Filter strikes up to this
-          time</span></label>
-      <button onclick="applyFilter()">Apply Filter</button>
-      <button id="remove-filter" onclick="removeTimeFilter()" style="display: none;">Remove Filter</button>
-      <label>Auto Time Filter: <input type="checkbox" id="auto-time-filter" checked><span class="tooltip">Auto-adjust
-          time based on uploaded files</span></label>
-      <label>Lightning Lifespan: <input type="number" id="lightning-lifespan" value="3" min="0.1" step="0.1"> hours<span
-          class="tooltip">Show strikes within this period</span></label>
-      <label>Slider's Max History: <input type="number" id="max-history-hours" value="6" min="1" step="1"
-          onchange="updateHistorySliderMax()"> hours<span class="tooltip">Max hours back for slider</span></label>
+      <label class="pretty-input">
+        Start Time
+        <input type="datetime-local" id="start-time">
+        <span class="tooltip">Filter strikes from this time</span>
+      </label>
+
+      <label class="pretty-input">
+        End Time
+        <input type="datetime-local" id="end-time">
+        <span class="tooltip">Filter strikes up to this time</span>
+      </label>
+
+      <div class="button-group">
+        <button onclick="applyFilter()">Apply Filter</button>
+        <button id="remove-filter" onclick="removeTimeFilter()" style="display: none;">Remove Filter</button>
+      </div>
+
+      <div class="switch-control auto-time-control">
+        <div class="label-group">
+          <span class="label-text">Auto Time Filter</span>
+          <span class="tooltip">Auto-adjust time based on data</span>
+        </div>
+        <div class="toggle-switch">
+          <input type="checkbox" id="auto-time-filter" checked>
+          <label for="auto-time-filter" class="switch"></label>
+        </div>
+      </div>
+
+      <label class="pretty-input">
+        Lightning Lifespan
+        <input type="number" id="lightning-lifespan" value="3" min="0.1" step="0.1">
+        <span class="unit">hours</span>
+        <span class="tooltip">Show strikes within this period</span>
+      </label>
+
+      <label class="pretty-input">
+        Slider Max History
+        <input type="number" id="max-history-hours" value="6" min="1" step="1" onchange="updateHistorySliderMax()">
+        <span class="unit">hours</span>
+        <span class="tooltip">Max hours back for time slider</span>
+      </label>
     </div>
 
     <div class="section">
@@ -1511,24 +2410,94 @@
 
     <div class="section">
       <h4>🧑‍💻 Expert Mode</h4>
-      <label>Enable: <input type="checkbox" id="expert-mode" onchange="toggleExpertMode()"><span class="tooltip">Show
-          advanced options</span></label>
-      <div id="expert-controls">
-        <button onclick="showRectangleExportModal()">Export Strikes As PNG</button>
-        <label>KML Layer: <input type="checkbox" id="kml-layer-toggle" checked onchange="toggleKMLLayer()"></label>
-        <label>KML File: <input type="file" id="kml-file" accept=".kml" onchange="importKML(this)"></label>
-        <label>PNG Layer: <input type="checkbox" id="png-layer-toggle" checked onchange="togglePNGLayer()"></label>
-        <label>PNG File: <input type="file" id="png-file" accept=".png" onchange="importPNG(this)"></label>
-        <label>PNG Opacity: <input type="range" id="png-opacity-slider" min="0" max="1" step="0.1" value="0.8"
-            onchange="updatePNGOpacity()"></label>
-        <label>KML Z-Index: <input type="number" id="kml-zindex" value="1" min="0" onchange="updateZIndex()"></label>
-        <label>PNG Z-Index: <input type="number" id="png-zindex" value="1400" min="0" onchange="updateZIndex()"></label>
-        <label>Lightning Z-Index: <input type="number" id="lightning-zindex" value="1000" min="0"
-            onchange="updateZIndex()"></label>
-        <label>Heatmap Z-Index: <input type="number" id="heatmap-zindex" value="70" min="0"
-            onchange="updateZIndex()"></label>
-        <label>Numbers Z-Index: <input type="number" id="numbers-zindex" value="1200" min="0"
-            onchange="updateZIndex()"></label>
+      <div class="switch-control expert-mode-control">
+        <div class="label-group">
+          <span class="label-text">Enable Expert Mode</span>
+          <span class="tooltip">Show advanced options</span>
+        </div>
+        <div class="toggle-switch">
+          <input type="checkbox" id="expert-mode"
+            onchange="toggleExpertMode(); updateSwitchGlow(this, 'expert-mode-control')">
+          <label for="expert-mode" class="switch"></label>
+        </div>
+      </div>
+      <div id="expert-controls" style="display: none;">
+        <button class="expert-button" onclick="showRectangleExportModal()">
+          Export Strikes As PNG
+        </button>
+        <div class="switch-control kml-control">
+          <div class="label-group">
+            <span class="label-text">KML Layer</span>
+            <span class="tooltip">Toggle custom KML overlay</span>
+          </div>
+          <div class="toggle-switch">
+            <input type="checkbox" id="kml-layer-toggle" checked
+              onchange="toggleKMLLayer(); updateSwitchGlow(this, 'kml-control')">
+            <label for="kml-layer-toggle" class="switch"></label>
+          </div>
+        </div>
+        <label class="pretty-input">
+          KML File
+          <input type="file" id="kml-file" accept=".kml" onchange="importKML(this)">
+          <span class="tooltip">Upload a KML file</span>
+        </label>
+
+        <!-- PNG Layer -->
+        <div class="switch-control png-control">
+          <div class="label-group">
+            <span class="label-text">PNG Layer</span>
+            <span class="tooltip">Toggle custom PNG overlay</span>
+          </div>
+          <div class="toggle-switch">
+            <input type="checkbox" id="png-layer-toggle" checked
+              onchange="togglePNGLayer(); updateSwitchGlow(this, 'png-control')">
+            <label for="png-layer-toggle" class="switch"></label>
+          </div>
+        </div>
+
+        <label class="pretty-input">
+          PNG File
+          <input type="file" id="png-file" accept=".png" onchange="importPNG(this)">
+          <span class="tooltip">Upload a PNG overlay</span>
+        </label>
+
+        <label class="pretty-slider">
+          PNG Opacity
+          <input type="range" id="png-opacity-slider" min="0" max="1" step="0.05" value="0.8"
+            onchange="updatePNGOpacity()">
+          <span class="slider-value">80%</span>
+          <span class="tooltip">Adjust PNG overlay transparency</span>
+        </label>
+
+        <label class="pretty-input">
+          KML Z-Index
+          <input type="number" id="kml-zindex" value="1" min="0" onchange="updateZIndex()">
+          <span class="tooltip">Layer draw order (higher = on top)</span>
+        </label>
+
+        <label class="pretty-input">
+          PNG Z-Index
+          <input type="number" id="png-zindex" value="1400" min="0" onchange="updateZIndex()">
+          <span class="tooltip">Layer draw order (higher = on top)</span>
+        </label>
+
+        <label class="pretty-input">
+          Lightning Z-Index
+          <input type="number" id="lightning-zindex" value="1000" min="0" onchange="updateZIndex()">
+          <span class="tooltip">Layer draw order (higher = on top)</span>
+        </label>
+
+        <label class="pretty-input">
+          Heatmap Z-Index
+          <input type="number" id="heatmap-zindex" value="70" min="0" onchange="updateZIndex()">
+          <span class="tooltip">Layer draw order (higher = on top)</span>
+        </label>
+
+        <label class="pretty-input">
+          Numbers Z-Index
+          <input type="number" id="numbers-zindex" value="1200" min="0" onchange="updateZIndex()">
+          <span class="tooltip">Layer draw order (higher = on top)</span>
+        </label>
       </div>
     </div>
 
@@ -1844,7 +2813,7 @@
       return div;
     };
     legendControl.addTo(map);
-
+    let forceLayerReplot = false;
     let strikeData = [];
     let strikeLayer = L.layerGroup().addTo(map);
     let heatmapLayer = null;
@@ -1932,6 +2901,13 @@
         url: 'https://tiles.meteoguard.dtn.com/tiles/radar-precip-type-europe-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
         interval: 15 * 60 * 1000,
         type: 'vector-tile',
+        bounds: null,
+        attribution: 'DTN Meteoguard'
+      },
+      'radar-precip-intensity-global-raster': {
+        url: 'https://tiles.meteoguard.dtn.com/tiles/radar-precip-intensity-global-raster/${iso}/${iso}/{z}/{x}/{y}.pbf',
+        interval: 30 * 60 * 1000,
+        type: 'tile-layer',
         bounds: null,
         attribution: 'DTN Meteoguard'
       },
@@ -2900,7 +3876,18 @@
       };
     }
 
-
+    function updateSwitchGlow(checkbox, controlClass) {
+      const control = checkbox.closest('.switch-control');
+      if (control) {
+        if (checkbox.checked) {
+          control.classList.add('glow-on');
+          control.classList.remove('glow-off');
+        } else {
+          control.classList.add('glow-off');
+          control.classList.remove('glow-on');
+        }
+      }
+    }
     function updateLegend() {
       const radarOpacity = parseFloat(document.getElementById('radarOpacity')?.value || 0.8);
       const satelliteOpacity = parseFloat(document.getElementById('satelliteOpacity')?.value || 0.8);
@@ -2926,7 +3913,58 @@
       if (document.getElementById('opacity-value-nowcast')) document.getElementById('opacity-value-nowcast').textContent = `Nowcast Opacity: ${nowcastOpacity.toFixed(1)}`;
       if (document.getElementById('opacity-value-warning')) document.getElementById('opacity-value-warning').textContent = `Warning Opacity: ${warningOpacity.toFixed(1)}`;
     }
+    // ==========================================
+    // LAYER TOGGLE HANDLER (WITH VISUAL FEEDBACK)
+    // ==========================================
+    const layerMap = {
+      radar: { select: 'radarLayer', handler: 'radarLayerTypeHandler' },
+      satellite: { select: 'satelliteLayerSelect', handler: 'satelliteLayerTypeHandler' },
+      isobar: { select: 'isobarLayerSelect', handler: 'isobarLayerTypeHandler' },
+      wind: { select: 'windLayerSelect', handler: 'windLayerTypeHandler' },
+      tropicalStorms: { select: 'tropicalStormsLayerSelect', handler: 'tropicalStormsLayerTypeHandler' },
+      rotation: { select: 'rotationLayerSelect', handler: 'rotationLayerTypeHandler' },
+      surfaceFront: { select: 'surfaceFrontLayerSelect', handler: 'surfaceFrontLayerTypeHandler' },
+      lightning: { select: 'lightningLayerSelect', handler: 'lightningLayerTypeHandler' },
+      observation: { select: 'observationLayerSelect', handler: 'observationLayerTypeHandler' },
+      warning: { select: 'warningLayerSelect', handler: 'warningLayerTypeHandler' },
+      nowcast: { select: 'nowcastLayerSelect', handler: 'nowcastLayerTypeHandler' }
+    };
+    function updateControlDimming(checkbox, controlClass) {
+      const control = checkbox.closest('.layer-control');
+      if (control) {
+        if (checkbox.checked) {
+          control.classList.remove('off');
+        } else {
+          control.classList.add('off');
+        }
+      }
+    }
+    function toggleLayer(layerKey, enabled) {
+      const layer = layerMap[layerKey];
+      if (!layer) return;
 
+      const select = document.getElementById(layer.select);
+      const container = select?.closest('.layer-control');
+
+      if (select) {
+        select.disabled = !enabled;
+      }
+
+      if (container) {
+        if (enabled) {
+          container.classList.remove('off');
+        } else {
+          container.classList.add('off');
+        }
+      }
+
+      const handler = window[layer.handler];
+      if (typeof handler === 'function') {
+        handler();
+      }
+
+      updateLegend();
+    }
     // ==========================================
     // 3. IMAGE/TILE FETCHING LOGIC (MODIFIED)
     // ==========================================
@@ -3412,82 +4450,80 @@
 
       const PROCESSING_DELAY_MS = 5 * 60 * 1000;
       let targetTimestamp = timestamp;
-
       const timeSlider = document.getElementById('history-slider');
       if (timeSlider && timeSlider.value === timeSlider.max) {
         targetTimestamp = Date.now() - PROCESSING_DELAY_MS;
       }
 
-      const radarType = document.getElementById('radarLayer')?.value || 'none';
-      const satelliteType = document.getElementById('satelliteLayerSelect')?.value || 'none';
-      const isobarType = document.getElementById('isobarLayerSelect')?.value || 'none';
-      const windType = document.getElementById('windLayerSelect')?.value || 'none';
-      const lightningType = document.getElementById('lightningLayerSelect')?.value || 'none';
-      const tropicalStormsType = document.getElementById('tropicalStormsLayerSelect')?.value || 'none';
-      const rotationType = document.getElementById('rotationLayerSelect')?.value || 'none';
-      const surfaceFrontType = document.getElementById('surfaceFrontLayerSelect')?.value || 'none';
-      const observationType = document.getElementById('observationLayerSelect')?.value || 'none';
-      const nowcastType = document.getElementById('nowcastLayerSelect')?.value || 'none';
-      const warningType = document.getElementById('warningLayerSelect')?.value || 'none';
-
-      // Helper to disable a layer
-      const disableLayer = (type, layerRef, clearFunc) => {
-        if (type === 'none') {
-          if (layerRef) { map.removeLayer(layerRef); }
-          // Assuming clearFunc handles clearing the global layer reference variable 
-          // (e.g., radarLayer = null) which is needed but not shown here.
-          // For completeness, we'll manually set to null if clearFunc is not defined.
-          if (typeof clearFunc === 'function') {
-            clearFunc();
-          } else {
-            // Manual cleanup needed if no clearFunc is available/provided in the context
-            switch (layerRef) {
-              case satelliteLayer: satelliteLayer = null; break;
-              case radarLayer: radarLayer = null; break;
-              case isobarLayer: isobarLayer = null; break;
-              case windLayer: windLayer = null; break;
-              case lightningLayer: lightningLayer = null; break;
-              case tropicalStormsLayer: tropicalStormsLayer = null; break;
-              case rotationLayer: rotationLayer = null; break;
-              case surfaceFrontLayer: surfaceFrontLayer = null; break;
-              case observationLayer: observationLayer = null; break;
-              case NowcastLayer: NowcastLayer = null; break;
-              case warningLayer: warningLayer = null; break;
-            }
-          }
-        }
+      const getLayerType = (id) => {
+        const el = document.getElementById(id);
+        return el && !el.disabled ? el.value : null;
       };
 
-      // Assuming clear*Layers functions exist in the wider scope
-      disableLayer(satelliteType, satelliteLayer, clearSatelliteLayers);
-      disableLayer(radarType, radarLayer, clearRadarLayers);
-      disableLayer(isobarType, isobarLayer, clearIsobarLayers);
-      disableLayer(windType, windLayer, clearWindLayers);
-      disableLayer(lightningType, lightningLayer, clearLightningLayers);
-      disableLayer(tropicalStormsType, tropicalStormsLayer, clearTropicalStormsLayers);
-      disableLayer(rotationType, rotationLayer, clearRotationLayers);
-      disableLayer(surfaceFrontType, surfaceFrontLayer, clearSurfaceFrontLayers);
-      disableLayer(observationType, observationLayer, clearObservationLayers);
-      disableLayer(nowcastType, NowcastLayer, clearNowcastLayers);
-      disableLayer(warningType, warningLayer, clearWarningLayers);
+      const radarType = getLayerType('radarLayer');
+      const satelliteType = getLayerType('satelliteLayerSelect');
+      const isobarType = getLayerType('isobarLayerSelect');
+      const windType = getLayerType('windLayerSelect');
+      const lightningType = getLayerType('lightningLayerSelect');
+      const tropicalStormsType = getLayerType('tropicalStormsLayerSelect');
+      const rotationType = getLayerType('rotationLayerSelect');
+      const surfaceFrontType = getLayerType('surfaceFrontLayerSelect');
+      const observationType = getLayerType('observationLayerSelect');
+      const nowcastType = getLayerType('nowcastLayerSelect');
+      const warningType = getLayerType('warningLayerSelect');
 
-      // Enable active layers
-      if (satelliteType !== 'none') await plotLayerIfNecessary(satelliteType, satelliteOptions, targetTimestamp, 'satellite');
-      if (radarType !== 'none') await plotLayerIfNecessary(radarType, radarOptions, targetTimestamp, 'radar');
-      if (isobarType !== 'none') await plotLayerIfNecessary(isobarType, isobarOptions, targetTimestamp, 'isobar');
-      if (windType !== 'none') await plotLayerIfNecessary(windType, windOptions, targetTimestamp, 'wind');
-      if (lightningType !== 'none') await plotLayerIfNecessary(lightningType, lightningOptions, targetTimestamp, 'lightning');
-      if (tropicalStormsType !== 'none') await plotLayerIfNecessary(tropicalStormsType, tropicalStormsOptions, targetTimestamp, 'tropicalStorms');
-      if (rotationType !== 'none') await plotLayerIfNecessary(rotationType, rotationOptions, targetTimestamp, 'rotation');
-      if (surfaceFrontType !== 'none') await plotLayerIfNecessary(surfaceFrontType, surfaceFrontOptions, targetTimestamp, 'surfaceFront');
-      if (observationType !== 'none') await plotLayerIfNecessary(observationType, observationOptions, targetTimestamp, 'observation');
-      if (nowcastType !== 'none') await plotLayerIfNecessary(nowcastType, nowcastOptions, targetTimestamp, 'nowcast');
-      if (warningType !== 'none') await plotLayerIfNecessary(warningType, warningOptions, targetTimestamp, 'warning');
+      if (radarType) await plotLayerIfNecessary(radarType, radarOptions, targetTimestamp, 'radar');
+      if (satelliteType) await plotLayerIfNecessary(satelliteType, satelliteOptions, targetTimestamp, 'satellite');
+      if (isobarType) await plotLayerIfNecessary(isobarType, isobarOptions, targetTimestamp, 'isobar');
+      if (windType) await plotLayerIfNecessary(windType, windOptions, targetTimestamp, 'wind');
+      if (lightningType) await plotLayerIfNecessary(lightningType, lightningOptions, targetTimestamp, 'lightning');
+      if (tropicalStormsType) await plotLayerIfNecessary(tropicalStormsType, tropicalStormsOptions, targetTimestamp, 'tropicalStorms');
+      if (rotationType) await plotLayerIfNecessary(rotationType, rotationOptions, targetTimestamp, 'rotation');
+      if (surfaceFrontType) await plotLayerIfNecessary(surfaceFrontType, surfaceFrontOptions, targetTimestamp, 'surfaceFront');
+      if (observationType) await plotLayerIfNecessary(observationType, observationOptions, targetTimestamp, 'observation');
+      if (nowcastType) await plotLayerIfNecessary(nowcastType, nowcastOptions, targetTimestamp, 'nowcast');
+      if (warningType) await plotLayerIfNecessary(warningType, warningOptions, targetTimestamp, 'warning');
 
       isPlotting = false;
       updateLegend();
     }
 
+    // ==========================================
+    // DEBOUNCED TRIGGER (CLEARS ALL IF NOTHING ENABLED)
+    // ==========================================
+    // ==========================================
+    // DEBOUNCED TRIGGER (CLEARS ALL IF NOTHING ENABLED)
+    // ==========================================
+    const triggerMapUpdate = debounce((timestamp) => {
+      currentFilterTimestamp = timestamp;
+
+      const anyEnabled = [
+        'radarLayer', 'satelliteLayerSelect', 'isobarLayerSelect', 'windLayerSelect',
+        'lightningLayerSelect', 'tropicalStormsLayerSelect', 'rotationLayerSelect',
+        'surfaceFrontLayerSelect', 'observationLayerSelect', 'nowcastLayerSelect', 'warningLayerSelect'
+      ].some(id => {
+        const el = document.getElementById(id);
+        return el && !el.disabled && el.value;
+      });
+
+      if (!anyEnabled) {
+        clearRadarLayers();
+        clearSatelliteLayers();
+        clearIsobarLayers();
+        clearWindLayers();
+        clearLightningLayers();
+        clearTropicalStormsLayers();
+        clearRotationLayers();
+        clearSurfaceFrontLayers();
+        clearObservationLayers();
+        clearNowcastLayers();
+        clearWarningLayers();
+        updateLegend();
+        return;
+      }
+
+      updateMapLayers(timestamp);
+    }, 100);
 
     /**
      * Generic logic to check state, fetch URLs, and call the plotting function.
@@ -3653,56 +4689,39 @@
 
       const PROCESSING_DELAY_MS = 5 * 60 * 1000;
       let targetTimestamp = timestamp;
-
       const timeSlider = document.getElementById('history-slider');
       if (timeSlider && timeSlider.value === timeSlider.max) {
         targetTimestamp = Date.now() - PROCESSING_DELAY_MS;
       }
 
-      const radarType = document.getElementById('radarLayer')?.value || 'none';
-      const satelliteType = document.getElementById('satelliteLayerSelect')?.value || 'none';
-      const isobarType = document.getElementById('isobarLayerSelect')?.value || 'none';
-      const windType = document.getElementById('windLayerSelect')?.value || 'none';
-      const lightningType = document.getElementById('lightningLayerSelect')?.value || 'none';
-      const tropicalStormsType = document.getElementById('tropicalStormsLayerSelect')?.value || 'none';
-      const rotationType = document.getElementById('rotationLayerSelect')?.value || 'none';
-      const surfaceFrontType = document.getElementById('surfaceFrontLayerSelect')?.value || 'none';
-      const observationType = document.getElementById('observationLayerSelect')?.value || 'none';
-      const nowcastType = document.getElementById('nowcastLayerSelect')?.value || 'none';
-      const warningType = document.getElementById('warningLayerSelect')?.value || 'none';
-
-      // Helper to disable a layer
-      const disableLayer = (type, layerRef, clearFunc) => {
-        if (type === 'none') {
-          if (layerRef) { map.removeLayer(layerRef); }
-          clearFunc();
-        }
+      const getLayerType = (id) => {
+        const el = document.getElementById(id);
+        return el && !el.disabled ? el.value : null;
       };
 
-      disableLayer(satelliteType, satelliteLayer, clearSatelliteLayers);
-      disableLayer(radarType, radarLayer, clearRadarLayers);
-      disableLayer(isobarType, isobarLayer, clearIsobarLayers);
-      disableLayer(windType, windLayer, clearWindLayers);
-      disableLayer(lightningType, lightningLayer, clearLightningLayers);
-      disableLayer(tropicalStormsType, tropicalStormsLayer, clearTropicalStormsLayers);
-      disableLayer(rotationType, rotationLayer, clearRotationLayers);
-      disableLayer(surfaceFrontType, surfaceFrontLayer, clearSurfaceFrontLayers);
-      disableLayer(observationType, observationLayer, clearObservationLayers);
-      disableLayer(nowcastType, NowcastLayer, clearNowcastLayers);
-      disableLayer(warningType, warningLayer, clearWarningLayers);
+      const radarType = getLayerType('radarLayer');
+      const satelliteType = getLayerType('satelliteLayerSelect');
+      const isobarType = getLayerType('isobarLayerSelect');
+      const windType = getLayerType('windLayerSelect');
+      const lightningType = getLayerType('lightningLayerSelect');
+      const tropicalStormsType = getLayerType('tropicalStormsLayerSelect');
+      const rotationType = getLayerType('rotationLayerSelect');
+      const surfaceFrontType = getLayerType('surfaceFrontLayerSelect');
+      const observationType = getLayerType('observationLayerSelect');
+      const nowcastType = getLayerType('nowcastLayerSelect');
+      const warningType = getLayerType('warningLayerSelect');
 
-      // Enable active layers
-      if (satelliteType !== 'none') await plotLayerIfNecessary(satelliteType, satelliteOptions, targetTimestamp, 'satellite');
-      if (radarType !== 'none') await plotLayerIfNecessary(radarType, radarOptions, targetTimestamp, 'radar');
-      if (isobarType !== 'none') await plotLayerIfNecessary(isobarType, isobarOptions, targetTimestamp, 'isobar');
-      if (windType !== 'none') await plotLayerIfNecessary(windType, windOptions, targetTimestamp, 'wind');
-      if (lightningType !== 'none') await plotLayerIfNecessary(lightningType, lightningOptions, targetTimestamp, 'lightning');
-      if (tropicalStormsType !== 'none') await plotLayerIfNecessary(tropicalStormsType, tropicalStormsOptions, targetTimestamp, 'tropicalStorms');
-      if (rotationType !== 'none') await plotLayerIfNecessary(rotationType, rotationOptions, targetTimestamp, 'rotation');
-      if (surfaceFrontType !== 'none') await plotLayerIfNecessary(surfaceFrontType, surfaceFrontOptions, targetTimestamp, 'surfaceFront');
-      if (observationType !== 'none') await plotLayerIfNecessary(observationType, observationOptions, targetTimestamp, 'observation');
-      if (nowcastType !== 'none') await plotLayerIfNecessary(nowcastType, nowcastOptions, targetTimestamp, 'nowcast');
-      if (warningType !== 'none') await plotLayerIfNecessary(warningType, warningOptions, targetTimestamp, 'warning');
+      if (radarType) await plotLayerIfNecessary(radarType, radarOptions, targetTimestamp, 'radar');
+      if (satelliteType) await plotLayerIfNecessary(satelliteType, satelliteOptions, targetTimestamp, 'satellite');
+      if (isobarType) await plotLayerIfNecessary(isobarType, isobarOptions, targetTimestamp, 'isobar');
+      if (windType) await plotLayerIfNecessary(windType, windOptions, targetTimestamp, 'wind');
+      if (lightningType) await plotLayerIfNecessary(lightningType, lightningOptions, targetTimestamp, 'lightning');
+      if (tropicalStormsType) await plotLayerIfNecessary(tropicalStormsType, tropicalStormsOptions, targetTimestamp, 'tropicalStorms');
+      if (rotationType) await plotLayerIfNecessary(rotationType, rotationOptions, targetTimestamp, 'rotation');
+      if (surfaceFrontType) await plotLayerIfNecessary(surfaceFrontType, surfaceFrontOptions, targetTimestamp, 'surfaceFront');
+      if (observationType) await plotLayerIfNecessary(observationType, observationOptions, targetTimestamp, 'observation');
+      if (nowcastType) await plotLayerIfNecessary(nowcastType, nowcastOptions, targetTimestamp, 'nowcast');
+      if (warningType) await plotLayerIfNecessary(warningType, warningOptions, targetTimestamp, 'warning');
 
       isPlotting = false;
       updateLegend();
@@ -3751,7 +4770,8 @@
       }
 
       // Prevent unnecessary re-plotting (redundant, if timestamp/type haven't changed)
-      if (lastTimestamp === roundedTimestampMs && lastType === layerType) {
+      // Only skip if timestamp hasn't changed (type change from dropdown always forces plot)
+      if (lastTimestamp === roundedTimestampMs) {
         return;
       }
 
@@ -3851,72 +4871,20 @@
     // ==========================================
     // 5. UTILITY AND EVENT HANDLERS
     // ==========================================
-
-    function clearRadarLayers() {
-      if (radarLayer) {
-        map.removeLayer(radarLayer);
-        radarLayer = null;
-      }
-      lastRadarTimestamp = null;
-      lastRadarType = null;
-    }
-
-    function clearSatelliteLayers() {
-      if (satelliteLayer) {
-        map.removeLayer(satelliteLayer);
-        satelliteLayer = null;
-      }
-      lastSatelliteTimestamp = null;
-      lastSatelliteType = null;
-    }
-
-    function clearIsobarLayers() { // NEW
-      if (isobarLayer) {
-        map.removeLayer(isobarLayer);
-        isobarLayer = null;
-      }
-      lastIsobarTimestamp = null;
-      lastIsobarType = null;
-    }
-
-    function clearWindLayers() { // NEW
-      if (windLayer) {
-        map.removeLayer(windLayer);
-        windLayer = null;
-      }
-      lastWindTimestamp = null;
-      lastWindType = null;
-    }
-    function clearLightningLayers() {
-      if (lightningLayer) { map.removeLayer(lightningLayer); lightningLayer = null; }
-      lastLightningTimestamp = null; lastLightningType = null;
-    }
-    function clearTropicalStormsLayers() {
-      if (tropicalStormsLayer) { map.removeLayer(tropicalStormsLayer); tropicalStormsLayer = null; }
-      lastTropicalStormsTimestamp = null; lastTropicalStormsType = null;
-    }
-    function clearRotationLayers() {
-      if (rotationLayer) { map.removeLayer(rotationLayer); rotationLayer = null; }
-      lastRotationTimestamp = null; lastRotationType = null;
-    }
-    function clearSurfaceFrontLayers() {
-      if (surfaceFrontLayer) { map.removeLayer(surfaceFrontLayer); surfaceFrontLayer = null; }
-      lastSurfaceFrontTimestamp = null; lastSurfaceFrontType = null;
-    }
-    function clearObservationLayers() {
-      if (observationLayer) { map.removeLayer(observationLayer); observationLayer = null; }
-      lastObservationTimestamp = null; lastObservationType = null;
-    }
-    function clearNowcastLayers() {
-      if (NowcastLayer) { map.removeLayer(NowcastLayer); NowcastLayer = null; }
-      lastNowcastTimestamp = null; lastNowcastType = null;
-    }
-    function clearWarningLayers() {
-      if (warningLayer) { map.removeLayer(warningLayer); warningLayer = null; }
-      lastWarningTimestamp = null; lastWarningType = null;
-    }
-    // *** Assuming the definition of the helper function createVectorLayerStyles is globally available ***
-
+    // ==========================================
+    // CLEAR FUNCTIONS
+    // ==========================================
+    function clearRadarLayers() { if (radarLayer && map.hasLayer(radarLayer)) map.removeLayer(radarLayer); radarLayer = null; lastRadarTimestamp = null; lastRadarType = null; }
+    function clearSatelliteLayers() { if (satelliteLayer && map.hasLayer(satelliteLayer)) map.removeLayer(satelliteLayer); satelliteLayer = null; lastSatelliteTimestamp = null; lastSatelliteType = null; }
+    function clearIsobarLayers() { if (isobarLayer && map.hasLayer(isobarLayer)) map.removeLayer(isobarLayer); isobarLayer = null; lastIsobarTimestamp = null; lastIsobarType = null; }
+    function clearWindLayers() { if (windLayer && map.hasLayer(windLayer)) map.removeLayer(windLayer); windLayer = null; lastWindTimestamp = null; lastWindType = null; }
+    function clearLightningLayers() { if (lightningLayer && map.hasLayer(lightningLayer)) map.removeLayer(lightningLayer); lightningLayer = null; lastLightningTimestamp = null; lastLightningType = null; }
+    function clearTropicalStormsLayers() { if (tropicalStormsLayer && map.hasLayer(tropicalStormsLayer)) map.removeLayer(tropicalStormsLayer); tropicalStormsLayer = null; lastTropicalStormsTimestamp = null; lastTropicalStormsType = null; }
+    function clearRotationLayers() { if (rotationLayer && map.hasLayer(rotationLayer)) map.removeLayer(rotationLayer); rotationLayer = null; lastRotationTimestamp = null; lastRotationType = null; }
+    function clearSurfaceFrontLayers() { if (surfaceFrontLayer && map.hasLayer(surfaceFrontLayer)) map.removeLayer(surfaceFrontLayer); surfaceFrontLayer = null; lastSurfaceFrontTimestamp = null; lastSurfaceFrontType = null; }
+    function clearObservationLayers() { if (observationLayer && map.hasLayer(observationLayer)) map.removeLayer(observationLayer); observationLayer = null; lastObservationTimestamp = null; lastObservationType = null; }
+    function clearNowcastLayers() { if (NowcastLayer && map.hasLayer(NowcastLayer)) map.removeLayer(NowcastLayer); NowcastLayer = null; lastNowcastTimestamp = null; lastNowcastType = null; }
+    function clearWarningLayers() { if (warningLayer && map.hasLayer(warningLayer)) map.removeLayer(warningLayer); warningLayer = null; lastWarningTimestamp = null; lastWarningType = null; }
     function updateLayerOpacities() {
       // Fetch all opacity values
       const opacities = {
@@ -4010,71 +4978,6 @@
       };
     }
     // Debounced function that actually calls the heavy updateMapLayers
-    const triggerMapUpdate = debounce((timestamp) => {
-      // CRITICAL for Historical Checks
-      currentFilterTimestamp = timestamp;
-
-      // Get all layer select elements
-      const radarTypeElement = document.getElementById('radarLayer');
-      const satelliteTypeElement = document.getElementById('satelliteLayerSelect');
-      const isobarTypeElement = document.getElementById('isobarLayerSelect');
-      const windTypeElement = document.getElementById('windLayerSelect');
-      const lightningTypeElement = document.getElementById('lightningLayerSelect');
-      const tropicalStormsTypeElement = document.getElementById('tropicalStormsLayerSelect');
-      const rotationTypeElement = document.getElementById('rotationLayerSelect');
-      const surfaceFrontTypeElement = document.getElementById('surfaceFrontLayerSelect');
-      const observationTypeElement = document.getElementById('observationLayerSelect');
-      const nowcastTypeElement = document.getElementById('nowcastLayerSelect');
-      const warningTypeElement = document.getElementById('warningLayerSelect');
-
-      // Determine if each layer is enabled
-      const isRadarEnabled = radarTypeElement?.value !== 'none';
-      const isSatelliteEnabled = satelliteTypeElement?.value !== 'none';
-      const isIsobarEnabled = isobarTypeElement?.value !== 'none';
-      const isWindEnabled = windTypeElement?.value !== 'none';
-      const isLightningEnabled = lightningTypeElement?.value !== 'none';
-      const isTropicalStormsEnabled = tropicalStormsTypeElement?.value !== 'none';
-      const isRotationEnabled = rotationTypeElement?.value !== 'none';
-      const isSurfaceFrontEnabled = surfaceFrontTypeElement?.value !== 'none';
-      const isObservationEnabled = observationTypeElement?.value !== 'none';
-      const isNowcastEnabled = nowcastTypeElement?.value !== 'none';
-      const isWarningEnabled = warningTypeElement?.value !== 'none';
-
-      // CASE 1: No layers enabled → clear everything
-      const anyLayerEnabled =
-        isRadarEnabled ||
-        isSatelliteEnabled ||
-        isIsobarEnabled ||
-        isWindEnabled ||
-        isLightningEnabled ||
-        isTropicalStormsEnabled ||
-        isRotationEnabled ||
-        isSurfaceFrontEnabled ||
-        isObservationEnabled ||
-        isNowcastEnabled ||
-        isWarningEnabled;
-
-      if (!anyLayerEnabled) {
-        clearRadarLayers();
-        clearSatelliteLayers();
-        clearIsobarLayers();
-        clearWindLayers();
-        clearLightningLayers();
-        clearTropicalStormsLayers();
-        clearRotationLayers();
-        clearSurfaceFrontLayers();
-        clearObservationLayers();
-        clearNowcastLayers();
-        clearWarningLayers();
-        updateLegend();
-        return;
-      }
-
-      // CASE 2: At least one layer enabled → perform full map update
-      updateMapLayers(timestamp);
-
-      updateLegend();
-    }, 100);
 
     function getCurrentSliderTimestamp() {
       const historySlider = document.getElementById('history-slider');
@@ -4111,87 +5014,199 @@
     }
 
     function radarLayerTypeHandler() {
-      lastRadarTimestamp = null;
-      lastRadarType = null;
+      const select = document.getElementById('radarLayer');
+      if (select?.disabled) {
+        clearRadarLayers();
+        return;
+      }
+
+      const newType = select.value;
       clearRadarLayers();
       const timestamp = getCurrentSliderTimestamp();
-      triggerMapUpdate(timestamp, true);
+      plotLayerIfNecessary(newType, radarOptions, timestamp, 'radar');
     }
 
     function satelliteLayerTypeHandler() {
-      lastSatelliteTimestamp = null;
-      lastSatelliteType = null;
+      const select = document.getElementById('satelliteLayerSelect');
+      if (select?.disabled) {
+        clearSatelliteLayers();
+        return;
+      }
+
+      const newType = select.value;
       clearSatelliteLayers();
       const timestamp = getCurrentSliderTimestamp();
-      triggerMapUpdate(timestamp, true);
+      plotLayerIfNecessary(newType, satelliteOptions, timestamp, 'satellite');
     }
 
-    function isobarLayerTypeHandler() { // NEW
-      lastIsobarTimestamp = null;
-      lastIsobarType = null;
+    function isobarLayerTypeHandler() {
+      const select = document.getElementById('isobarLayerSelect');
+      if (select?.disabled) {
+        clearIsobarLayers();
+        return;
+      }
+
+      const newType = select.value;
       clearIsobarLayers();
       const timestamp = getCurrentSliderTimestamp();
-      triggerMapUpdate(timestamp, true);
+      plotLayerIfNecessary(newType, isobarOptions, timestamp, 'isobar');
     }
 
-    function windLayerTypeHandler() { // NEW
-      lastWindTimestamp = null;
-      lastWindType = null;
+    function windLayerTypeHandler() {
+      const select = document.getElementById('windLayerSelect');
+      if (select?.disabled) {
+        clearWindLayers();
+        return;
+      }
+
+      const newType = select.value;
       clearWindLayers();
       const timestamp = getCurrentSliderTimestamp();
-      triggerMapUpdate(timestamp, true);
+      plotLayerIfNecessary(newType, windOptions, timestamp, 'wind');
     }
 
-    // ==========================================
-    // LAYER TYPE CHANGE HANDLERS
-    // ==========================================
+    function tropicalStormsLayerTypeHandler() {
+      const select = document.getElementById('tropicalStormsLayerSelect');
+      if (select?.disabled) {
+        clearTropicalStormsLayers();
+        return;
+      }
+
+      const newType = select.value;
+      clearTropicalStormsLayers();
+      const timestamp = getCurrentSliderTimestamp();
+      plotLayerIfNecessary(newType, tropicalStormsOptions, timestamp, 'tropicalStorms');
+    }
+
+    function rotationLayerTypeHandler() {
+      const select = document.getElementById('rotationLayerSelect');
+      if (select?.disabled) {
+        clearRotationLayers();
+        return;
+      }
+
+      const newType = select.value;
+      clearRotationLayers();
+      const timestamp = getCurrentSliderTimestamp();
+      plotLayerIfNecessary(newType, rotationOptions, timestamp, 'rotation');
+    }
+
+    function surfaceFrontLayerTypeHandler() {
+      const select = document.getElementById('surfaceFrontLayerSelect');
+      if (select?.disabled) {
+        clearSurfaceFrontLayers();
+        return;
+      }
+
+      const newType = select.value;
+      clearSurfaceFrontLayers();
+      const timestamp = getCurrentSliderTimestamp();
+      plotLayerIfNecessary(newType, surfaceFrontOptions, timestamp, 'surfaceFront');
+    }
 
     function lightningLayerTypeHandler() {
-      lastLightningTimestamp = null; lastLightningType = null;
+      const select = document.getElementById('lightningLayerSelect');
+      if (select?.disabled) {
+        clearLightningLayers();
+        return;
+      }
+
+      const newType = select.value;
       clearLightningLayers();
-      triggerMapUpdate(getCurrentSliderTimestamp(), true);
+      const timestamp = getCurrentSliderTimestamp();
+      plotLayerIfNecessary(newType, lightningOptions, timestamp, 'lightning');
     }
-    function tropicalStormsLayerTypeHandler() {
-      lastTropicalStormsTimestamp = null; lastTropicalStormsType = null;
-      clearTropicalStormsLayers();
-      triggerMapUpdate(getCurrentSliderTimestamp(), true);
-    }
-    function rotationLayerTypeHandler() {
-      lastRotationTimestamp = null; lastRotationType = null;
-      clearRotationLayers();
-      triggerMapUpdate(getCurrentSliderTimestamp(), true);
-    }
-    function surfaceFrontLayerTypeHandler() {
-      lastSurfaceFrontTimestamp = null; lastSurfaceFrontType = null;
-      clearSurfaceFrontLayers();
-      triggerMapUpdate(getCurrentSliderTimestamp(), true);
-    }
+
     function observationLayerTypeHandler() {
-      lastObservationTimestamp = null; lastObservationType = null;
+      const select = document.getElementById('observationLayerSelect');
+      if (select?.disabled) {
+        clearObservationLayers();
+        return;
+      }
+
+      const newType = select.value;
       clearObservationLayers();
-      triggerMapUpdate(getCurrentSliderTimestamp(), true);
+      const timestamp = getCurrentSliderTimestamp();
+      plotLayerIfNecessary(newType, observationOptions, timestamp, 'observation');
     }
-    function nowcastLayerTypeHandler() {
-      lastNowcastTimestamp = null; lastNowcastType = null;
-      clearNowcastLayers();
-      triggerMapUpdate(getCurrentSliderTimestamp(), true);
-    }
+
     function warningLayerTypeHandler() {
-      lastWarningTimestamp = null; lastWarningType = null;
+      const select = document.getElementById('warningLayerSelect');
+      if (select?.disabled) {
+        clearWarningLayers();
+        return;
+      }
+
+      const newType = select.value;
       clearWarningLayers();
-      triggerMapUpdate(getCurrentSliderTimestamp(), true);
+      const timestamp = getCurrentSliderTimestamp();
+      plotLayerIfNecessary(newType, warningOptions, timestamp, 'warning');
+    }
+
+    function nowcastLayerTypeHandler() {
+      const select = document.getElementById('nowcastLayerSelect');
+      if (select?.disabled) {
+        clearNowcastLayers();
+        return;
+      }
+
+      const newType = select.value;
+      clearNowcastLayers();
+      const timestamp = getCurrentSliderTimestamp();
+      plotLayerIfNecessary(newType, nowcastOptions, timestamp, 'nowcast');
     }
     // --- INITIALIZATION AND EVENT ATTACHMENT ---
     document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('.layer-control').forEach(control => {
+        const checkbox = control.querySelector('.toggle-switch input[type="checkbox"]');
+        if (checkbox && !checkbox.checked) {
+          control.classList.add('off');
+        }
+      });
+      // Initialize glow for all switch controls
+      document.querySelectorAll('.switch-control').forEach(control => {
+        const checkbox = control.querySelector('input[type="checkbox"]');
+        if (checkbox) {
+          const classes = [...control.classList];
+          const uniqueClass = classes.find(cls => cls !== 'switch-control' && cls !== 'glow-on' && cls !== 'glow-off');
+          if (uniqueClass) {
+            updateSwitchGlow(checkbox, uniqueClass);
+          }
+        }
+      });
+      // Initialize dimming for Heatmap and Counter controls based on current checkbox state
+      document.querySelectorAll('.heatmap-control, .counter-control').forEach(control => {
+        const checkbox = control.querySelector('input[type="checkbox"]');
+        if (checkbox && !checkbox.checked) {
+          control.classList.add('off');
+        }
+      });
+      document.querySelectorAll('.lightning-layer-control, .color-mode-control').forEach(control => {
+        const checkbox = control.querySelector('input[type="checkbox"]');
+        if (checkbox) {
+          updateSwitchGlow(checkbox, control.classList[1]); // Use the second class as identifier
+        }
+      });
       const timeSlider = document.getElementById('history-slider');
+
+      // Opacity sliders
       const radarOpacitySlider = document.getElementById('radarOpacity');
       const satelliteOpacitySlider = document.getElementById('satelliteOpacity');
-      const isobarOpacitySlider = document.getElementById('isobarOpacity'); // NEW
-      const windOpacitySlider = document.getElementById('windOpacity'); // NEW
-      const radarLayerType = document.getElementById('radarLayer');
-      const satelliteLayerSelect = document.getElementById('satelliteLayerSelect');
-      const isobarLayerSelect = document.getElementById('isobarLayerSelect'); // NEW
-      const windLayerSelect = document.getElementById('windLayerSelect'); // NEW
+      const isobarOpacitySlider = document.getElementById('isobarOpacity');
+      const windOpacitySlider = document.getElementById('windOpacity');
+      const lightningOpacitySlider = document.getElementById('lightningOpacity');
+      const tropicalStormsOpacitySlider = document.getElementById('tropicalStormsOpacity');
+      const rotationOpacitySlider = document.getElementById('rotationOpacity');
+      const surfaceFrontOpacitySlider = document.getElementById('surfaceFrontOpacity');
+      const observationOpacitySlider = document.getElementById('observationOpacity');
+      const nowcastOpacitySlider = document.getElementById('nowcastOpacity');
+      const warningOpacitySlider = document.getElementById('warningOpacity');
+
+      // Layer select elements
+      const radarSelect = document.getElementById('radarLayer');
+      const satelliteSelect = document.getElementById('satelliteLayerSelect');
+      const isobarSelect = document.getElementById('isobarLayerSelect');
+      const windSelect = document.getElementById('windLayerSelect');
       const lightningSelect = document.getElementById('lightningLayerSelect');
       const tropicalStormsSelect = document.getElementById('tropicalStormsLayerSelect');
       const rotationSelect = document.getElementById('rotationLayerSelect');
@@ -4200,14 +5215,11 @@
       const nowcastSelect = document.getElementById('nowcastLayerSelect');
       const warningSelect = document.getElementById('warningLayerSelect');
 
-      const lightningOpacity = document.getElementById('lightningOpacity');
-      const tropicalStormsOpacity = document.getElementById('tropicalStormsOpacity');
-      const rotationOpacity = document.getElementById('rotationOpacity');
-      const surfaceFrontOpacity = document.getElementById('surfaceFrontOpacity');
-      const observationOpacity = document.getElementById('observationOpacity');
-      const nowcastOpacity = document.getElementById('nowcastOpacity');
-      const warningOpacity = document.getElementById('warningOpacity');
-
+      // Attach change handlers for layer dropdowns
+      if (radarSelect) radarSelect.addEventListener('change', radarLayerTypeHandler);
+      if (satelliteSelect) satelliteSelect.addEventListener('change', satelliteLayerTypeHandler);
+      if (isobarSelect) isobarSelect.addEventListener('change', isobarLayerTypeHandler);
+      if (windSelect) windSelect.addEventListener('change', windLayerTypeHandler);
       if (lightningSelect) lightningSelect.addEventListener('change', lightningLayerTypeHandler);
       if (tropicalStormsSelect) tropicalStormsSelect.addEventListener('change', tropicalStormsLayerTypeHandler);
       if (rotationSelect) rotationSelect.addEventListener('change', rotationLayerTypeHandler);
@@ -4216,58 +5228,62 @@
       if (nowcastSelect) nowcastSelect.addEventListener('change', nowcastLayerTypeHandler);
       if (warningSelect) warningSelect.addEventListener('change', warningLayerTypeHandler);
 
-      if (lightningOpacity) lightningOpacity.addEventListener('input', updateLayerOpacities);
-      if (tropicalStormsOpacity) tropicalStormsOpacity.addEventListener('input', updateLayerOpacities);
-      if (rotationOpacity) rotationOpacity.addEventListener('input', updateLayerOpacities);
-      if (surfaceFrontOpacity) surfaceFrontOpacity.addEventListener('input', updateLayerOpacities);
-      if (observationOpacity) observationOpacity.addEventListener('input', updateLayerOpacities);
-      if (nowcastOpacity) nowcastOpacity.addEventListener('input', updateLayerOpacities);
-      if (warningOpacity) warningOpacity.addEventListener('input', updateLayerOpacities);
+      // Attach opacity sliders
+      if (radarOpacitySlider) radarOpacitySlider.addEventListener('input', updateLayerOpacities);
+      if (satelliteOpacitySlider) satelliteOpacitySlider.addEventListener('input', updateLayerOpacities);
+      if (isobarOpacitySlider) isobarOpacitySlider.addEventListener('input', updateLayerOpacities);
+      if (windOpacitySlider) windOpacitySlider.addEventListener('input', updateLayerOpacities);
+      if (lightningOpacitySlider) lightningOpacitySlider.addEventListener('input', updateLayerOpacities);
+      if (tropicalStormsOpacitySlider) tropicalStormsOpacitySlider.addEventListener('input', updateLayerOpacities);
+      if (rotationOpacitySlider) rotationOpacitySlider.addEventListener('input', updateLayerOpacities);
+      if (surfaceFrontOpacitySlider) surfaceFrontOpacitySlider.addEventListener('input', updateLayerOpacities);
+      if (observationOpacitySlider) observationOpacitySlider.addEventListener('input', updateLayerOpacities);
+      if (nowcastOpacitySlider) nowcastOpacitySlider.addEventListener('input', updateLayerOpacities);
+      if (warningOpacitySlider) warningOpacitySlider.addEventListener('input', updateLayerOpacities);
 
-
+      // Time slider
       if (timeSlider) {
         timeSlider.addEventListener('input', handleTimeSliderChange);
       }
 
-      if (radarOpacitySlider) {
-        radarOpacitySlider.addEventListener('input', updateLayerOpacities);
-      }
-      if (satelliteOpacitySlider) {
-        satelliteOpacitySlider.addEventListener('input', updateLayerOpacities);
-      }
-      if (isobarOpacitySlider) { // NEW
-        isobarOpacitySlider.addEventListener('input', updateLayerOpacities);
-      }
-      if (windOpacitySlider) { // NEW
-        windOpacitySlider.addEventListener('input', updateLayerOpacities);
+      // === CRITICAL: Force initial plot of all currently enabled layers ===
+      updateLegend(); // Update opacity labels first
+
+      const initialTimestamp = timeSlider ? getCurrentSliderTimestamp() : Date.now();
+
+      // Force immediate execution (bypasses debounce delay)
+      triggerMapUpdate(initialTimestamp, true);
+
+      // Update the time display to match the initial timestamp
+      const timeDisplay = document.getElementById('history-time');
+      if (timeDisplay) {
+        timeDisplay.innerText = new Date(initialTimestamp).toLocaleString('en-GB', {
+          timeZone: 'Europe/London',
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        }) + ' BST';
       }
 
-      if (radarLayerType) {
-        radarLayerType.addEventListener('change', radarLayerTypeHandler);
-      }
 
-      if (satelliteLayerSelect) {
-        satelliteLayerSelect.addEventListener('change', satelliteLayerTypeHandler);
-      }
+      if (radarSelect && radarSelect.value === '') radarSelect.value = 'uk-precip-intensity';
+      if (satelliteSelect && satelliteSelect.value === '') satelliteSelect.value = 'global-ir';
+      if (isobarSelect && isobarSelect.value === '') isobarSelect.value = 'pressure_two';
+      if (windSelect && windSelect.value === '') windSelect.value = 'wind-direction';
+      if (surfaceFrontSelect && surfaceFrontSelect.value === '') surfaceFrontSelect.value = 'fcst-surface-fronts-isolines';
+      if (nowcastSelect && nowcastSelect.value === '') nowcastSelect.value = 'sevwx-global-storm-corridors-plot';
 
-      if (isobarLayerSelect) { // NEW
-        isobarLayerSelect.addEventListener('change', isobarLayerTypeHandler);
-      }
+      // Trigger handlers to apply defaults immediately
+      radarLayerTypeHandler();
+      satelliteLayerTypeHandler();
+      isobarLayerTypeHandler();
+      windLayerTypeHandler();
+      surfaceFrontLayerTypeHandler();
+      nowcastLayerTypeHandler();
 
-      if (windLayerSelect) { // NEW
-        windLayerSelect.addEventListener('change', windLayerTypeHandler);
-      }
-
-      // Initial Load - Set up the UI and trigger the first map update
-      updateLegend(); // Initialize opacity text display
-      if (timeSlider) {
-        handleTimeSliderChange({ target: timeSlider });
-      } else {
-        triggerMapUpdate(Date.now());
-      }
     });
-
-
 
 
 
