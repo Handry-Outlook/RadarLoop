@@ -2902,7 +2902,7 @@
       })
     };
 
-    map = L.map('map', { layers: [baseLayers['mapbox-streets-satellite']], zoomControl: false }).setView([53.5, -4.5], 6);
+    map = L.map('map', { layers: [baseLayers['mapbox-streets-satellite']], zoomControl: false }).setView([53.5, -4.5], 5);
 
     map3D = new mapboxgl.Map({
       container: 'map-3d',
@@ -4583,49 +4583,6 @@
      * Main function to coordinate updating the map layers.
      * @param {number} timestamp - The target timestamp from the slider/current time.
      */
-    async function updateMapLayers(timestamp) {
-      if (isPlotting) return;
-      isPlotting = true;
-
-      const PROCESSING_DELAY_MS = 5 * 60 * 1000;
-      let targetTimestamp = timestamp;
-      const timeSlider = document.getElementById('history-slider');
-      if (timeSlider && timeSlider.value === timeSlider.max) {
-        targetTimestamp = Date.now() - PROCESSING_DELAY_MS;
-      }
-
-      const getLayerType = (id) => {
-        const el = document.getElementById(id);
-        return el && !el.disabled ? el.value : null;
-      };
-
-      const radarType = getLayerType('radarLayer');
-      const satelliteType = getLayerType('satelliteLayerSelect');
-      const isobarType = getLayerType('isobarLayerSelect');
-      const windType = getLayerType('windLayerSelect');
-      const lightningType = getLayerType('lightningLayerSelect');
-      const tropicalStormsType = getLayerType('tropicalStormsLayerSelect');
-      const rotationType = getLayerType('rotationLayerSelect');
-      const surfaceFrontType = getLayerType('surfaceFrontLayerSelect');
-      const observationType = getLayerType('observationLayerSelect');
-      const nowcastType = getLayerType('nowcastLayerSelect');
-      const warningType = getLayerType('warningLayerSelect');
-
-      if (radarType) await plotLayerIfNecessary(radarType, radarOptions, targetTimestamp, 'radar');
-      if (satelliteType) await plotLayerIfNecessary(satelliteType, satelliteOptions, targetTimestamp, 'satellite');
-      if (isobarType) await plotLayerIfNecessary(isobarType, isobarOptions, targetTimestamp, 'isobar');
-      if (windType) await plotLayerIfNecessary(windType, windOptions, targetTimestamp, 'wind');
-      if (lightningType) await plotLayerIfNecessary(lightningType, lightningOptions, targetTimestamp, 'lightning');
-      if (tropicalStormsType) await plotLayerIfNecessary(tropicalStormsType, tropicalStormsOptions, targetTimestamp, 'tropicalStorms');
-      if (rotationType) await plotLayerIfNecessary(rotationType, rotationOptions, targetTimestamp, 'rotation');
-      if (surfaceFrontType) await plotLayerIfNecessary(surfaceFrontType, surfaceFrontOptions, targetTimestamp, 'surfaceFront');
-      if (observationType) await plotLayerIfNecessary(observationType, observationOptions, targetTimestamp, 'observation');
-      if (nowcastType) await plotLayerIfNecessary(nowcastType, nowcastOptions, targetTimestamp, 'nowcast');
-      if (warningType) await plotLayerIfNecessary(warningType, warningOptions, targetTimestamp, 'warning');
-
-      isPlotting = false;
-      updateLegend();
-    }
 
     // ==========================================
     // DEBOUNCED TRIGGER (CLEARS ALL IF NOTHING ENABLED)
@@ -4664,158 +4621,6 @@
       updateMapLayers(timestamp);
     }, 100);
 
-    /**
-     * Generic logic to check state, fetch URLs, and call the plotting function.
-     * @param {string} layerType - The specific layer key.
-     * @param {object} optionsMap - The options map (radarOptions, satelliteOptions, isobarOptions, windOptions).
-     * @param {number} targetTimestamp - The target timestamp.
-     * @param {string} layerKey - 'satellite', 'radar', 'isobar', or 'wind', etc.
-     */
-    async function plotLayerIfNecessary(layerType, optionsMap, targetTimestamp, layerKey) {
-      const layerConfig = optionsMap[layerType];
-
-      if (!layerConfig) {
-        console.error(`Layer configuration not found for type: ${layerType}`);
-
-        let currentLayer;
-        // The original file ended here, completing the switch:
-        switch (layerKey) {
-          case 'satellite': currentLayer = satelliteLayer; break;
-          case 'radar': currentLayer = radarLayer; break;
-          case 'isobar': currentLayer = isobarLayer; break;
-          case 'wind': currentLayer = windLayer; break;
-          case 'lightning': currentLayer = lightningLayer; break;
-          case 'tropicalStorms': currentLayer = tropicalStormsLayer; break;
-          case 'rotation': currentLayer = rotationLayer; break;
-          case 'surfaceFront': currentLayer = surfaceFrontLayer; break;
-          case 'observation': currentLayer = observationLayer; break;
-          case 'nowcast': currentLayer = NowcastLayer; break;
-          case 'warning': currentLayer = warningLayer; break;
-          default: return;
-        }
-
-        if (currentLayer && map.hasLayer(currentLayer)) {
-          map.removeLayer(currentLayer);
-        }
-
-        // Must exit here if config is missing
-        return;
-      }
-
-      let lastTimestamp;
-      let isAnimating;
-      let lastRequestedTimestamp;
-
-      switch (layerKey) {
-        case 'satellite': lastTimestamp = lastSatelliteTimestamp; isAnimating = isSatelliteAnimating; lastRequestedTimestamp = lastRequestedSatelliteTimestamp; break;
-        case 'radar': lastTimestamp = lastRadarTimestamp; isAnimating = isRadarAnimating; lastRequestedTimestamp = lastRequestedRadarTimestamp; break;
-        case 'isobar': lastTimestamp = lastIsobarTimestamp; isAnimating = isIsobarAnimating; lastRequestedTimestamp = lastRequestedIsobarTimestamp; break;
-        case 'wind': lastTimestamp = lastWindTimestamp; isAnimating = isWindAnimating; lastRequestedTimestamp = lastRequestedWindTimestamp; break;
-        case 'lightning': lastTimestamp = lastLightningTimestamp; isAnimating = isLightningAnimating; lastRequestedTimestamp = lastRequestedLightningTimestamp; break;
-        case 'tropicalStorms': lastTimestamp = lastTropicalStormsTimestamp; isAnimating = isTropicalStormsAnimating; lastRequestedTimestamp = lastRequestedTropicalStormsTimestamp; break;
-        case 'rotation': lastTimestamp = lastRotationTimestamp; isAnimating = isRotationAnimating; lastRequestedTimestamp = lastRequestedRotationTimestamp; break;
-        case 'surfaceFront': lastTimestamp = lastSurfaceFrontTimestamp; isAnimating = isSurfaceFrontAnimating; lastRequestedTimestamp = lastRequestedSurfaceFrontTimestamp; break;
-        case 'observation': lastTimestamp = lastObservationTimestamp; isAnimating = isObservationAnimating; lastRequestedTimestamp = lastRequestedObservationTimestamp; break;
-        case 'nowcast': lastTimestamp = lastNowcastTimestamp; isAnimating = isNowcastAnimating; lastRequestedTimestamp = lastRequestedNowcastTimestamp; break;
-        case 'warning': lastTimestamp = lastWarningTimestamp; isAnimating = isWarningAnimating; lastRequestedTimestamp = lastRequestedWarningTimestamp; break;
-        default: return;
-      }
-
-      if (isAnimating) return;
-
-      // Prevent redundant fetches for the same timestamp
-      if (lastTimestamp && lastTimestamp === targetTimestamp) {
-        // Optimization: Check if the layer type has changed, even if timestamp is the same
-        let lastType;
-        switch (layerKey) {
-          case 'satellite': lastType = lastSatelliteType; break;
-          case 'radar': lastType = lastRadarType; break;
-          case 'isobar': lastType = lastIsobarType; break;
-          case 'wind': lastType = lastWindType; break;
-          case 'lightning': lastType = lastLightningType; break;
-          case 'tropicalStorms': lastType = lastTropicalStormsType; break;
-          case 'rotation': lastType = lastRotationType; break;
-          case 'surfaceFront': lastType = lastSurfaceFrontType; break;
-          case 'observation': lastType = lastObservationType; break;
-          case 'nowcast': lastType = lastNowcastType; break;
-          case 'warning': lastType = lastWarningType; break;
-        }
-
-        if (lastType === layerType) {
-          return;
-        }
-      }
-
-      // Set animating flag
-      switch (layerKey) {
-        case 'satellite': isSatelliteAnimating = true; lastRequestedSatelliteTimestamp = targetTimestamp; break;
-        case 'radar': isRadarAnimating = true; lastRequestedRadarTimestamp = targetTimestamp; break;
-        case 'isobar': isIsobarAnimating = true; lastRequestedIsobarTimestamp = targetTimestamp; break;
-        case 'wind': isWindAnimating = true; lastRequestedWindTimestamp = targetTimestamp; break;
-        case 'lightning': isLightningAnimating = true; lastRequestedLightningTimestamp = targetTimestamp; break;
-        case 'tropicalStorms': isTropicalStormsAnimating = true; lastRequestedTropicalStormsTimestamp = targetTimestamp; break;
-        case 'rotation': isRotationAnimating = true; lastRequestedRotationTimestamp = targetTimestamp; break;
-        case 'surfaceFront': isSurfaceFrontAnimating = true; lastRequestedSurfaceFrontTimestamp = targetTimestamp; break;
-        case 'observation': isObservationAnimating = true; lastRequestedObservationTimestamp = targetTimestamp; break;
-        case 'nowcast': isNowcastAnimating = true; lastRequestedNowcastTimestamp = targetTimestamp; break;
-        case 'warning': isWarningAnimating = true; lastRequestedWarningTimestamp = targetTimestamp; break;
-      }
-
-      const finalUrl = await fetchTileUrl(targetTimestamp, layerConfig);
-
-      if (finalUrl) {
-        await plotMainLayer(finalUrl, layerType, targetTimestamp, layerKey);
-      } else {
-        // Clear the layer if no URL is found
-        let layerToClear;
-        switch (layerKey) {
-          case 'satellite': layerToClear = satelliteLayer; break;
-          case 'radar': layerToClear = radarLayer; break;
-          case 'isobar': layerToClear = isobarLayer; break;
-          case 'wind': layerToClear = windLayer; break;
-          case 'lightning': layerToClear = lightningLayer; break;
-          case 'tropicalStorms': layerToClear = tropicalStormsLayer; break;
-          case 'rotation': layerToClear = rotationLayer; break;
-          case 'surfaceFront': layerToClear = surfaceFrontLayer; break;
-          case 'observation': layerToClear = observationLayer; break;
-          case 'nowcast': layerToClear = NowcastLayer; break;
-          case 'warning': layerToClear = warningLayer; break;
-        }
-
-        if (layerToClear && map.hasLayer(layerToClear)) {
-          map.removeLayer(layerToClear);
-          // And set the global reference to null
-          switch (layerKey) {
-            case 'satellite': satelliteLayer = null; break;
-            case 'radar': radarLayer = null; break;
-            case 'isobar': isobarLayer = null; break;
-            case 'wind': windLayer = null; break;
-            case 'lightning': lightningLayer = null; break;
-            case 'tropicalStorms': tropicalStormsLayer = null; break;
-            case 'rotation': rotationLayer = null; break;
-            case 'surfaceFront': surfaceFrontLayer = null; break;
-            case 'observation': observationLayer = null; break;
-            case 'nowcast': NowcastLayer = null; break;
-            case 'warning': warningLayer = null; break;
-          }
-        }
-
-        // Ensure animating flag is reset even on failure
-        switch (layerKey) {
-          case 'satellite': isSatelliteAnimating = false; break;
-          case 'radar': isRadarAnimating = false; break;
-          case 'isobar': isIsobarAnimating = false; break;
-          case 'wind': isWindAnimating = false; break;
-          case 'lightning': isLightningAnimating = false; break;
-          case 'tropicalStorms': isTropicalStormsAnimating = false; break;
-          case 'rotation': isRotationAnimating = false; break;
-          case 'surfaceFront': isSurfaceFrontAnimating = false; break;
-          case 'observation': isObservationAnimating = false; break;
-          case 'nowcast': isNowcastAnimating = false; break;
-          case 'warning': isWarningAnimating = false; break;
-        }
-      }
-    }
 
 
     /**
@@ -4937,12 +4742,10 @@
         let finalTimestamp = roundedTimestampMs;
 
         // Optimized Fetch Logic (fetches up to 3 tiles back)
-        const urls = await Promise.all([
-          fetchTileUrl(roundedTimestampMs, layerConfig).catch(() => null),
-          fetchTileUrl(roundedTimestampMs - interval, layerConfig).catch(() => null),
-          fetchTileUrl(roundedTimestampMs - 2 * interval, layerConfig).catch(() => null)
-        ]);
-
+        const urls = await Promise.all(Array.from({ length: 6 }, (_, i) =>
+          fetchTileUrl(roundedTimestampMs - i * interval, layerConfig).catch(() => null)
+        ));
+        finalUrl = urls.find(url => url);
         const [currentUrl, previousUrl1, previousUrl2] = urls;
 
         // Find the most recent valid URL and update the effective timestamp
