@@ -28,8 +28,7 @@
   </script>
 
   <style>
-    /* --- Professional Weather Popup - Unified Styles --- */
-
+    /* --- 1. CORE CONTAINER & STATE MANAGEMENT --- */
     .weather-popup-container {
       font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
       color: #1a1a1a;
@@ -50,8 +49,16 @@
       display: none;
     }
 
-    /* --- DYNAMIC COLOR CONTROLS --- */
-    /* These must be strong enough to override inherited styles */
+    /* --- 2. HEADER & DYNAMIC SEVERITY COLORS --- */
+    .weather-popup-header {
+      padding: 14px 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    /* Strong overrides for text color based on background severity */
     .weather-popup-header.text-dark,
     .weather-popup-header.text-dark .warning-type,
     .weather-popup-header.text-dark .warning-level-text {
@@ -62,14 +69,6 @@
     .weather-popup-header.text-light .warning-type,
     .weather-popup-header.text-light .warning-level-text {
       color: #ffffff !important;
-    }
-
-    .weather-popup-header {
-      padding: 14px 18px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-shrink: 0;
     }
 
     .warning-type {
@@ -91,34 +90,11 @@
       border-radius: 20px;
       background: rgba(255, 255, 255, 0.9);
       color: #1a1a1a !important;
-      /* Always dark for readability on white badge */
+      /* Always dark for readability */
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     }
 
-    /* --- HEADLINES & METADATA --- */
-    .headline-style {
-      margin: 0 !important;
-      font-size: 15px !important;
-      line-height: 1.45 !important;
-      font-weight: 800 !important;
-      color: #1a1a1a !important;
-      text-align: center;
-      display: block;
-      width: 100%;
-    }
-
-    .summary-headline-box {
-      padding: 15px 18px;
-      background: #fafafa;
-      border-top: 1px solid #f0f0f0;
-    }
-
-    .detail-headline-box {
-      padding-bottom: 15px;
-      margin-bottom: 15px;
-      border-bottom: 1px solid #eee;
-    }
-
+    /* --- 3. METADATA & HEADLINES --- */
     .metadata-row {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -147,170 +123,6 @@
       color: #333;
     }
 
-    /* --- MATRIX --- */
-    .matrix-container {
-      display: flex;
-      align-items: center;
-      gap: 20px;
-      padding: 20px 18px;
-      background: #fff;
-    }
-
-    .matrix-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 18px);
-      gap: 4px;
-    }
-
-    .m-cell {
-      width: 18px;
-      height: 18px;
-      border-radius: 3px;
-      background: #eee;
-    }
-
-    .m-cell.active {
-      transform: scale(1.3);
-      outline: 2px solid #333;
-      z-index: 5;
-    }
-
-    /* --- CONTENT SECTIONS --- */
-    .summary-view,
-    .detail-view {
-      display: flex;
-      flex-direction: column;
-      flex: 1;
-      min-height: 0;
-    }
-
-    .detail-view .content-area {
-      padding: 18px;
-      overflow-y: auto;
-      flex: 1;
-    }
-
-    .content-section {
-      background: #fffdf0;
-      padding: 12px 15px;
-      border-radius: 8px;
-      margin-bottom: 15px;
-    }
-
-    .content-section label {
-      display: block;
-      font-size: 10px;
-      text-transform: uppercase;
-      font-weight: 800;
-      color: #999;
-      margin-bottom: 4px;
-    }
-
-    .content-section p {
-      font-size: 13.5px;
-      line-height: 1.6;
-      margin: 0;
-      color: #333;
-      white-space: pre-wrap;
-    }
-
-    /* --- FOOTER & SLIDER --- */
-    .weather-popup-footer {
-      background: #f8f9fa;
-      padding: 10px 18px;
-      font-size: 10px;
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-      color: #777;
-      border-top: 1px solid #eee;
-      flex-shrink: 0;
-    }
-
-    .footer-timestamps {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-
-    .detail-view .content-area::-webkit-scrollbar {
-      width: 5px;
-    }
-
-    .detail-view .content-area::-webkit-scrollbar-thumb {
-      background: #ccc;
-      border-radius: 10px;
-    }
-
-    /* LEAFLET WRAPPER FIX */
-    .custom-weather-popup .leaflet-popup-content-wrapper {
-      padding: 0;
-      border-radius: 12px;
-      overflow: hidden;
-    }
-
-    .custom-weather-popup .leaflet-popup-content {
-      margin: 0;
-      width: 380px !important;
-    }
-
-    /* --- 1. CORE CONTAINER & TOGGLE LOGIC --- */
-    /* --- 1. CORE CONTAINER & TOGGLE --- */
-    .weather-popup-container {
-      font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
-      color: #1a1a1a;
-      width: 380px;
-      max-height: 550px;
-      /* Limits total height */
-      display: flex;
-      flex-direction: column;
-      background: #ffffff;
-      overflow: hidden;
-    }
-
-    /* State Toggles */
-    .weather-popup-container[data-expanded="false"] .detail-view {
-      display: none;
-    }
-
-    .weather-popup-container[data-expanded="true"] .summary-view {
-      display: none;
-    }
-
-    /* --- 2. DYNAMIC HEADER & LABELS --- */
-    .weather-popup-header {
-      padding: 14px 18px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-shrink: 0;
-    }
-
-    /* Classes for dynamic text color based on severity */
-    .text-dark {
-      color: #1a1a1a !important;
-    }
-
-    .text-light {
-      color: #ffffff !important;
-    }
-
-    .warning-type {
-      font-weight: 800;
-      font-size: 16px;
-      text-transform: uppercase;
-    }
-
-    .time-badge {
-      font-size: 10px;
-      font-weight: 700;
-      padding: 5px 12px;
-      border-radius: 20px;
-      background: rgba(255, 255, 255, 0.9);
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    }
-
-    /* --- 3. UNIFIED HEADLINE & METADATA --- */
     .headline-style {
       margin: 0 !important;
       font-size: 15px !important;
@@ -334,35 +146,7 @@
       border-bottom: 1px solid #eee;
     }
 
-    .metadata-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1px;
-      background: #eee;
-      border-bottom: 1px solid #eee;
-      flex-shrink: 0;
-    }
-
-    .meta-box {
-      background: #fafafa;
-      padding: 10px 18px;
-      text-align: center;
-    }
-
-    .meta-box label {
-      display: block;
-      font-size: 9px;
-      text-transform: uppercase;
-      color: #888;
-      font-weight: 800;
-    }
-
-    .meta-box strong {
-      font-size: 11px;
-      color: #333;
-    }
-
-    /* --- 4. MATRIX STYLING --- */
+    /* --- 4. RISK MATRIX --- */
     .matrix-container {
       display: flex;
       align-items: center;
@@ -406,7 +190,7 @@
       z-index: 5;
     }
 
-    /* --- 5. CONTENT AREAS & SLIDER --- */
+    /* --- 5. CONTENT VIEWS & SCROLLING --- */
     .summary-view,
     .detail-view {
       display: flex;
@@ -418,7 +202,6 @@
     .detail-view .content-area {
       padding: 18px;
       overflow-y: auto;
-      /* The Slider */
       flex: 1;
     }
 
@@ -427,6 +210,8 @@
       padding: 12px 15px;
       border-radius: 8px;
       margin-bottom: 15px;
+      border-left: 4px solid transparent;
+      /* Color added via JS */
     }
 
     .content-section label {
@@ -446,7 +231,7 @@
       white-space: pre-wrap;
     }
 
-    /* --- 6. FOOTER & BUTTONS --- */
+    /* --- 6. ACTIONS, FOOTER & SCROLLBAR --- */
     .expand-action,
     .collapse-action {
       display: flex;
@@ -481,7 +266,7 @@
       gap: 2px;
     }
 
-    /* CUSTOM SCROLLBAR (Slider) */
+    /* Custom Scrollbar for Detail View */
     .detail-view .content-area::-webkit-scrollbar {
       width: 5px;
     }
@@ -491,16 +276,22 @@
       border-radius: 10px;
     }
 
-    /* LEAFLET OVERRIDES */
+    /* --- 7. LEAFLET INTEGRATION --- */
     .custom-weather-popup .leaflet-popup-content-wrapper {
       padding: 0;
       border-radius: 12px;
       overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
     }
 
     .custom-weather-popup .leaflet-popup-content {
       margin: 0;
       width: 380px !important;
+    }
+
+    .custom-weather-popup .leaflet-popup-tip-container {
+      display: none;
+      /* Cleaner look for modern weather maps */
     }
 
     /* Move the entire attribution container to bottom-left */
@@ -2758,11 +2549,11 @@
       <div class="layer-control" id="warning-control">
         <div class="top-row">
           <div class="label-group">
-            <span class="label-text">Warning Layer</span>
-            <span class="tooltip">Select Warning data layer</span>
+            <span class="label-text">Weather Warnings</span>
+            <span class="tooltip">Display official weather warnings</span>
           </div>
           <div class="toggle-switch">
-            <input type="checkbox" id="warningToggle" checked onchange="toggleLayer('warning', this.checked);">
+            <input type="checkbox" id="warningToggle" onchange="toggleLayer('warning', this.checked);">
             <label for="warningToggle" class="switch"></label>
           </div>
         </div>
@@ -2770,10 +2561,10 @@
           <option value="ukmo-detail-warning">UK Met Office Warning</option>
           <option value="sevwx-agency-bulletin-zones">Global Weather Bulletins</option>
         </select>
-        <div class="opacity-control">
-          <input type="range" id="warningOpacity" min="0" max="1" step="0.05" value="0.5"
-            oninput="updateLayerOpacities()">
-
+        <div class="pretty-slider">
+          <input type="range" id="warningOpacity" min="0" max="1" step="0.1" value="0.7"
+            oninput="updateLayerOpacity('warning', this.value)">
+          <span class="slider-value" id="warningOpacityValue">70%</span>
         </div>
       </div>
 
@@ -3375,20 +3166,7 @@
     };
 
     map = L.map('map', { layers: [baseLayers['mapbox-streets-satellite']], zoomControl: false }).setView([53.5, -4.5], 5);
-    // Add this where you initialize your map
-    // Ensure this is called before the layers are added
-    // Add this in your map initialization
-    // 1. Initialize the Map
 
-
-    // 2. IMMEDIATELY create the custom pane for Warnings
-    map.createPane('warningPane');
-
-    // 3. Set the Z-index low (150) so it is behind Tiles (200)
-    map.getPane('warningPane').style.zIndex = 200;
-
-    // 4. IMPORTANT: Ensure pointer events are 'auto' so popups still work
-    map.getPane('warningPane').style.pointerEvents = 'none';
     map3D = new mapboxgl.Map({
       container: 'map-3d',
       style: 'mapbox://styles/handry-outlook/cm9457ty1009d01sk37353ux2',
@@ -4306,21 +4084,13 @@
         bounds: null,
         attribution: 'dtn'
       },
-      'ukmo-warning': {
-        url: 'https://services.arcgis.com/Lq3V5RFuTBC9I7kv/arcgis/rest/services/Met_Office_National_Severe_Weather_Warning_Service_Live/FeatureServer/0',
-        interval: 5 * 60 * 1000, // Met Office updates roughly every 5 mins
-        type: 'feature-layer',
-        bounds: null,
-        attribution: 'Met Office'
-      },
       'ukmo-detail-warning': {
-        url: 'https://services.arcgis.com/Lq3V5RFuTBC9I7kv/ArcGIS/rest/services/Met_Office_National_Severe_Weather_Warning_Service_Live/FeatureServer/0',
-        attribution: '© Met Office',
-        interval: 5 * 60 * 1000, // Met Office updates roughly every 5 mins
+        url: 'https://services.arcgis.com/Lq3V5RFuTBC9I7kv/arcgis/rest/services/Met_Office_National_Severe_Weather_Warning_Service_Live/FeatureServer/0',
+        interval: 5 * 60 * 1000,
         type: 'feature-layer',
         bounds: null,
-        attribution: 'Met Office'
-      },
+        attribution: '© Met Office'
+      }
     };
     // --- ISOBAR OPTIONS (NEW) ---
     const isobarOptions = {
@@ -4478,17 +4248,17 @@
 
     let currentFilterTimestamp = null;
 
-    const SATELLITE_Z_INDEX = 340;
-    const RADAR_Z_INDEX = 350;
-    const WIND_Z_INDEX = 355;
-    const ISOBAR_Z_INDEX = 360;
-    const LIGHTNING_Z_INDEX = 365;          // NEW
-    const TROPICAL_STORMS_Z_INDEX = 370;    // NEW
-    const ROTATION_Z_INDEX = 375;           // NEW
-    const SURFACE_FRONT_Z_INDEX = 380;      // NEW
-    const OBSERVATION_Z_INDEX = 330;        // NEW
-    const NOWCAST_Z_INDEX = 390;            // NEW
-    const WARNING_Z_INDEX = 335;            // NEW
+    const SATELLITE_Z_INDEX = 140;
+    const RADAR_Z_INDEX = 150;
+    const WIND_Z_INDEX = 155;
+    const ISOBAR_Z_INDEX = 160;
+    const LIGHTNING_Z_INDEX = 165;          // NEW
+    const TROPICAL_STORMS_Z_INDEX = 170;    // NEW
+    const ROTATION_Z_INDEX = 175;           // NEW
+    const SURFACE_FRONT_Z_INDEX = 180;      // NEW
+    const OBSERVATION_Z_INDEX = 130;        // NEW
+    const NOWCAST_Z_INDEX = 190;            // NEW
+    const WARNING_Z_INDEX = 135;            // NEW
 
     // ==========================================
     // 2. HELPER FUNCTIONS
@@ -4604,9 +4374,6 @@
     // ==========================================
     const recentTimeThreshold = 15 * 60 * 1000;
     async function fetchTileUrl(timestamp, layerConfig) {
-      if (layerConfig.url && layerConfig.url.includes('arcgis')) {
-        return layerConfig.url;
-      }
       let layerTypeKey;
       if (Object.values(radarOptions).includes(layerConfig)) {
         layerTypeKey = Object.keys(radarOptions).find(key => radarOptions[key] === layerConfig);
@@ -4732,55 +4499,119 @@
     // 4. MAIN UPDATE FUNCTIONS (UNIFIED)
     // ==========================================
     /**
- * Plots weather layers with an atomic fade-swap and high-detail popups for warnings.
- * Handles UKMO detailed warning fields including risk matrices and impact descriptions.
- */
-    /**
-     * Plots weather layers with an atomic fade-swap and high-detail popups for warnings.
+     * Plots either the Radar, Satellite, Isobar, or Wind layer with an atomic fade-swap.
+     * @param {string} finalUrl - The pre-validated tile URL.
+     * @param {string} layerType - The specific key (e.g., 'us-visible', 'uk-precip-intensity', 'global-pressure', 'global-wind').
+     * @param {number|null} timestamp - The rounded timestamp of the plotted data.
+     * @param {string} layerKey - 'satellite', 'radar', 'isobar', or 'wind'.
      */
     async function plotMainLayer(finalUrl, layerType, timestamp, layerKey) {
-      let layerOptions, zIndex, currentLayerRef;
-
-      // 1. Mapping Configuration
+      let layerOptions, zIndex, currentLayerRef, lastTimestampRef, lastTypeRef, isAnimatingRef;
       switch (layerKey) {
-        case 'satellite': layerOptions = satelliteOptions[layerType]; zIndex = SATELLITE_Z_INDEX; currentLayerRef = window.satelliteLayer; break;
-        case 'radar': layerOptions = radarOptions[layerType]; zIndex = RADAR_Z_INDEX; currentLayerRef = window.radarLayer; break;
-        case 'isobar': layerOptions = isobarOptions[layerType]; zIndex = ISOBAR_Z_INDEX; currentLayerRef = window.isobarLayer; break;
-        case 'wind': layerOptions = windOptions[layerType]; zIndex = WIND_Z_INDEX; currentLayerRef = window.windLayer; break;
-        case 'lightning': layerOptions = lightningOptions[layerType]; zIndex = LIGHTNING_Z_INDEX; currentLayerRef = window.lightningLayer; break;
-        case 'tropicalStorms': layerOptions = tropicalStormsOptions[layerType]; zIndex = TROPICAL_STORMS_Z_INDEX; currentLayerRef = window.tropicalStormsLayer; break;
-        case 'rotation': layerOptions = rotationOptions[layerType]; zIndex = ROTATION_Z_INDEX; currentLayerRef = window.rotationLayer; break;
-        case 'surfaceFront': layerOptions = surfaceFrontOptions[layerType]; zIndex = SURFACE_FRONT_Z_INDEX; currentLayerRef = window.surfaceFrontLayer; break;
-        case 'observation': layerOptions = observationOptions[layerType]; zIndex = OBSERVATION_Z_INDEX; currentLayerRef = window.observationLayer; break;
-        case 'nowcast': layerOptions = nowcastOptions[layerType]; zIndex = NOWCAST_Z_INDEX; currentLayerRef = window.NowcastLayer; break;
-        case 'warning': layerOptions = warningOptions[layerType]; zIndex = WARNING_Z_INDEX; currentLayerRef = window.warningLayer; break;
-        default: return;
+        case 'satellite':
+          layerOptions = satelliteOptions[layerType];
+          zIndex = SATELLITE_Z_INDEX;
+          currentLayerRef = satelliteLayer;
+          // References for state modification, not direct value access
+          lastTimestampRef = 'lastSatelliteTimestamp';
+          lastTypeRef = 'lastSatelliteType';
+          isAnimatingRef = 'isSatelliteAnimating';
+          break;
+        case 'radar':
+          layerOptions = radarOptions[layerType];
+          zIndex = RADAR_Z_INDEX;
+          currentLayerRef = radarLayer;
+          lastTimestampRef = 'lastRadarTimestamp';
+          lastTypeRef = 'lastRadarType';
+          isAnimatingRef = 'isRadarAnimating';
+          break;
+        case 'isobar':
+          layerOptions = isobarOptions[layerType];
+          zIndex = ISOBAR_Z_INDEX;
+          currentLayerRef = isobarLayer;
+          lastTimestampRef = 'lastIsobarTimestamp';
+          lastTypeRef = 'lastIsobarType';
+          isAnimatingRef = 'isIsobarAnimating';
+          break;
+        case 'wind':
+          layerOptions = windOptions[layerType];
+          zIndex = WIND_Z_INDEX;
+          currentLayerRef = windLayer;
+          lastTimestampRef = 'lastWindTimestamp';
+          lastTypeRef = 'lastWindType';
+          isAnimatingRef = 'isWindAnimating';
+          break;
+        case 'lightning':
+          layerOptions = lightningOptions[layerType];
+          zIndex = LIGHTNING_Z_INDEX;
+          currentLayerRef = lightningLayer;
+          lastTimestampRef = 'lastLightningTimestamp';
+          lastTypeRef = 'lastLightningType';
+          isAnimatingRef = 'isLightningAnimating';
+          break;
+        case 'tropicalStorms':
+          layerOptions = tropicalStormsOptions[layerType];
+          zIndex = TROPICAL_STORMS_Z_INDEX;
+          currentLayerRef = tropicalStormsLayer;
+          lastTimestampRef = 'lastTropicalStormsTimestamp';
+          lastTypeRef = 'lastTropicalStormsType';
+          isAnimatingRef = 'isTropicalStormsAnimating';
+          break;
+        case 'rotation':
+          layerOptions = rotationOptions[layerType];
+          zIndex = ROTATION_Z_INDEX;
+          currentLayerRef = rotationLayer;
+          lastTimestampRef = 'lastRotationTimestamp';
+          lastTypeRef = 'lastRotationType';
+          isAnimatingRef = 'isRotationAnimating';
+          break;
+        case 'surfaceFront':
+          layerOptions = surfaceFrontOptions[layerType];
+          zIndex = SURFACE_FRONT_Z_INDEX;
+          currentLayerRef = surfaceFrontLayer;
+          lastTimestampRef = 'lastSurfaceFrontTimestamp';
+          lastTypeRef = 'lastSurfaceFrontType';
+          isAnimatingRef = 'isSurfaceFrontAnimating';
+          break;
+        case 'observation':
+          layerOptions = observationOptions[layerType];
+          zIndex = OBSERVATION_Z_INDEX;
+          currentLayerRef = observationLayer;
+          lastTimestampRef = 'lastObservationTimestamp';
+          lastTypeRef = 'lastObservationType';
+          isAnimatingRef = 'isObservationAnimating';
+          break;
+        case 'nowcast':
+          layerOptions = nowcastOptions[layerType];
+          zIndex = NOWCAST_Z_INDEX;
+          currentLayerRef = NowcastLayer; // Fixed typo
+          lastTimestampRef = 'lastNowcastTimestamp';
+          lastTypeRef = 'lastNowcastType';
+          isAnimatingRef = 'isNowcastAnimating';
+          break;
+        case 'warning':
+          layerOptions = warningOptions[layerType];
+          zIndex = WARNING_Z_INDEX;
+          currentLayerRef = warningLayer;
+          lastTimestampRef = 'lastWarningTimestamp';
+          lastTypeRef = 'lastWarningType';
+          isAnimatingRef = 'isWarningAnimating';
+          break;
+        default:
+          return;
       }
-
-      const keyCap = layerKey.charAt(0).toUpperCase() + layerKey.slice(1);
-
-      // --- POPUP PROTECTION & FLASH PREVENTION ---
-      const openPopup = map._popup;
-      if (openPopup && openPopup.isOpen()) {
-        console.log("Popup is open. Skipping refresh.");
-        window[`is${keyCap}Animating`] = false;
-        return;
-      }
-
-      if (window[`last${keyCap}Url`] === finalUrl && window[`last${keyCap}Type`] === layerType) {
-        window[`is${keyCap}Animating`] = false;
-        return;
-      }
-      window[`last${keyCap}Url`] = finalUrl;
-
+      // Note: Direct use of global variables for comparison before the switch is safer for complex state
+      const lastPlottedTimestamp = eval(lastTimestampRef);
+      const lastPlottedType = eval(lastTypeRef);
       const currentOpacity = parseFloat(document.getElementById(`${layerKey}Opacity`)?.value || 0.8);
+      let layerToDispose = currentLayerRef;
       let newLayer = null;
-
       try {
         if (layerOptions.type === 'feature-layer') {
+          // ESRI Feature Layer requires L.esri.featureLayer
           newLayer = L.esri.featureLayer({
             url: finalUrl,
-            pane: 'warningPane',
+            pane: 'warningPane', // Ensure this pane exists or use default
             style: (feature) => {
               const colors = { 'Yellow': '#fff200', 'Amber': '#FF8C00', 'Red': '#D32F2F' };
               return {
@@ -4793,6 +4624,7 @@
             }
           });
 
+          // Add weather labels (Tooltips)
           newLayer.on('createfeature', (e) => {
             if (e.feature.properties.weathertype) {
               e.layer.bindTooltip(e.feature.properties.weathertype, {
@@ -4803,178 +4635,238 @@
             }
           });
 
+          // Bind the detailed UKMO Popup
           newLayer.bindPopup(function (l) {
             const p = l.feature.properties;
 
-            // 24-HOUR TIME FORMATTER (Fixed for DD-MM-YYYY)
+            // Time Formatter for UK Format
             const format24h = (dateInput) => {
               if (!dateInput) return 'N/A';
-              let sanitizedDate = dateInput;
-              if (typeof dateInput === 'string' && dateInput.includes('-')) {
-                const parts = dateInput.split(' ');
-                const dateParts = parts[0].split('-');
-                if (dateParts[0].length === 2) {
-                  sanitizedDate = `${dateParts[1]}-${dateParts[0]}-${dateParts[2]} ${parts.slice(1).join(' ')}`;
-                }
-              }
-              const d = new Date(sanitizedDate);
-              if (isNaN(d.getTime())) return 'Invalid Format';
-              return d.toLocaleString('en-GB', {
+              const d = new Date(dateInput);
+              return isNaN(d.getTime()) ? 'Invalid' : d.toLocaleString('en-GB', {
                 day: '2-digit', month: '2-digit', year: 'numeric',
                 hour: '2-digit', minute: '2-digit', hour12: false
               }).replace(',', '');
             };
 
-            const now = new Date().getTime();
-            const start = new Date(p.validfromdate).getTime();
-            const end = new Date(p.validtodate).getTime();
-
-            let timeStatusText = "";
-            if (now < start) {
-              const diff = start - now;
-              timeStatusText = `Starts in ${Math.floor(diff / 3600000)}h ${Math.floor((diff % 3600000) / 60000)}m`;
-            } else if (now >= start && now <= end) {
-              const diff = end - now;
-              timeStatusText = `${Math.floor(diff / 3600000)}h ${Math.floor((diff % 3600000) / 60000)}m remaining`;
-            } else {
-              timeStatusText = "Expired";
-            }
             const accentColor = p.warninglevel === 'Red' ? '#D32F2F' : (p.warninglevel === 'Amber' ? '#EF6C00' : '#fff200');
-
-            // 2. FORCE Black text if warning level is Yellow (Case-insensitive check)
-            const isYellow = p.warninglevel && p.warninglevel.toLowerCase() === 'yellow';
-            const headerTextColorClass = isYellow ? 'text-dark' : 'text-light';
-            const impactScore = p.warningImpact ? parseInt(p.warningImpact.split('/')[0]) : 0;
-            const likelihoodScore = p.warningLikelihood ? parseInt(p.warningLikelihood.split('/')[0]) : 0;
-
-            // Clean text labels (removes "3/" and "2/")
-            const likelihoodText = p.warningLikelihood ? p.warningLikelihood.split('/')[1] : 'Unknown';
-            const impactText = p.warningImpact ? p.warningImpact.split('/')[1] : 'Unknown';
+            const headerClass = p.warninglevel === 'Yellow' ? 'text-dark' : 'text-light';
 
             return `
-<div class="weather-popup-container" data-expanded="false">
-    <div class="weather-popup-header ${headerTextColorClass}" style="background-color: ${accentColor}">
-        <div class="header-left">
+        <div class="weather-popup-container" data-expanded="false">
+          <div class="weather-popup-header ${headerClass}" style="background-color: ${accentColor}">
             <div class="warning-type">${p.weathertype} WARNING</div>
             <div class="warning-level-text">${p.warninglevel} Severity</div>
-        </div>
-        <div class="time-badge text-dark">${timeStatusText}</div>
-    </div>
-    
-    <div class="metadata-row">
-        <div class="meta-box"><label>Valid From</label><strong>${format24h(p.validfromdate)}</strong></div>
-        <div class="meta-box"><label>Valid Until</label><strong>${format24h(p.validtodate)}</strong></div>
-    </div>
-
-    <div class="summary-view">
-        <div class="matrix-container">
-            <div class="matrix-wrapper">
-                <div class="axis-vertical">Likelihood</div>
-                <div class="grid-stack">
-                    <div class="matrix-grid">
-                        ${[4, 3, 2, 1].map(row => [1, 2, 3, 4].map(col => {
-              const isActive = (row === likelihoodScore && col === impactScore);
-              return `<div class="m-cell ${isActive ? 'active' : ''}" style="background:${isActive ? accentColor : '#eee'}"></div>`;
-            }).join('')).join('')}
-                    </div>
-                    <div class="axis-horizontal">Impact</div>
-                </div>
-            </div>
-            <div class="matrix-info">
-                <div><strong>Likelihood:</strong> ${likelihoodText}</div>
-                <div><strong>Impact:</strong> ${impactText}</div>
-            </div>
-        </div>
-        <div class="summary-headline-box">
-            <h4 class="headline-style">${p.warningheadline}</h4>
-        </div>
-        <div class="expand-action" onclick="toggleWeatherDetails(this)">
-            <span>VIEW FULL DETAILS & IMPACT</span>
-            <span class="arrow-icon">▼</span>
-        </div>
-    </div>
-
-    <div class="detail-view">
-        <div class="content-area">
-            <div class="detail-headline-box">
-                <h4 class="headline-style">${p.warningheadline}</h4>
-            </div>
-            <div class="content-section" style="border-left: 4px solid ${accentColor}">
-                <label>Further Details</label>
-                <p>${p.warningFurtherDetails || 'No additional details available.'}</p>
-            </div>
-            <div class="content-section" style="border-left: 4px solid ${accentColor}">
-                <label>What to expect</label>
-                <p>${p.whatToExpect || 'No details provided.'}</p>
-            </div>
-            
-        </div>
-        <div class="collapse-action" onclick="toggleWeatherDetails(this)">
-            <span class="arrow-icon">▲</span>
-            <span>BACK TO SUMMARY</span>
-        </div>
-    </div>
-
-    <div class="weather-popup-footer">
-        <div class="footer-timestamps">
-            <span><strong>Issued:</strong> ${format24h(p.issuedDateString)}</span>
-            <span><strong>Updated:</strong> ${format24h(p.modifiedDateString || p.issuedDateString)}</span>
-        </div>
-        <span>v${p.warningVersion || '2.0'}</span>
-    </div>
-</div>`;
-          }, {
-            maxWidth: 400,
-            minWidth: 380,
-            className: 'custom-weather-popup',
-            autoPan: true
-          });
+          </div>
+          <div class="metadata-row">
+            <div class="meta-box"><label>Valid From</label><strong>${format24h(p.validfromdate)}</strong></div>
+            <div class="meta-box"><label>Until</label><strong>${format24h(p.validtodate)}</strong></div>
+          </div>
+          <div class="summary-view">
+             <h4 class="headline-style">${p.warningheadline}</h4>
+             <div class="expand-action" onclick="toggleWeatherDetails(this)">
+                <span>VIEW FULL DETAILS</span> <span class="arrow-icon">▼</span>
+             </div>
+          </div>
+          <div class="detail-view" style="display:none;">
+             <p>${p.warningFurtherDetails || 'No details.'}</p>
+             <div class="collapse-action" onclick="toggleWeatherDetails(this)">
+                <span>BACK</span> <span class="arrow-icon">▲</span>
+             </div>
+          </div>
+        </div>`;
+          }, { maxWidth: 400, className: 'custom-weather-popup' });
 
         } else if (layerOptions.type === 'image') {
-          newLayer = L.imageOverlay(finalUrl, layerOptions.bounds, { opacity: 0.01, zIndex: zIndex, className: 'seamless-layer' });
+          newLayer = L.imageOverlay(finalUrl, layerOptions.bounds, {
+            opacity: 0.01,
+            zIndex: zIndex,
+            attribution: layerOptions.attribution,
+            className: 'seamless-layer'
+          });
         } else if (layerOptions.type === 'vector-tile') {
-          if (typeof L.vectorGrid !== 'undefined' && L.vectorGrid.protobuf) {
+          try {
+            const defaultStyle = { fill: true, opacity: 0.01, fillOpacity: 0.01, weight: 0, color: 'inherit' };
+            let vectorStyles = {};
+            const baseOpacity = 0.01;
+            if (layerKey === 'isobar') {
+              vectorStyles = {
+                'default': { stroke: true, color: '#FFFFFF', weight: 2, opacity: baseOpacity, fill: false },
+                'features': { stroke: true, color: '#FFFFFF', weight: 2, opacity: baseOpacity, fill: false }
+              };
+            } else if (layerKey === 'wind') {
+              vectorStyles = {
+                'default': { stroke: true, color: '#88E0FF', weight: 1, opacity: baseOpacity, fill: false },
+                'features': { stroke: true, color: '#88E0FF', weight: 1, opacity: baseOpacity, fill: false }
+              };
+            } else {
+              vectorStyles = { 'default': defaultStyle, 'features': defaultStyle };
+            }
             newLayer = L.vectorGrid.protobuf(finalUrl, {
               opacity: 0.01,
-              vectorTileLayerStyles: { 'default': layerKey === 'isobar' ? { stroke: true, weight: 2, color: '#FFF' } : { fill: true, opacity: 0.01 } },
+              vectorTileLayerStyles: vectorStyles,
+              className: 'seamless-layer',
               zIndex: zIndex
             });
-          } else {
-            newLayer = L.tileLayer(finalUrl, { opacity: 0.01, zIndex: zIndex });
+          } catch (error) {
+            newLayer = L.tileLayer(finalUrl, {
+              opacity: 0.01, zIndex: zIndex, attribution: layerOptions.attribution, className: 'seamless-layer'
+            });
           }
-        } else {
-          newLayer = L.tileLayer(finalUrl, { opacity: 0.01, zIndex: zIndex, tms: true, className: 'seamless-layer' });
+        } else { // 'tile-layer'
+          newLayer = L.tileLayer(finalUrl, {
+            opacity: 0.01,
+            zIndex: zIndex,
+            attribution: layerOptions.attribution,
+            tms: true,
+            tileSize: 256,
+            className: 'seamless-layer'
+          });
         }
-
         if (!newLayer) return;
         newLayer.addTo(map);
-
-        await new Promise(resolve => {
-          const timeout = setTimeout(() => resolve(true), 1200);
+        // --- Wait for Layer Load ---
+        const layerLoadedPromise = new Promise(resolve => {
+          const timeout = setTimeout(() => resolve(true), 1000);
           newLayer.once('load', () => { clearTimeout(timeout); resolve(true); });
+          newLayer.once('error', () => { clearTimeout(timeout); resolve(false); });
         });
-
-        if (layerKey === 'nowcast') window.NowcastLayer = newLayer;
-        else window[`${layerKey}Layer`] = newLayer;
-
-        if (newLayer.setOpacity) newLayer.setOpacity(currentOpacity);
-
-        if (currentLayerRef && map.hasLayer(currentLayerRef)) {
-          if (currentLayerRef.setOpacity) currentLayerRef.setOpacity(0);
-          setTimeout(() => { if (map.hasLayer(currentLayerRef)) map.removeLayer(currentLayerRef); }, 450);
+        const success = await layerLoadedPromise;
+        // --- Robustness Check: Requested Timestamp and Layer Type ---
+        // Accessing lastRequested timestamps
+        let requestedTimestamp;
+        switch (layerKey) {
+          case 'satellite': requestedTimestamp = lastRequestedSatelliteTimestamp; break;
+          case 'radar': requestedTimestamp = lastRequestedRadarTimestamp; break;
+          case 'isobar': requestedTimestamp = lastRequestedIsobarTimestamp; break;
+          case 'wind': requestedTimestamp = lastRequestedWindTimestamp; break;
+          case 'lightning': requestedTimestamp = lastRequestedLightningTimestamp; break;
+          case 'tropicalStorms': requestedTimestamp = lastRequestedTropicalStormsTimestamp; break;
+          case 'rotation': requestedTimestamp = lastRequestedRotationTimestamp; break;
+          case 'surfaceFront': requestedTimestamp = lastRequestedSurfaceFrontTimestamp; break;
+          case 'observation': requestedTimestamp = lastRequestedObservationTimestamp; break;
+          case 'nowcast': requestedTimestamp = lastRequestedNowcastTimestamp; break;
+          case 'warning': requestedTimestamp = lastRequestedWarningTimestamp; break;
         }
-
+        const currentType = (
+          document.getElementById(`${layerKey}LayerSelect`) ||
+          document.getElementById(`${layerKey}Layer`)
+        )?.value || 'none';
+        if (currentType !== layerType || (timestamp !== null && lastPlottedTimestamp === timestamp)) {
+          if (newLayer && map.hasLayer(newLayer)) {
+            map.removeLayer(newLayer);
+          }
+          return;
+        }
+        if (success) {
+          // 1. Update active layer and state variables (Direct variable modification)
+          switch (layerKey) {
+            case 'satellite':
+              satelliteLayer = newLayer;
+              lastSatelliteTimestamp = timestamp !== null ? timestamp : lastSatelliteTimestamp;
+              lastSatelliteType = layerType;
+              break;
+            case 'radar':
+              radarLayer = newLayer;
+              lastRadarTimestamp = timestamp !== null ? timestamp : lastRadarTimestamp;
+              lastRadarType = layerType;
+              break;
+            case 'isobar':
+              isobarLayer = newLayer;
+              lastIsobarTimestamp = timestamp !== null ? timestamp : lastIsobarTimestamp;
+              lastIsobarType = layerType;
+              break;
+            case 'wind':
+              windLayer = newLayer;
+              lastWindTimestamp = timestamp !== null ? timestamp : lastWindTimestamp;
+              lastWindType = layerType;
+              break;
+            case 'lightning':
+              lightningLayer = newLayer;
+              lastLightningTimestamp = timestamp !== null ? timestamp : lastLightningTimestamp;
+              lastLightningType = layerType;
+              break;
+            case 'tropicalStorms':
+              tropicalStormsLayer = newLayer;
+              lastTropicalStormsTimestamp = timestamp !== null ? timestamp : lastTropicalStormsTimestamp;
+              lastTropicalStormsType = layerType;
+              break;
+            case 'rotation':
+              rotationLayer = newLayer;
+              lastRotationTimestamp = timestamp !== null ? timestamp : lastRotationTimestamp;
+              lastRotationType = layerType;
+              break;
+            case 'surfaceFront':
+              surfaceFrontLayer = newLayer;
+              lastSurfaceFrontTimestamp = timestamp !== null ? timestamp : lastSurfaceFrontTimestamp;
+              lastSurfaceFrontType = layerType;
+              break;
+            case 'observation':
+              observationLayer = newLayer;
+              lastObservationTimestamp = timestamp !== null ? timestamp : lastObservationTimestamp;
+              lastObservationType = layerType;
+              break;
+            case 'nowcast':
+              NowcastLayer = newLayer;
+              lastNowcastTimestamp = timestamp !== null ? timestamp : lastNowcastTimestamp;
+              lastNowcastType = layerType;
+              break;
+            case 'warning':
+              warningLayer = newLayer;
+              lastWarningTimestamp = timestamp !== null ? timestamp : lastWarningTimestamp;
+              lastWarningType = layerType;
+              break;
+          }
+          // 2. Fade In
+          if (newLayer.getElement) {
+            const imgElement = newLayer.getElement();
+            if (imgElement) imgElement.style.opacity = currentOpacity;
+          } else if (newLayer.setOpacity) {
+            newLayer.setOpacity(currentOpacity);
+          }
+          // 3. Fade Out & Remove Old Layer
+          if (layerToDispose && map.hasLayer(layerToDispose)) {
+            if (layerToDispose.getElement) {
+              const oldImgElement = layerToDispose.getElement();
+              if (oldImgElement) oldImgElement.style.opacity = 0;
+            } else if (layerToDispose.setOpacity) {
+              layerToDispose.setOpacity(0);
+            }
+            setTimeout(() => {
+              if (map.hasLayer(layerToDispose)) {
+                map.removeLayer(layerToDispose);
+              }
+            }, 350);
+          }
+          lastValidTileUrls[layerType] = finalUrl;
+        } else {
+          if (newLayer && map.hasLayer(newLayer)) {
+            map.removeLayer(newLayer);
+          }
+        }
       } catch (error) {
-        console.error(`Plotting Error (${layerKey}):`, error);
+        console.error(`Critical plotting error during ${layerKey} layer creation/swap:`, error);
+        if (newLayer && map.hasLayer(newLayer)) {
+          map.removeLayer(newLayer);
+        }
       } finally {
-        window[`is${keyCap}Animating`] = false;
+        // Reset animation flag for ALL layers
+        switch (layerKey) {
+          case 'satellite': isSatelliteAnimating = false; break;
+          case 'radar': isRadarAnimating = false; break;
+          case 'isobar': isIsobarAnimating = false; break;
+          case 'wind': isWindAnimating = false; break;
+          case 'lightning': isLightningAnimating = false; break;
+          case 'tropicalStorms': isTropicalStormsAnimating = false; break;
+          case 'rotation': isRotationAnimating = false; break;
+          case 'surfaceFront': isSurfaceFrontAnimating = false; break;
+          case 'observation': isObservationAnimating = false; break;
+          case 'nowcast': isNowcastAnimating = false; break;
+          case 'warning': isWarningAnimating = false; break;
+        }
       }
     }
-    window.toggleWeatherDetails = function (button) {
-      const container = button.closest('.weather-popup-container');
-      const isExpanded = container.getAttribute('data-expanded') === 'true';
-      container.setAttribute('data-expanded', !isExpanded);
-    };
+
     /**
      * Main function to coordinate updating the map layers.
      * @param {number} timestamp - The target timestamp from the slider/current time.
@@ -5054,6 +4946,22 @@
       isPlotting = false;
       updateLegend();
     }
+    window.toggleWeatherDetails = function (button) {
+      const container = button.closest('.weather-popup-container');
+      const detailView = container.querySelector('.detail-view');
+      const summaryView = container.querySelector('.summary-view');
+      const isExpanded = container.getAttribute('data-expanded') === 'true';
+
+      if (isExpanded) {
+        detailView.style.display = 'none';
+        summaryView.style.display = 'block';
+        container.setAttribute('data-expanded', 'false');
+      } else {
+        detailView.style.display = 'block';
+        summaryView.style.display = 'none';
+        container.setAttribute('data-expanded', 'true');
+      }
+    };
     /**
      * Generic logic to check state, fetch URLs, and call the plotting function.
      * @param {string} layerType - The specific layer key.
@@ -5087,18 +4995,7 @@
         case 'surfaceFront': lastTimestamp = lastSurfaceFrontTimestamp; lastType = lastSurfaceFrontType; isAnimating = isSurfaceFrontAnimating; break;
         case 'observation': lastTimestamp = lastObservationTimestamp; lastType = lastObservationType; isAnimating = isObservationAnimating; break;
         case 'nowcast': lastTimestamp = lastNowcastTimestamp; lastType = lastNowcastType; isAnimating = isNowcastAnimating; break;
-        case 'warning':
-          // If the warningLayer was created by warningLayerTypeHandler as an esri-feature,
-          // we don't necessarily need to run the standard plotMainLayer logic.
-          if (warningOptions[layerType].type === 'esri-feature') return;
-
-          layerOptions = warningOptions[layerType];
-          zIndex = WARNING_Z_INDEX;
-          currentLayerRef = warningLayer;
-          lastTimestampRef = 'lastWarningTimestamp';
-          lastTypeRef = 'lastWarningType';
-          isAnimatingRef = 'isWarningAnimating';
-          break;
+        case 'warning': lastTimestamp = lastWarningTimestamp; lastType = lastWarningType; isAnimating = isWarningAnimating; break;
         default: return;
       }
       // Prevent unnecessary re-plotting only when BOTH timestamp AND layer type are unchanged
@@ -5433,15 +5330,20 @@
     }
     function warningLayerTypeHandler() {
       const select = document.getElementById('warningLayerSelect');
-      if (select?.disabled) {
-        clearWarningLayers();
-        return;
+      const type = select.value;
+      const isEnabled = document.getElementById('warningToggle').checked;
+
+      if (isEnabled) {
+        // If updateLayer doesn't exist, call the main update function
+        // In your code, this is likely 'updateMapLayers'
+        if (typeof updateMapLayers === "function") {
+          updateMapLayers();
+        } else {
+          // Fallback: Manually trigger the plot
+          const currentUrl = warningOptions[type].url;
+          plotMainLayer(currentUrl, type, Date.now(), 'warning');
+        }
       }
-      fetchData();
-      const newType = select.value;
-      clearWarningLayers();
-      const timestamp = getCurrentSliderTimestamp();
-      plotLayerIfNecessary(newType, warningOptions, timestamp, 'warning');
     }
     function nowcastLayerTypeHandler() {
       const select = document.getElementById('nowcastLayerSelect');
