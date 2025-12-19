@@ -3802,7 +3802,7 @@
         const rotationOptions = {
             'sevwx-rotation-track-contours': {
                 url: 'https://tiles.meteoguard.dtn.com/tiles/sevwx-rotation-track-contours/${iso}/${iso}/{z}/{x}/{y}.png',
-                interval: 60 * 60 * 1000, // Hourly update, for example
+                interval: 5 * 60 * 1000, // Hourly update, for example
                 type: 'vector-tile', // Typically vector tiles for lines/contours
                 bounds: null,
                 attribution: 'dtn'
