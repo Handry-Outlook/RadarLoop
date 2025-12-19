@@ -2394,6 +2394,27 @@
 
                 </div>
             </div>
+            <!-- Global Lightning Layer - OFF -->
+            <div class="layer-control" id="lightning-control">
+                <div class="top-row">
+                    <div class="label-group">
+                        <span class="label-text">Global Lightning Layer</span>
+                        <span class="tooltip">Select Global Lightning data layer</span>
+                    </div>
+                    <div class="toggle-switch">
+                        <input type="checkbox" id="lightningToggle" checked onchange="toggleLayer('lightning', this.checked);">
+                        <label for="lightningToggle" class="switch"></label>
+                    </div>
+                </div>
+                <select id="lightningLayerSelect" onchange="lightningLayerTypeHandler();" >
+                    <option value="sevwx-lightning-global-plot">Global Lightning</option>
+                </select>
+                <div class="opacity-control">
+                    <input type="range" id="lightningOpacity" min="0" max="1" step="0.05" value="0.8"
+                        oninput="updateLayerOpacities()">
+
+                </div>
+            </div>
             <!-- Global Nowcast Layer - ON -->
             <div class="layer-control" id="nowcast-control">
                 <div class="top-row">
@@ -2469,27 +2490,7 @@
 
 
 
-            <!-- Global Lightning Layer - OFF -->
-            <div class="layer-control" id="lightning-control">
-                <div class="top-row">
-                    <div class="label-group">
-                        <span class="label-text">Global Lightning Layer</span>
-                        <span class="tooltip">Select Global Lightning data layer</span>
-                    </div>
-                    <div class="toggle-switch">
-                        <input type="checkbox" id="lightningToggle" onchange="toggleLayer('lightning', this.checked);">
-                        <label for="lightningToggle" class="switch"></label>
-                    </div>
-                </div>
-                <select id="lightningLayerSelect" onchange="lightningLayerTypeHandler();" disabled>
-                    <option value="sevwx-lightning-global-plot">Global Lightning</option>
-                </select>
-                <div class="opacity-control">
-                    <input type="range" id="lightningOpacity" min="0" max="1" step="0.05" value="0.8"
-                        oninput="updateLayerOpacities()">
-
-                </div>
-            </div>
+            
 
             <!-- Observation Layer - OFF -->
             <div class="layer-control" id="observation-control">
@@ -3770,7 +3771,7 @@
         const lightningOptions = {
             'sevwx-lightning-global-plot': {
                 url: 'https://tiles.meteoguard.dtn.com/tiles/sevwx-lightning-global-plot/${iso}/${iso}/{z}/{x}/{y}.png',
-                interval: 60 * 60 * 1000, // Hourly update, for example
+                interval: 1 * 60 * 1000, // Hourly update, for example
                 type: 'vector-tile', // Typically vector tiles for lines/contours
                 bounds: null,
                 attribution: 'dtn'
