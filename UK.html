@@ -4838,7 +4838,13 @@
                     const checkUrl = tileUrl.replace('{z}/{x}/{y}', '0/0/0');
                     for (let retry = 0; retry < 2; retry++) {
                         try {
-                            const response = await fetch(checkUrl, { method: 'GET' });
+                            const response = await fetch(checkUrl, {
+                                method: 'GET',
+                                credentials: 'omit',   // ❗ no cookies, no auth
+                                cache: 'no-store',     // avoid cached auth artefacts
+                                mode: 'cors',          // explicit, prevents surprises
+                                headers: {}            // browser will still add mandatory ones
+                            });
                             if (response.ok) {
                                 // REMOVE THE arrayBuffer.byteLength CHECK for vector tiles
                                 // const arrayBuffer = await response.arrayBuffer();
