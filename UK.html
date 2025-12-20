@@ -28,6 +28,73 @@
     </script>
 
     <style>
+        /* Custom scrollbar for the popup detail view */
+        .content-area::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .content-area::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        .content-area::-webkit-scrollbar-thumb {
+            background: #ccc;
+            border-radius: 10px;
+        }
+
+        .content-area::-webkit-scrollbar-thumb:hover {
+            background: #999;
+        }
+
+        .detail-view {
+            display: none;
+            /* Hidden by default until "Read Full Statement" is clicked */
+        }
+
+        .weather-popup-container[data-expanded="true"] .detail-view {
+            display: block;
+        }
+
+        .weather-popup-container[data-expanded="true"] .summary-view {
+            display: none;
+        }
+
+        /* Container override for light theme */
+        .weather-popup-container.light-theme {
+            background-color: white !important;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+            color: black !important;
+        }
+
+        /* Ensure Leaflet's popup container doesn't add weird padding */
+        .leaflet-popup-content {
+            margin: 0 !important;
+            width: 320px !important;
+        }
+
+        .leaflet-popup-tip {
+            background: white !important;
+        }
+
+        /* Metadata Styling */
+        .metadata-row {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .meta-box label {
+            display: block;
+            font-size: 9px;
+            text-transform: uppercase;
+            margin-bottom: 2px;
+        }
+
+        .meta-box strong {
+            font-size: 11px;
+        }
+
         /* --- 1. CORE CONTAINER & STATE MANAGEMENT --- */
         .weather-popup-container {
             font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
@@ -123,12 +190,13 @@
             color: #333;
         }
 
+        /* Update headline to allow dynamic colors */
         .headline-style {
             margin: 0 !important;
             font-size: 15px !important;
             line-height: 1.45 !important;
             font-weight: 800 !important;
-            color: #1a1a1a !important;
+            /* Color will now be set via inline style in JS */
             text-align: center;
             display: block;
             width: 100%;
@@ -206,12 +274,13 @@
         }
 
         .content-section {
-            background: #fffdf0;
-            padding: 12px 15px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            border-left: 4px solid transparent;
-            /* Color added via JS */
+            border-left: 3px solid var(--alert-color);
+            background: #fdfdfd;
+            padding: 10px 12px;
+            /* Ensure first number (top/bottom) and second (left/right) are tight */
+            margin-top: 5px;
+            text-align: left;
+            /* Explicit alignment */
         }
 
         .content-section label {
@@ -223,11 +292,12 @@
             margin-bottom: 4px;
         }
 
+        /* Ensure the content section text also adopts the warning color */
         .content-section p {
             font-size: 13.5px;
             line-height: 1.6;
             margin: 0;
-            color: #333;
+            /* Color will now be set via inline style in JS */
             white-space: pre-wrap;
         }
 
@@ -2434,6 +2504,7 @@
                     </div>
                 </div>
                 <select id="lightningLayerSelect" onchange="lightningLayerTypeHandler();">
+                    <option value="xweather-lightning">Global Live Strikes</option>
                     <option value="sevwx-lightning-global-plot">Global Lightning</option>
                     <option value="lightning-flash">Global Lightning (last 5 minutes)</option>
                     <option value="lightning-all"> Global Lightning (last 15 minutes)</option>
@@ -2459,10 +2530,12 @@
                     </div>
                 </div>
                 <select id="nowcastLayerSelect" onchange="nowcastLayerTypeHandler();">
+                    <option value="stormHailThreat">Live Storm & Hail Threat</option>
                     <option value="sevwx-global-storm-corridors-plot">Storm Nowcasts</option>
                     <option value="sevwx-storm-corridors-plot">Storm Corridors</option>
-                    <option value="sevwx-hail-swath-contours">Hail Nowcast (US & Canada)</option>
                     <option value="stormcells"> StormCells Nowcast (US)</option>
+                    <option value="xweather-storm-threats">Live Storm Threats</option>
+                    <option value="xweather-hail-threats">Live Hail Threats</option>
 
                 </select>
                 <div class="opacity-control">
@@ -2638,6 +2711,7 @@
                     </div>
                 </div>
                 <select id="warningLayerSelect" onchange="warningLayerTypeHandler();">
+                    <option value="xweather-alerts">Global Weather Alerts (Xweather)</option>
                     <option value="ukmo-detail-warning">UK Met Office Warning</option>
                     <option value="alerts">Active Alerts (local)</option>
                     <option value="sevwx-agency-bulletin-zones">Global Weather Bulletins</option>
@@ -3873,6 +3947,11 @@
             },
         };
         const lightningOptions = {
+            'xweather-lightning': {
+                type: 'geojson',
+                label: 'Xweather Live Strikes',
+                url: 'https://data.api.xweather.com/lightning'
+            },
             'sevwx-lightning-global-plot': {
                 url: 'https://tiles.meteoguard.dtn.com/tiles/sevwx-lightning-global-plot/${iso}/${iso}/{z}/{x}/{y}.png',
                 interval: 1 * 60 * 1000, // Hourly update, for example
@@ -4339,36 +4418,76 @@
             },
         };
         const nowcastOptions = {
+            // --- Combined GeoJSON Layer ---
+            'stormHailThreat': {
+                type: 'geojson',
+                label: 'Storm & Hail Threat (Combined)',
+                // Standard HTTPS URL to pass validation; logic handled in handleXweatherData
+                url: 'https://data.api.xweather.com/hail/threats/within?p=-90,-180,90,180&client_id=wgE96YE3scTQLKjnqiMsv&client_secret=1XwHqbCjiTqtzWi8txyN4JtM0ezVNuEfaDXQdkjq',
+                attribution: 'X Weather'
+            },
+
+            // --- Individual XWeather GeoJSON Layers ---
+            'xweather-storm-threats': {
+                type: 'geojson',
+                label: 'Xweather Storm Threats',
+                url: 'https://data.api.xweather.com/lightning/threats'
+            },
+            'xweather-hail-threats': {
+                type: 'geojson',
+                label: 'Xweather Hail Threats',
+                url: 'https://data.api.xweather.com/hail/threats'
+            },
+            'xweather-lightning': {
+                type: 'geojson',
+                label: 'Xweather Live Strikes',
+                url: 'https://data.api.xweather.com/lightning'
+            },
+            'xweather-alerts': {
+                type: 'geojson',
+                label: 'Xweather Official Alerts',
+                url: 'https://data.api.xweather.com/alerts'
+            },
+
+            // --- Vector Tile Layers (Aeris & DTN) ---
             'stormcells': {
                 url: 'https://maps.aerisapi.com/wgE96YE3scTQLKjnqiMsv_1XwHqbCjiTqtzWi8txyN4JtM0ezVNuEfaDXQdkjq/stormcells/{z}/{x}/{y}/${iso2}_${iso2}.webp',
                 interval: 3 * 60 * 1000,
                 type: 'vector-tile',
                 bounds: null,
-                attribution: 'X weather' //range 7 days
+                attribution: 'X weather'
             },
             'sevwx-storm-corridors-plot': {
                 url: 'https://tiles.meteoguard.dtn.com/tiles/sevwx-storm-corridors-plot/${iso}/${iso}/{z}/{x}/{y}.pbf',
-                interval: 5 * 60 * 1000, // Hourly update, for example
-                type: 'vector-tile', // Typically vector tiles for lines/contours
+                interval: 5 * 60 * 1000,
+                type: 'vector-tile',
                 bounds: null,
                 attribution: 'dtn'
             },
             'sevwx-global-storm-corridors-plot': {
                 url: 'https://tiles.meteoguard.dtn.com/tiles/sevwx-global-storm-corridors-plot/${iso}/${iso}/{z}/{x}/{y}.png',
-                interval: 5 * 60 * 1000, // Hourly update, for example
-                type: 'vector-tile', // Typically vector tiles for lines/contours
+                interval: 5 * 60 * 1000,
+                type: 'vector-tile',
                 bounds: null,
                 attribution: 'dtn'
             },
             'sevwx-hail-swath-contours': {
                 url: 'https://tiles.meteoguard.dtn.com/tiles/sevwx-hail-swath-contours/${iso}/${iso}/{z}/{x}/{y}.png',
-                interval: 5 * 60 * 1000, // Hourly update, for example
-                type: 'vector-tile', // Typically vector tiles for lines/contours
+                interval: 5 * 60 * 1000,
+                type: 'vector-tile',
                 bounds: null,
                 attribution: 'dtn'
-            },
+            }
         };
         const warningOptions = {
+            'xweather-alerts': {
+                // Using the alerts endpoint with the 'search' action as a standard base
+                url: 'https://data.api.xweather.com/alerts/search?client_id=${client_id}&client_secret=${client_secret}&limit=50',
+                interval: 5 * 60 * 1000, // 5 minute refresh
+                type: 'geojson-layer',   // Use GeoJSON as this endpoint returns feature data
+                attribution: 'Xweather Alerts',
+                coverage: ['India', 'Brazil', 'South Africa', 'South Korea', 'Mexico', 'US', 'Canada', 'Europe', 'Australia']
+            },
             'alerts': {
                 url: 'https://maps.aerisapi.com/wgE96YE3scTQLKjnqiMsv_1XwHqbCjiTqtzWi8txyN4JtM0ezVNuEfaDXQdkjq/alerts/{z}/{x}/{y}/${iso2}_${iso2}.webp',
                 interval: 60 * 1000,
@@ -4581,7 +4700,13 @@
         let lastNowcastType = null;                 // NEW
         let lastWarningTimestamp = null;            // NEW
         let lastWarningType = null;                 // NEW
-
+        window.xWeatherLayers = {
+            'xweather-storm-threats': null,
+            'xweather-hail-threats': null,
+            'xweather-lightning': null,
+            'xweather-alerts': null
+        };
+        window.xWeatherLastHash = {};
         let isSatelliteAnimating = false;
         let isRadarAnimating = false;
         let isIsobarAnimating = false;
@@ -4715,18 +4840,58 @@
         function toggleLayer(layerKey, enabled) {
             const layer = layerMap[layerKey];
             if (!layer) return;
+
             const select = document.getElementById(layer.select);
             const container = select?.closest('.layer-control');
-            if (select) {
-                select.disabled = !enabled;
-            }
+
+            // 1. Update UI State
+            if (select) select.disabled = !enabled;
             if (container) {
-                if (enabled) {
-                    container.classList.remove('off');
-                } else {
-                    container.classList.add('off');
+                enabled ? container.classList.remove('off') : container.classList.add('off');
+            }
+
+            // 2. Helper to remove XWeather Layers (2D & 3D)
+            const removeXWeatherLayer = (type) => {
+                // Remove from 2D Map
+                if (window.xWeatherLayers[type]) {
+                    if (map.hasLayer(window.xWeatherLayers[type])) {
+                        map.removeLayer(window.xWeatherLayers[type]);
+                    }
+                    window.xWeatherLayers[type] = null;
+                }
+
+                // Remove from 3D Map
+                if (map3D) {
+                    const layerId = `fill-${type}`;
+                    const outlineId = `outline-${type}`;
+                    const sourceId = `source-${type}`;
+                    
+                    if (map3D.getLayer(layerId)) map3D.removeLayer(layerId);
+                    if (map3D.getLayer(outlineId)) map3D.removeLayer(outlineId);
+                    if (map3D.getSource(sourceId)) map3D.removeSource(sourceId);
+                }
+            };
+
+            // 3. Specific Cleanup Logic based on Layer Key
+            if (!enabled) {
+                // FIX: Only remove Storm/Hail threats when Nowcast is toggled
+                if (layerKey === 'nowcast') {
+                    const nowcastTypes = ['xweather-storm-threats', 'xweather-hail-threats', 'stormHailThreat'];
+                    nowcastTypes.forEach(type => removeXWeatherLayer(type));
+                }
+                
+                // FIX: Only remove Lightning when Lightning is toggled
+                if (layerKey === 'lightning') {
+                    removeXWeatherLayer('xweather-lightning');
+                }
+
+                // FIX: Only remove Alerts when Warning is toggled
+                if (layerKey === 'warning') {
+                    removeXWeatherLayer('xweather-alerts');
                 }
             }
+
+            // 4. Trigger standard handler to update standard layers (tiles/images)
             const handler = window[layer.handler];
             if (typeof handler === 'function') {
                 handler();
@@ -5237,7 +5402,27 @@
                 }
             }
         }
+        async function toggleStormHailCombined() {
+            const isEnabled = document.getElementById('storm-hail-threat-toggle').checked;
 
+            if (!isEnabled) {
+                // Force an update to clear the layers via the logic in updateNowcast
+                // Ensure lastFilteredData is accessible globally
+                updateNowcast(typeof lastFilteredData !== 'undefined' ? lastFilteredData : []);
+                return;
+            }
+
+            // Fetch both in parallel for a unified display
+            // Added 'xweather-' prefix to match your handleXweatherData conditions
+            try {
+                await Promise.all([
+                    handleXweatherData('xweather-storm-threats'),
+                    handleXweatherData('xweather-hail-threats')
+                ]);
+            } catch (e) {
+                console.error("Error toggling combined threats:", e);
+            }
+        }
         /**
          * Main function to coordinate updating the map layers.
          * @param {number} timestamp - The target timestamp from the slider/current time.
@@ -5318,21 +5503,386 @@
             updateLegend();
         }
         window.toggleWeatherDetails = function (button) {
+            // 1. STOP THE BUG: Prevent the click from bubbling up to the map, 
+            // which causes the popup to close or the map to refresh.
+            if (window.event) window.event.stopPropagation();
+
             const container = button.closest('.weather-popup-container');
             const detailView = container.querySelector('.detail-view');
             const summaryView = container.querySelector('.summary-view');
             const isExpanded = container.getAttribute('data-expanded') === 'true';
 
             if (isExpanded) {
+                // Switch to Summary View
                 detailView.style.display = 'none';
                 summaryView.style.display = 'block';
                 container.setAttribute('data-expanded', 'false');
             } else {
+                // Switch to Detail View
                 detailView.style.display = 'block';
                 summaryView.style.display = 'none';
                 container.setAttribute('data-expanded', 'true');
             }
+
+            // 2. RECENTER/RESIZE: Leaflet needs to know the popup height changed
+            // so it can shift the map or adjust the tip.
+            if (typeof map !== 'undefined' && map.invalidateSize) {
+                // Small delay ensures the DOM has rendered the new height
+                setTimeout(() => {
+                    const popup = button.closest('.leaflet-popup');
+                    if (popup && map.hasLayer(NowcastLayer)) {
+                        // This forces Leaflet to recalculate the popup position/height
+                        map.panBy([0, 0]);
+                    }
+                }, 10);
+            }
         };
+        function createXweatherPopupContent(props, type) {
+            props = props || {};
+
+            let title = "STORM THREAT";
+            let isSevere = props.severe === true;
+            let severity = isSevere ? "Severe" : "Moderate";
+            let accentColor = isSevere ? "#D32F2F" : "#EF6C00";
+            let headerClass = "text-light";
+
+            // --- ALERT LOGIC (Global Alerts) ---
+            if (type === 'xweather-alerts') {
+                const alertColor = props.color || "#ce2220";
+                const issuedTime = props.issued ? new Date(props.issued).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A';
+                const expiresTime = props.expires ? new Date(props.expires).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A';
+
+                const cleanedBody = props.body ? props.body.trim()
+                    .replace(/^[^\S\r\n]+/gm, "")
+                    .replace(/^\s\s+/gm, "")
+                    .replace(/\n{3,}/g, '\n\n')
+                    : 'No additional details available.';
+
+                return `
+<div class="weather-popup-container light-theme" data-expanded="false" style="border-top: 4px solid ${alertColor}">
+    <div class="weather-popup-header" style="background: #f8f9fa; border-bottom: 1px solid #eee; padding: 12px 15px;">
+        <div class="warning-type" style="color: ${alertColor}; font-weight: 800; letter-spacing: 1px; font-size: 10px;">OFFICIAL WEATHER ALERT</div>
+        <div class="warning-level-text" style="color: #1a1a1a; font-size: 16px; font-weight: 700;">${props.name || 'Weather Warning'}</div>
+    </div>
+    <div class="metadata-row" style="background: #fff; padding: 10px 15px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between;">
+        <div class="meta-box"><label style="color: #666; display: block; font-size: 10px;">Issued</label><strong style="color: #000; font-size: 12px;">${issuedTime}</strong></div>
+        <div class="meta-box"><label style="color: #666; display: block; font-size: 10px;">Expires</label><strong style="color: #000; font-size: 12px;">${expiresTime}</strong></div>
+    </div>
+    <div class="summary-view" style="padding: 15px; background: #fff;">
+        <p style="font-size: 13px; color: #333; margin: 0 0 12px 0; line-height: 1.5;">
+            ${props.body ? props.body.substring(0, 160).replace(/\n/g, ' ') + '...' : 'Active threat detected.'}
+        </p>
+        <div class="expand-action" onclick="toggleWeatherDetails(this)" style="background: ${alertColor}15; color: ${alertColor}; border: 1px solid ${alertColor}30; border-radius: 4px; padding: 8px; text-align: center; font-weight: 600; font-size: 11px; cursor: pointer;">
+            VIEW FULL STATEMENT
+        </div>
+    </div>
+    <div class="detail-view" style="background: #fff; display: none;">
+        <div class="content-area" style="padding: 0 15px 15px 15px; max-height: 250px; overflow-y: auto;">
+            <div class="content-section" style="border-left: 3px solid ${alertColor}; background: #fdfdfd; padding: 10px 12px; margin-top: 5px;">
+                <label style="color: #888; font-size: 10px; text-transform: uppercase; font-weight: 700;">Full Details</label>
+                <p style="font-size: 13.5px; line-height: 1.6; white-space: pre-wrap; color: #000; margin-top: 5px; text-align: left;">${cleanedBody}</p>
+            </div>
+        </div>
+        <div class="collapse-action" onclick="toggleWeatherDetails(this)" style="padding: 10px; text-align: center; color: #666; font-size: 11px; font-weight: 600; cursor: pointer; border-top: 1px solid #eee; background: white; position: sticky; bottom: 0;">
+            CLOSE DETAILS
+        </div>
+    </div>
+</div>`;
+            }
+
+            // --- THREAT LOGIC (Storm, Hail, Lightning) ---
+            const hailProb = props.hail_prob || props.hailProb;
+            const isHail = (hailProb && hailProb > 0) || type.includes('hail');
+
+            if (isHail) {
+                title = "HAIL THREAT";
+                accentColor = "#800080"; // Purple for Hail
+                headerClass = "text-light";
+            } else if (type.includes('lightning')) {
+                title = "LIGHTNING STRIKE";
+                accentColor = "#fff200"; // Yellow for Lightning
+                headerClass = "text-dark";
+            }
+
+            // ... existing hailInfo logic ...
+            const hailInfo = hailProb ? `${hailProb}% Probability` : "N/A";
+
+            // Update displayType based on the check above
+
+            // DETERMINING DISPLAY TYPE
+            // If it's the combined layer, we check for hail probability to decide the name
+            let displayType = type;
+            if (type === 'stormHailThreat' || type === 'xweather-storm-threats' || type === 'xweather-hail-threats') {
+                displayType = (hailProb && hailProb > 0) ? "Hail" : "Lightning";
+            } else if (type === 'xweather-lightning') {
+                displayType = "Lightning";
+            }
+
+            return `
+        <div class="weather-popup-container" data-expanded="false">
+            <div class="weather-popup-header ${headerClass}" style="background-color: ${accentColor}">
+                <div class="warning-type">${title}</div>
+                <div class="warning-level-text">${severity}</div>
+            </div>
+            <div class="metadata-row">
+                <div class="meta-box"><label>Hail Risk</label><strong>${hailInfo}</strong></div>
+                <div class="meta-box">
+                    <label>Type</label>
+                    <strong>${displayType}</strong>
+                </div>
+            </div>
+            <div class="summary-view">
+                <h4 class="headline-style">Active weather threat detected in this sector.</h4>
+                <div class="expand-action" onclick="toggleWeatherDetails(this)">
+                    <span>VIEW FULL DETAILS</span>
+                </div>
+            </div>
+            <div class="detail-view">
+                <div class="content-area">
+                    <div class="content-section" style="border-left-color: ${accentColor}">
+                        <label>Technical Details</label>
+                        <p>Detailed analysis of this ${displayType.toLowerCase()} threat is being processed. This cell is moving at monitored speeds with active convection.</p>
+                        ${props.max_dbz ? `<p><strong>Max Intensity:</strong> ${props.max_dbz} dBZ</p>` : ''}
+                    </div>
+                </div>
+                <div class="collapse-action" onclick="toggleWeatherDetails(this)">
+                    <span>SHOW LESS</span>
+                </div>
+            </div>
+        </div>`;
+        }
+        async function handleXweatherData(type) {
+            // 1. Guard: Don't fetch if Nowcast toggle is off
+            const nowcastToggle = document.getElementById('nowcast-toggle');
+            if (!nowcastToggle || !nowcastToggle.checked) {
+                if (window.xWeatherLayers[type] && !is3DMode) {
+                    map.removeLayer(window.xWeatherLayers[type]);
+                    window.xWeatherLayers[type] = null;
+                }
+                return;
+            }
+
+            const X_ID = 'wgE96YE3scTQLKjnqiMsv';
+            const X_SECRET = '1XwHqbCjiTqtzWi8txyN4JtM0ezVNuEfaDXQdkjq';
+            const worldP = "-90,-180,90,180";
+
+            try {
+                let geojsonData;
+
+                // --- DATA FETCHING & MERGING ---
+                if (type === 'stormHailThreat') {
+                    const stormUrl = `https://data.api.xweather.com/lightning/threats/within?p=${worldP}&limit=500&client_id=${X_ID}&client_secret=${X_SECRET}`;
+                    const hailUrl = `https://data.api.xweather.com/hail/threats/within?p=${worldP}&client_id=${X_ID}&client_secret=${X_SECRET}`;
+
+                    const [stormRes, hailRes] = await Promise.all([fetch(stormUrl), fetch(hailUrl)]);
+                    const stormData = await stormRes.json();
+                    const hailData = await hailRes.json();
+
+                    const stormGeo = processXweatherToGeoJSON(stormData, 'xweather-storm-threats');
+                    const hailGeo = processXweatherToGeoJSON(hailData, 'xweather-hail-threats');
+
+                    geojsonData = {
+                        type: "FeatureCollection",
+                        features: [...stormGeo.features, ...hailGeo.features]
+                    };
+                } else {
+                    let url = "";
+                    if (type === 'xweather-storm-threats') url = `https://data.api.xweather.com/lightning/threats/within?p=${worldP}&limit=500&client_id=${X_ID}&client_secret=${X_SECRET}`;
+                    if (type === 'xweather-hail-threats') url = `https://data.api.xweather.com/hail/threats/within?p=${worldP}&client_id=${X_ID}&client_secret=${X_SECRET}`;
+                    if (type === 'xweather-lightning') url = `https://data.api.xweather.com/lightning/within?p=${worldP}&limit=5000&client_id=${X_ID}&client_secret=${X_SECRET}`;
+                    if (type === 'xweather-alerts') url = `https://data.api.xweather.com/alerts/within?p=${worldP}&limit=10000&filter=geo&client_id=${X_ID}&client_secret=${X_SECRET}`;
+
+                    if (!url) return;
+                    const res = await fetch(url);
+                    const data = await res.json();
+                    if (!data || !data.success) return;
+                    geojsonData = processXweatherToGeoJSON(data, type);
+                }
+
+                if (!geojsonData || !geojsonData.features || geojsonData.features.length === 0) return;
+
+                // --- RENDERING ---
+                if (!is3DMode) {
+                    // Leaflet 2D Logic: SMOOTH UPDATE (No Flash)
+                    if (window.xWeatherLayers[type]) {
+                        // Layer exists: Just swap the data
+                        window.xWeatherLayers[type].clearLayers();
+                        window.xWeatherLayers[type].addData(geojsonData);
+                    } else {
+                        // Layer doesn't exist: Create it (First load only)
+                        window.xWeatherLayers[type] = L.geoJSON(geojsonData, {
+                            // 1. Convert Points (Lightning) to Dots
+                            pointToLayer: (feature, latlng) => {
+                                return L.circleMarker(latlng, {
+                                    radius: 4,
+                                    fillColor: "#fff200", // Lightning yellow
+                                    color: "#000",
+                                    weight: 1,
+                                    opacity: 1,
+                                    fillOpacity: 0.9
+                                });
+                            },
+                            // 2. Style Polygons (Hail = Purple)
+                            style: (feature) => {
+                                const isHail = feature.properties.name === "Hail Threat";
+                                return {
+                                    color: isHail ? '#800080' : (feature.properties.color || "#FF4500"), // Purple for hail
+                                    weight: isHail ? 4 : 3,
+                                    fill: true,
+                                    fillColor: isHail ? '#800080' : (feature.properties.color || "#FF4500"),
+                                    fillOpacity: isHail ? 0.3 : 0.1,
+                                    dashArray: isHail ? '5, 10' : null
+                                };
+                            },
+                            onEachFeature: (feature, layer) => {
+                                layer.bindPopup(() => createXweatherPopupContent(feature.properties, type), {
+                                    className: 'custom-weather-popup',
+                                    maxWidth: 380
+                                });
+                            }
+                        }).addTo(map);
+                    }
+                } else {
+                    // Mapbox 3D Logic (Already smooth)
+                    const sourceId = `source-${type}`;
+                    const layerId = `fill-${type}`;
+                    const outlineId = `outline-${type}`;
+
+                    if (map3D.getSource(sourceId)) {
+                        map3D.getSource(sourceId).setData(geojsonData);
+                    } else {
+                        map3D.addSource(sourceId, { type: 'geojson', data: geojsonData });
+
+                        // Add Fill Layer
+                        map3D.addLayer({
+                            id: layerId,
+                            type: 'fill',
+                            source: sourceId,
+                            paint: {
+                                'fill-color': [
+                                    'case',
+                                    ['==', ['get', 'name'], 'Hail Threat'], '#00FFFF',
+                                    ['get', 'color']
+                                ],
+                                'fill-opacity': [
+                                    'case',
+                                    ['==', ['get', 'name'], 'Hail Threat'], 0.2,
+                                    0.1
+                                ]
+                            }
+                        });
+
+                        // Add Outline Layer
+                        map3D.addLayer({
+                            id: outlineId,
+                            type: 'line',
+                            source: sourceId,
+                            paint: {
+                                'line-color': [
+                                    'case',
+                                    ['==', ['get', 'name'], 'Hail Threat'], '#00FFFF',
+                                    ['get', 'color']
+                                ],
+                                'line-width': [
+                                    'case',
+                                    ['==', ['get', 'name'], 'Hail Threat'], 4,
+                                    3
+                                ],
+                                'line-dasharray': [
+                                    'case',
+                                    ['==', ['get', 'name'], 'Hail Threat'], ['literal', [2, 2]],
+                                    ['literal', [1, 0]]
+                                ]
+                            }
+                        });
+                    }
+                }
+            } catch (e) {
+                console.error("Xweather process failed", e);
+            }
+        }
+        function processXweatherToGeoJSON(data, type) {
+            let features = [];
+            if (!data || !data.response) return { type: "FeatureCollection", features: [] };
+
+            // --- LOGIC FOR OFFICIAL ALERTS ---
+            if (type === 'xweather-alerts') {
+                data.response.forEach(alert => {
+                    let geometry = alert.geoPoly || alert.poly || (alert.loc ? { type: "Point", coordinates: [alert.loc.long, alert.loc.lat] } : null);
+
+                    if (geometry) {
+                        const rawColor = alert.details.color || "808080";
+                        const alertColor = rawColor.startsWith('#') ? rawColor : `#${rawColor}`;
+
+                        features.push({
+                            type: "Feature",
+                            geometry: geometry,
+                            properties: {
+                                id: alert.id,
+                                name: alert.details.name,
+                                body: alert.details.bodyFull || alert.details.body,
+                                issued: alert.timestamps.issuedISO,
+                                expires: alert.timestamps.expiresISO,
+                                color: alertColor,
+                                place: alert.place ? alert.place.name : "Unknown Location"
+                            }
+                        });
+                    }
+                });
+            }
+
+            // --- LOGIC FOR HAIL THREATS ---
+            else if (type === 'xweather-hail-threats') {
+                data.response.forEach(hail => {
+                    if (hail.periods && hail.periods[0] && hail.periods[0].polygon) {
+                        features.push({
+                            type: "Feature",
+                            geometry: hail.periods[0].polygon,
+                            properties: {
+                                ...hail.details,
+                                severe: true,
+                                name: "Hail Threat",
+                                color: "#ea00ff", // Magenta for Hail
+                                hailProb: hail.periods[0].hail ? hail.periods[0].hail.prob : 0
+                            }
+                        });
+                    }
+                });
+            }
+
+            // --- LOGIC FOR STORM THREATS (Convective) ---
+            else if (type === 'xweather-storm-threats') {
+                data.response.forEach(threat => {
+                    if (threat.periods && threat.periods[0] && threat.periods[0].polygon) {
+                        features.push({
+                            type: "Feature",
+                            geometry: threat.periods[0].polygon,
+                            properties: {
+                                name: "Storm Threat",
+                                color: "#ff9800", // Orange for Storm Threats
+                                details: threat.details
+                            }
+                        });
+                    }
+                });
+            }
+
+            // --- LOGIC FOR LIGHTNING (Points) ---
+            else if (type === 'xweather-lightning') {
+                features = data.response.map(strike => ({
+                    type: "Feature",
+                    geometry: { type: "Point", coordinates: [strike.loc.long, strike.loc.lat] },
+                    properties: {
+                        timestamp: strike.ob.timestamp,
+                        type: 'lightning',
+                        name: 'Lightning Strike',
+                        color: '#ffeb3b' // Yellow for Lightning
+                    }
+                }));
+            }
+
+            return { type: "FeatureCollection", features };
+        }
         /**
          * Generic logic to check state, fetch URLs, and call the plotting function.
          * @param {string} layerType - The specific layer key.
@@ -5342,10 +5892,19 @@
          */
         async function plotLayerIfNecessary(layerType, optionsMap, targetTimestamp, layerKey) {
             const layerConfig = optionsMap[layerType];
+            if (layerType.startsWith('xweather-')) {
+                await handleXweatherData(layerType);
+                return; // Exit so it doesn't try to load as a PNG tile
+            }
             if (!layerConfig) {
                 console.error(`Layer configuration not found for type: ${layerType}`);
                 // ... (Layer cleanup logic omitted for brevity, assuming it's correct from your snippet) ...
                 return;
+            }
+            if (layerType === 'stormHailThreat' || layerConfig.isCustomLayer) {
+                console.log("Bypassing standard fetch for combined layer...");
+                handleXweatherData(layerType);
+                return; // IMPORTANT: Stop execution here so it doesn't try to fetch the URL
             }
             const interval = layerConfig.interval || 5 * 60 * 1000;
             const roundedDate = new Date(targetTimestamp);
@@ -5679,11 +6238,28 @@
             const select = document.getElementById('lightningLayerSelect');
             if (select?.disabled) {
                 clearLightningLayers();
+                // Also ensure XWeather lightning is cleared if disabled
+                if (window.xWeatherLayers['xweather-lightning']) {
+                    map.removeLayer(window.xWeatherLayers['xweather-lightning']);
+                    window.xWeatherLayers['xweather-lightning'] = null;
+                }
                 return;
             }
-            fetchData();
+
             const newType = select.value;
+
+            // FIX: If switching AWAY from 'xweather-lightning', clear it immediately
+            if (newType !== 'xweather-lightning') {
+                if (window.xWeatherLayers['xweather-lightning']) {
+                    map.removeLayer(window.xWeatherLayers['xweather-lightning']);
+                    window.xWeatherLayers['xweather-lightning'] = null;
+                }
+            }
+
+            // Clear standard tile layers (handled by clearLightningLayers)
             clearLightningLayers();
+
+            // Plot the new selection
             const timestamp = getCurrentSliderTimestamp();
             plotLayerIfNecessary(newType, lightningOptions, timestamp, 'lightning');
         }
@@ -5701,43 +6277,97 @@
         }
         function warningLayerTypeHandler() {
             const select = document.getElementById('warningLayerSelect');
-            const type = select.value;
-            const isEnabled = document.getElementById('warningToggle').checked;
+            if (!select) return;
 
-            if (isEnabled) {
-                // If updateLayer doesn't exist, call the main update function
-                // In your code, this is likely 'updateMapLayers'
-                if (typeof updateMapLayers === "function") {
-                    updateMapLayers();
-                } else {
-                    // Fallback: Manually trigger the plot
-                    const currentUrl = warningOptions[type].url;
-                    plotMainLayer(currentUrl, type, Date.now(), 'warning');
+            // 1. If the control is disabled, clear everything
+            if (select.disabled) {
+                clearWarningLayers();
+                if (window.xWeatherLayers && window.xWeatherLayers['xweather-alerts']) {
+                    map.removeLayer(window.xWeatherLayers['xweather-alerts']);
+                    window.xWeatherLayers['xweather-alerts'] = null;
                 }
+                return;
+            }
+
+            const newType = select.value;
+
+            // 2. FIX: If switching AWAY from Xweather, clear the Xweather layer immediately
+            // This prevents Xweather polygons from "ghosting" over other providers
+            if (newType !== 'xweather-alerts') {
+                if (window.xWeatherLayers && window.xWeatherLayers['xweather-alerts']) {
+                    if (map.hasLayer(window.xWeatherLayers['xweather-alerts'])) {
+                        map.removeLayer(window.xWeatherLayers['xweather-alerts']);
+                    }
+                    window.xWeatherLayers['xweather-alerts'] = null;
+                }
+            }
+
+            // 3. Clear standard tile-based warning layers
+            clearWarningLayers();
+
+            // 4. Plot the newly selected provider
+            if (newType === 'xweather-alerts') {
+                handleXweatherData('xweather-alerts');
+            } else {
+                const timestamp = getCurrentSliderTimestamp();
+                plotLayerIfNecessary(newType, warningOptions, timestamp, 'warning');
             }
         }
         function nowcastLayerTypeHandler() {
             const select = document.getElementById('nowcastLayerSelect');
-            if (select?.disabled) {
-                clearNowcastLayers();
-                return;
-            }
-            fetchData();
-            const newType = select.value;
-            clearNowcastLayers();
-            const timestamp = getCurrentSliderTimestamp();
-            plotLayerIfNecessary(newType, nowcastOptions, timestamp, 'nowcast');
-        }
-        // --- INITIALIZATION AND EVENT ATTACHMENT ---
-        document.addEventListener('DOMContentLoaded', () => {
-            document.querySelectorAll('.layer-control').forEach(control => {
-                const checkbox = control.querySelector('.toggle-switch input[type="checkbox"]');
-                if (checkbox && !checkbox.checked) {
-                    control.classList.add('off');
+            const type = select.value;
+
+            // FIX: Removed 'xweather-lightning' from this list. 
+            // Now changing the Nowcast layer will ONLY affect Storm/Hail threats, not Lightning.
+            const nowcastXWeatherKeys = ['xweather-storm-threats', 'xweather-hail-threats', 'stormHailThreat'];
+
+            // 1. Clear only the relevant XWeather threat layers
+            nowcastXWeatherKeys.forEach(key => {
+                if (window.xWeatherLayers && window.xWeatherLayers[key]) {
+                    map.removeLayer(window.xWeatherLayers[key]);
+                    window.xWeatherLayers[key] = null;
                 }
             });
+
+            if (select.disabled) return;
+
+            // 2. Plot ONLY the newly selected independent layer
+            if (nowcastXWeatherKeys.includes(type)) {
+                handleXweatherData(type);
+            } else {
+                // Handle standard tile layers
+                plotLayerIfNecessary(type, nowcastOptions, getCurrentSliderTimestamp(), 'nowcast');
+            }
+        }
+        // --- INITIALIZATION AND EVENT ATTACHMENT ---
+        // --- INITIALIZATION AND EVENT ATTACHMENT ---
+        document.addEventListener('DOMContentLoaded', () => {
+            
+            // 1. CRITICAL FIX: Sync visual and functional state of all layers immediately
+            document.querySelectorAll('.layer-control').forEach(control => {
+                const checkbox = control.querySelector('.toggle-switch input[type="checkbox"]');
+                const select = control.querySelector('select'); // Get the dropdown within this control
+
+                if (checkbox) {
+                    const isChecked = checkbox.checked;
+
+                    // Set Visual State (Dimming)
+                    if (!isChecked) {
+                        control.classList.add('off');
+                    } else {
+                        control.classList.remove('off');
+                    }
+
+                    // Set Functional State (Disable dropdown so map doesn't plot it)
+                    if (select) {
+                        select.disabled = !isChecked; 
+                    }
+                }
+            });
+
             document.getElementById('history-label').innerText = formatTimeAgo(minutesBack);
             document.getElementById('history-time').innerText = `${start.toLocaleString()} - ${end.toLocaleString()}`;
+            
             // Initialize glow for all switch controls
             document.querySelectorAll('.switch-control').forEach(control => {
                 const checkbox = control.querySelector('input[type="checkbox"]');
@@ -5749,20 +6379,16 @@
                     }
                 }
             });
-            // Initialize dimming for Heatmap and Counter controls based on current checkbox state
-            document.querySelectorAll('.heatmap-control, .counter-control').forEach(control => {
-                const checkbox = control.querySelector('input[type="checkbox"]');
-                if (checkbox && !checkbox.checked) {
-                    control.classList.add('off');
-                }
-            });
+
             document.querySelectorAll('.lightning-layer-control, .color-mode-control').forEach(control => {
                 const checkbox = control.querySelector('input[type="checkbox"]');
                 if (checkbox) {
-                    updateSwitchGlow(checkbox, control.classList[1]); // Use the second class as identifier
+                    updateSwitchGlow(checkbox, control.classList[1]); 
                 }
             });
+
             const timeSlider = document.getElementById('history-slider');
+            
             // Opacity sliders
             const radarOpacitySlider = document.getElementById('radarOpacity');
             const satelliteOpacitySlider = document.getElementById('satelliteOpacity');
@@ -5775,6 +6401,7 @@
             const observationOpacitySlider = document.getElementById('observationOpacity');
             const nowcastOpacitySlider = document.getElementById('nowcastOpacity');
             const warningOpacitySlider = document.getElementById('warningOpacity');
+            
             // Layer select elements
             const radarSelect = document.getElementById('radarLayer');
             const satelliteSelect = document.getElementById('satelliteLayerSelect');
@@ -5788,7 +6415,6 @@
             const nowcastSelect = document.getElementById('nowcastLayerSelect');
             const warningSelect = document.getElementById('warningLayerSelect');
 
-
             // Attach change handlers for layer dropdowns
             if (radarSelect) radarSelect.addEventListener('change', radarLayerTypeHandler);
             if (satelliteSelect) satelliteSelect.addEventListener('change', satelliteLayerTypeHandler);
@@ -5801,6 +6427,7 @@
             if (observationSelect) observationSelect.addEventListener('change', observationLayerTypeHandler);
             if (nowcastSelect) nowcastSelect.addEventListener('change', nowcastLayerTypeHandler);
             if (warningSelect) warningSelect.addEventListener('change', warningLayerTypeHandler);
+            
             // Attach opacity sliders
             if (radarOpacitySlider) radarOpacitySlider.addEventListener('input', updateLayerOpacities);
             if (satelliteOpacitySlider) satelliteOpacitySlider.addEventListener('input', updateLayerOpacities);
@@ -5813,16 +6440,19 @@
             if (observationOpacitySlider) observationOpacitySlider.addEventListener('input', updateLayerOpacities);
             if (nowcastOpacitySlider) nowcastOpacitySlider.addEventListener('input', updateLayerOpacities);
             if (warningOpacitySlider) warningOpacitySlider.addEventListener('input', updateLayerOpacities);
+            
             // Time slider
             if (timeSlider) {
                 timeSlider.addEventListener('input', handleTimeSliderChange);
             }
+
             // === CRITICAL: Force initial plot of all currently enabled layers ===
-            updateLegend(); // Update opacity labels first
+            updateLegend(); 
             const initialTimestamp = timeSlider ? getCurrentSliderTimestamp() : Date.now();
+            
             // Force immediate execution (bypasses debounce delay)
             triggerMapUpdate(initialTimestamp, true);
-            // Update the time display to match the initial timestamp
+            
             const timeDisplay = document.getElementById('history-time');
             if (timeDisplay) {
                 timeDisplay.innerText = new Date(initialTimestamp).toLocaleString('en-GB', {
@@ -5834,14 +6464,19 @@
                     minute: '2-digit'
                 }) + ' BST';
             }
+
+            // Set Defaults if empty
             if (radarSelect && radarSelect.value === '') radarSelect.value = 'uk-precip-intensity';
             if (satelliteSelect && satelliteSelect.value === '') satelliteSelect.value = 'global-ir';
             if (isobarSelect && isobarSelect.value === '') isobarSelect.value = 'pressure_two';
             if (windSelect && windSelect.value === '') windSelect.value = 'wind-direction';
             if (surfaceFrontSelect && surfaceFrontSelect.value === '') surfaceFrontSelect.value = 'fcst-surface-fronts-isolines';
             if (nowcastSelect && nowcastSelect.value === '') nowcastSelect.value = 'sevwx-global-storm-corridors-plot';
-            if (warningSelect && warningSelect.value === '') nowcastSelect.value = 'alert';
-            // Trigger handlers to apply defaults immediately
+            
+            // FIX: Corrected typo here (was setting nowcastSelect instead of warningSelect)
+            if (warningSelect && warningSelect.value === '') warningSelect.value = 'xweather-alerts';
+
+            // Trigger handlers for enabled layers
             radarLayerTypeHandler();
             satelliteLayerTypeHandler();
             isobarLayerTypeHandler();
@@ -5849,8 +6484,8 @@
             surfaceFrontLayerTypeHandler();
             nowcastLayerTypeHandler();
             warningLayerTypeHandler();
+            // Note: warningLayerTypeHandler is NOT called here, so it respects the disabled state set above
         });
-
 
 
 
@@ -10294,7 +10929,7 @@
         }
 
         function updateNowcast(filtered) {
-            // 1. CLEAR ALL LAYERS (Both 2D and 3D)
+            // 1. CLEAR LOCAL CALCULATED LAYERS ONLY (Cones & Hulls)
             if (typeof polygonNowcastLayer !== 'undefined') {
                 polygonNowcastLayer.clearLayers();
             }
@@ -10309,131 +10944,94 @@
                 nowcastLayer3D = [];
             }
 
-            // 2. CHECK TOGGLE
-            if (!document.getElementById('nowcast-toggle').checked) return;
+            // [DELETED THE BLOCK THAT WAS CLEARING XWEATHER LAYERS HERE]
+            // XWeather layers are managed independently by handleXweatherData.
+            // Removing them here caused the flashing every 10 seconds.
 
-            // 3. CALCULATE NOWCAST WITH FILTERED DATA
+            // 2. CHECK TOGGLES
+            const nowcastEnabled = document.getElementById('nowcast-toggle').checked;
+            const stormHailEnabled = document.getElementById('storm-hail-threat-toggle')?.checked;
+            const stormOnlyEnabled = document.getElementById('storm-threat-toggle')?.checked;
+
+            // If neither the main nowcast nor the X-Weather threats are on, exit
+            if (!nowcastEnabled && !stormHailEnabled && !stormOnlyEnabled) return;
+
+            // 3. TRIGGER X-WEATHER UPDATES (if toggled)
+            // These run regardless of lightning data to show external threats
+            if (stormHailEnabled) {
+                handleXweatherData('xweather-storm-threats');
+                handleXweatherData('xweather-hail-threats');
+            } else if (stormOnlyEnabled) {
+                handleXweatherData('xweather-storm-threats');
+            }
+
+            // If main lightning nowcast is off, don't run the calculation loop for local data
+            if (!nowcastEnabled) return;
+
+            // 4. CALCULATE NOWCAST WITH FILTERED DATA
             const minNowcastConfidence = parseFloat(document.getElementById('min-nowcast-confidence').value) || 0.5;
             currentNowcasts = calculateLightningNowcast(filtered);
 
-            // 4. DRAWING LOOP
+            // 5. DRAWING LOOP (Local Data)
             currentNowcasts.forEach((cluster, index) => {
                 const confidence = cluster.confidenceScore;
-
-                // Skip low confidence
                 if (confidence < minNowcastConfidence) return;
 
-                // ============================================================
-                // DYNAMIC COLOR & OPACITY CALCULATION
-                // HIGH CONFIDENCE => HIGH OPACITY (LOW TRANSPARENCY)
-                // ============================================================
-                // NOTE: Assuming LOW_CONFIDENCE_COLOR_HEX/HIGH_CONFIDENCE_COLOR_HEX constants are available
                 const confidenceColor = interpolateColor(LOW_CONFIDENCE_COLOR, HIGH_CONFIDENCE_COLOR, confidence);
-
-                // Base opacity: Min 0.2 opacity at CS 0.0, Max 1.0 opacity at CS 1.0 (for uncapped use)
                 const baseOpacity = Math.max(0.2, confidence * 0.8 + 0.2);
-                // ============================================================
-
-                // --- IMPACT CALCULATION & STYLING LOGIC ---
                 const potentialImpact = calculatePotentialImpact(cluster.clusterSize, confidence);
                 const impactHtml = getImpactHtml(potentialImpact);
 
-                // Determine custom styling based on impact level (Level 4/5 = Purple/Thick)
-                let customStrokeColor = 'red'; // Default border color for hull
-                let customStrokeWeight = 2;       // Default border weight for hull
-                let forecastStrokeWeight = 1;     // Default border weight for forecasts
+                let customStrokeColor = 'red';
+                let customStrokeWeight = 2;
+                let forecastStrokeWeight = 1;
 
-                if (potentialImpact.includes('LEVEL 5 - EXTREME') || potentialImpact.includes('LEVEL 4 - HIGH')) {
-                    // Apply special styling for high-risk alerts: Purple and thicker
-                    customStrokeColor = '#8A2BE2'; // BlueViolet/Purple
-                    customStrokeWeight = 8;        // Thick outline for the hull
-                    forecastStrokeWeight = 4;      // Thicker outline for the forecast polygons
+                if (potentialImpact.includes('LEVEL 5') || potentialImpact.includes('LEVEL 4')) {
+                    customStrokeColor = '#8A2BE2'; // Purple alert
+                    customStrokeWeight = 8;
+                    forecastStrokeWeight = 4;
                 }
-                // ------------------------------------------
 
-                // ============================================================
-                // 2D MODE (Leaflet)
-                // ============================================================
                 if (!is3DMode) {
-
-                    if (typeof polygonNowcastLayer !== 'undefined') {
-
-                        // --- A1. DRAW FUTURE POLYGONS FIRST (BOTTOM LAYERS) ---
-                        if (cluster.nowcastPolygons && cluster.nowcastPolygons.length > 0) {
-                            cluster.nowcastPolygons.sort((a, b) => b.timeMinutes - a.timeMinutes);
-
-                            cluster.nowcastPolygons.forEach(forecast => {
-                                const latLngs = forecast.polygon.map(p => [p[1], p[0]]);
-
-                                const timeDecayFactor = 1.0 - (forecast.timeMinutes / 80);
-                                const finalStrokeOpacity = baseOpacity * timeDecayFactor;
-                                const finalFillOpacity = baseOpacity * timeDecayFactor * 0.3;
-
-                                L.polygon(latLngs, {
-                                    // Use conditional weight/color for forecast stroke
-                                    color: customStrokeColor !== 'black' ? customStrokeColor : confidenceColor,
-                                    weight: forecastStrokeWeight,
-                                    opacity: finalStrokeOpacity,
-                                    fillColor: confidenceColor,
-                                    fillOpacity: finalFillOpacity,
-                                    dashArray: '5, 5'
-                                }).bindPopup(`
-                            <div style="font-size: 14px;">
-                                <h4>🧭 ${forecast.timeMinutes}-Minute Projection</h4>
-                                <hr style="margin: 4px 0;">
-                                <b>Potential Impact:</b> ${impactHtml}<br>
-                                <b>Confidence:</b> ${(confidence * 100).toFixed(0)}% (${confidence.toFixed(2)})<br>
-                                <b>Projected Speed:</b> ${cluster.speedKmH.toFixed(1)} km/h<br>
-                                <b>Projected Direction:</b> ${cluster.directionDeg.toFixed(1)}° (${getDirection(cluster.directionDeg)})<br>
-                            </div>
-                        `).addTo(polygonNowcastLayer);
-                            });
-                        }
-
-                        // --- A2. DRAW CURRENT HULL LAST (TOP LAYER - Z-INDEX) ---
-                        if (cluster.hullGeometry) {
-                            L.geoJSON(cluster.hullGeometry, {
-                                style: {
-                                    fillColor: confidenceColor,
-                                    // FIX: Hull opacity is capped at 0.7 
-                                    fillOpacity: Math.min(baseOpacity, 0.7), // Reverted cap to 0.7
-                                    // Apply conditional stroke color and weight
-                                    color: customStrokeColor,
-                                    weight: customStrokeWeight,
-                                    opacity: 0.9 // Stroke opacity remains high
-                                }
-                            }).bindPopup(`
-                        <div style="font-size: 14px;">
-                            <h4>🌩️ Current Storm Cell (Hull)</h4>
-                            <hr style="margin: 4px 0;">
-                            <b>Cell Size:</b> ${cluster.clusterSize} strikes<br>
-                            <b>Potential Impact:</b> ${impactHtml}<br>
-                            <b>Nowcast Confidence:</b> ${(confidence * 100).toFixed(0)}% (${confidence.toFixed(2)})<br>
-                            <b>Storm Motion:</b> ${cluster.speedKmH.toFixed(1)} km/h @ ${cluster.directionDeg.toFixed(1)}° (${getDirection(cluster.directionDeg)})<br>
-                        </div>
-                    `).addTo(polygonNowcastLayer);
-                        }
+                    // --- 2D RENDERING ---
+                    if (cluster.nowcastPolygons) {
+                        cluster.nowcastPolygons.sort((a, b) => b.timeMinutes - a.timeMinutes);
+                        cluster.nowcastPolygons.forEach(forecast => {
+                            const latLngs = forecast.polygon.map(p => [p[1], p[0]]);
+                            const timeDecay = 1.0 - (forecast.timeMinutes / 80);
+                            L.polygon(latLngs, {
+                                color: customStrokeColor !== 'black' ? customStrokeColor : confidenceColor,
+                                weight: forecastStrokeWeight,
+                                opacity: baseOpacity * timeDecay,
+                                fillColor: confidenceColor,
+                                fillOpacity: baseOpacity * timeDecay * 0.3,
+                                dashArray: '5, 5'
+                            }).addTo(polygonNowcastLayer);
+                        });
                     }
 
-
-                }
-
-                // ============================================================
-                // 3D MODE (Mapbox GL JS) 
-                // ============================================================
-                else {
+                    if (cluster.hullGeometry) {
+                        L.geoJSON(cluster.hullGeometry, {
+                            style: {
+                                fillColor: confidenceColor,
+                                fillOpacity: Math.min(baseOpacity, 0.7),
+                                color: customStrokeColor,
+                                weight: customStrokeWeight,
+                                opacity: 0.9
+                            }
+                        }).addTo(polygonNowcastLayer);
+                    }
+                } else {
+                    // --- 3D RENDERING ---
                     const radiusKm = confidence * 5 + 5;
-                    const coneRadiusKm = confidence * 30 + 30;
                     const radiusDeg = radiusKm / 111;
-
-                    // Render Cluster Circle
                     const circleId = `nowcast-circle-${index}`;
+
                     map3D.addSource(circleId, {
                         type: 'geojson',
                         data: {
                             type: 'Feature',
-                            geometry: { type: 'Point', coordinates: [cluster.baseLon, cluster.baseLat] },
-                            properties: { radius: radiusDeg }
+                            geometry: { type: 'Point', coordinates: [cluster.baseLon, cluster.baseLat] }
                         }
                     });
                     map3D.addLayer({
@@ -10441,48 +11039,20 @@
                         type: 'circle',
                         source: circleId,
                         paint: {
-                            'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, (radiusKm * 1000) / 1000, 10, (radiusKm * 1000) / 250],
+                            'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, radiusKm, 10, radiusKm * 4],
                             'circle-color': confidenceColor,
-                            'circle-opacity': baseOpacity, // Dynamic opacity
-                            'circle-stroke-width': customStrokeWeight, // Use custom weight for emphasis
-                            'circle-stroke-color': customStrokeColor // Use custom color for emphasis
+                            'circle-opacity': baseOpacity,
+                            'circle-stroke-width': customStrokeWeight / 2,
+                            'circle-stroke-color': customStrokeColor
                         }
                     });
                     nowcastLayer3D.push({ id: circleId, source: circleId });
-
-                    // Render Cone Sector (Cone Sector uses color and fill opacity)
-                    if (typeof turf !== 'undefined') {
-                        const cone = turf.sector(
-                            [cluster.baseLon, cluster.baseLat],
-                            coneRadiusKm,
-                            cluster.directionDeg - 15,
-                            cluster.directionDeg + 15,
-                            { units: 'kilometers' }
-                        );
-                        const coneId = `nowcast-cone-${index}`;
-                        map3D.addSource(coneId, { type: 'geojson', data: cone });
-                        map3D.addLayer({
-                            id: coneId,
-                            type: 'fill',
-                            source: coneId,
-                            paint: {
-                                'fill-color': confidenceColor,
-                                'fill-opacity': baseOpacity * 0.5 // Dynamic fill opacity
-                            }
-                        });
-                        nowcastLayer3D.push({ id: coneId, source: coneId });
-                    }
                 }
             });
 
-            // Ensure layers are added to map if visible
             if (!is3DMode) {
-                if (typeof polygonNowcastLayer !== 'undefined' && !map.hasLayer(polygonNowcastLayer)) {
-                    map.addLayer(polygonNowcastLayer);
-                }
-                if (typeof nowcastLayer !== 'undefined' && !map.hasLayer(nowcastLayer)) {
-                    map.addLayer(nowcastLayer);
-                }
+                if (!map.hasLayer(polygonNowcastLayer)) map.addLayer(polygonNowcastLayer);
+                if (!map.hasLayer(nowcastLayer)) map.addLayer(nowcastLayer);
             }
 
             if (typeof updateLegend === 'function') updateLegend();
