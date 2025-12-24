@@ -29,6 +29,23 @@
     </script>
 
     <style>
+        /* Remove the default Leaflet popup styling to show ONLY our custom box */
+        .met-office-popup .leaflet-popup-content-wrapper {
+            background: transparent;
+            padding: 0;
+            box-shadow: none;
+        }
+
+        .met-office-popup .leaflet-popup-content {
+            margin: 0;
+            width: auto !important;
+        }
+
+        .met-office-popup .leaflet-popup-tip-container {
+            display: none;
+            /* Optional: removes the little triangle at the bottom */
+        }
+
         /* Styling for MapsGL legends inside your existing Leaflet legend container */
         .legend .awmsgl-legend {
             background: transparent !important;
@@ -5210,287 +5227,416 @@
          * @param {string} layerKey - 'satellite', 'radar', 'isobar', or 'wind'.
          */
         async function plotMainLayer(finalUrl, layerType, timestamp, layerKey) {
-    let layerOptions, zIndex, currentLayerRef, lastTimestampRef, lastTypeRef, isAnimatingRef;
-    switch (layerKey) {
-        case 'satellite':
-            layerOptions = satelliteOptions[layerType];
-            zIndex = SATELLITE_Z_INDEX;
-            currentLayerRef = satelliteLayer;
-            lastTimestampRef = 'lastSatelliteTimestamp';
-            lastTypeRef = 'lastSatelliteType';
-            isAnimatingRef = 'isSatelliteAnimating';
-            break;
-        case 'radar':
-            layerOptions = radarOptions[layerType];
-            zIndex = RADAR_Z_INDEX;
-            currentLayerRef = radarLayer;
-            lastTimestampRef = 'lastRadarTimestamp';
-            lastTypeRef = 'lastRadarType';
-            isAnimatingRef = 'isRadarAnimating';
-            break;
-        case 'isobar':
-            layerOptions = isobarOptions[layerType];
-            zIndex = ISOBAR_Z_INDEX;
-            currentLayerRef = isobarLayer;
-            lastTimestampRef = 'lastIsobarTimestamp';
-            lastTypeRef = 'lastIsobarType';
-            isAnimatingRef = 'isIsobarAnimating';
-            break;
-        case 'wind':
-            layerOptions = windOptions[layerType];
-            zIndex = WIND_Z_INDEX;
-            currentLayerRef = windLayer;
-            lastTimestampRef = 'lastWindTimestamp';
-            lastTypeRef = 'lastWindType';
-            isAnimatingRef = 'isWindAnimating';
-            break;
-        case 'lightning':
-            layerOptions = lightningOptions[layerType];
-            zIndex = LIGHTNING_Z_INDEX;
-            currentLayerRef = lightningLayer;
-            lastTimestampRef = 'lastLightningTimestamp';
-            lastTypeRef = 'lastLightningType';
-            isAnimatingRef = 'isLightningAnimating';
-            break;
-        case 'tropicalStorms':
-            layerOptions = tropicalStormsOptions[layerType];
-            zIndex = TROPICAL_STORMS_Z_INDEX;
-            currentLayerRef = tropicalStormsLayer;
-            lastTimestampRef = 'lastTropicalStormsTimestamp';
-            lastTypeRef = 'lastTropicalStormsType';
-            isAnimatingRef = 'isTropicalStormsAnimating';
-            break;
-        case 'rotation':
-            layerOptions = rotationOptions[layerType];
-            zIndex = ROTATION_Z_INDEX;
-            currentLayerRef = rotationLayer;
-            lastTimestampRef = 'lastRotationTimestamp';
-            lastTypeRef = 'lastRotationType';
-            isAnimatingRef = 'isRotationAnimating';
-            break;
-        case 'surfaceFront':
-            layerOptions = surfaceFrontOptions[layerType];
-            zIndex = SURFACE_FRONT_Z_INDEX;
-            currentLayerRef = surfaceFrontLayer;
-            lastTimestampRef = 'lastSurfaceFrontTimestamp';
-            lastTypeRef = 'lastSurfaceFrontType';
-            isAnimatingRef = 'isSurfaceFrontAnimating';
-            break;
-        case 'observation':
-            layerOptions = observationOptions[layerType];
-            zIndex = OBSERVATION_Z_INDEX;
-            currentLayerRef = observationLayer;
-            lastTimestampRef = 'lastObservationTimestamp';
-            lastTypeRef = 'lastObservationType';
-            isAnimatingRef = 'isObservationAnimating';
-            break;
-        case 'nowcast':
-            layerOptions = nowcastOptions[layerType];
-            zIndex = NOWCAST_Z_INDEX;
-            currentLayerRef = NowcastLayer;
-            lastTimestampRef = 'lastNowcastTimestamp';
-            lastTypeRef = 'lastNowcastType';
-            isAnimatingRef = 'isNowcastAnimating';
-            break;
-        case 'warning':
-            layerOptions = warningOptions[layerType];
-            zIndex = WARNING_Z_INDEX;
-            currentLayerRef = warningLayer;
-            lastTimestampRef = 'lastWarningTimestamp';
-            lastTypeRef = 'lastWarningType';
-            isAnimatingRef = 'isWarningAnimating';
-            break;
-        default:
-            return;
-    }
-
-    const lastPlottedTimestamp = eval(lastTimestampRef);
-    const lastPlottedType = eval(lastTypeRef);
-    const currentOpacity = parseFloat(document.getElementById(`${layerKey}Opacity`)?.value || 0.8);
-    let layerToDispose = currentLayerRef;
-    let newLayer = null;
-
-    try {
-        if (layerOptions.type === 'feature-layer') {
-            newLayer = L.esri.featureLayer({
-                url: finalUrl,
-                pane: 'warningPane',
-                style: (feature) => {
-                    const colors = { 'Yellow': '#FFD700', 'Amber': '#FF8C00', 'Red': '#D32F2F' };
-                    return {
-                        fillColor: colors[feature.properties.warninglevel] || '#FFD700',
-                        weight: 2,
-                        color: '#222',
-                        fillOpacity: currentOpacity,
-                        dashArray: '3'
-                    };
-                }
-            });
-
-            // FIX 1: Tooltip protection
-            newLayer.on('createfeature', (e) => {
-                if (e.layer && e.feature.properties.weathertype) {
-                    e.layer.bindTooltip(e.feature.properties.weathertype, {
-                        permanent: true,
-                        direction: 'center',
-                        className: 'weather-label-style'
-                    }).openTooltip();
-                }
-            });
-
-            // FIX 2: Met Office Popup styled like Xweather
-            newLayer.bindPopup(function (l) {
-                const p = l.feature.properties;
-                const formatTime = (dateInput) => {
-                    if (!dateInput) return 'N/A';
-                    const d = new Date(dateInput);
-                    return isNaN(d.getTime()) ? 'Invalid' : d.toLocaleString('en-GB', {
-                        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
-                    });
-                };
-
-                const colors = { 'Yellow': '#FFD700', 'Amber': '#FF8C00', 'Red': '#D32F2F' };
-                const alertColor = colors[p.warninglevel] || '#FFD700';
-                const isYellow = p.warninglevel === 'Yellow';
-
-                return `
-                <div class="weather-popup-container light-theme" style="border-top: 4px solid ${alertColor}">
-                    <div class="weather-popup-header" style="background: #f8f9fa; border-bottom: 1px solid #eee; padding: 12px 15px;">
-                        <div class="warning-type" style="color: ${alertColor}; font-weight: 800; letter-spacing: 1px; font-size: 10px;">
-                            MET OFFICE ${p.weathertype.toUpperCase()} WARNING
-                        </div>
-                        <div class="warning-level-text" style="color: #1a1a1a; font-size: 16px; font-weight: 700;">
-                            ${p.warninglevel} Warning
-                        </div>
-                    </div>
-                    <div class="metadata-row" style="background: #fff; padding: 10px 15px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between;">
-                        <div class="meta-box">
-                            <label style="color: #666; display: block; font-size: 10px;">Valid From</label>
-                            <strong style="color: #000; font-size: 12px;">${formatTime(p.validfromdate)}</strong>
-                        </div>
-                        <div class="meta-box">
-                            <label style="color: #666; display: block; font-size: 10px;">Until</label>
-                            <strong style="color: #000; font-size: 12px;">${formatTime(p.validtodate)}</strong>
-                        </div>
-                    </div>
-                    <div class="summary-view" style="padding: 15px; background: #fff;">
-                        <p style="font-size: 13px; color: #333; margin: 0 0 12px 0; line-height: 1.5; font-weight: 600;">
-                            ${p.warningheadline || 'Weather Warning'}
-                        </p>
-                        <div class="expand-action" onclick="toggleWeatherDetails(this)" style="background: ${alertColor}15; color: ${isYellow ? '#d4a000' : alertColor}; border: 1px solid ${alertColor}30; border-radius: 4px; padding: 8px; text-align: center; font-weight: 600; font-size: 11px; cursor: pointer;">
-                            VIEW FULL DETAILS
-                        </div>
-                    </div>
-                    <div class="detail-view" style="background: #fff; display: none;">
-                        <div class="content-area" style="padding: 0 15px 15px 15px; max-height: 250px; overflow-y: auto;">
-                            <div class="content-section" style="border-left: 3px solid ${alertColor}; background: #fdfdfd; padding: 10px 12px; margin-top: 5px;">
-                                <p style="font-size: 13.5px; line-height: 1.6; white-space: pre-wrap; color: #000;">${p.warningFurtherDetails || 'No details.'}</p>
-                            </div>
-                        </div>
-                        <div class="collapse-action" onclick="toggleWeatherDetails(this)" style="padding: 10px; text-align: center; color: #666; font-size: 11px; font-weight: 600; cursor: pointer; border-top: 1px solid #eee; background: white;">
-                            CLOSE DETAILS
-                        </div>
-                    </div>
-                </div>`;
-            }, { maxWidth: 380, className: 'custom-weather-popup' });
-
-        } else if (layerOptions.type === 'image') {
-            newLayer = L.imageOverlay(finalUrl, layerOptions.bounds, {
-                opacity: 0.01,
-                zIndex: zIndex,
-                attribution: layerOptions.attribution,
-                className: 'seamless-layer'
-            });
-        } else if (layerOptions.type === 'vector-tile') {
-            try {
-                const defaultStyle = { fill: true, opacity: 0.01, fillOpacity: 0.01, weight: 0, color: 'inherit' };
-                let vectorStyles = (layerKey === 'isobar' || layerKey === 'wind') ? 
-                    { 'default': { stroke: true, color: layerKey === 'isobar' ? '#FFFFFF' : '#88E0FF', weight: 2, opacity: 0.01, fill: false },
-                      'features': { stroke: true, color: layerKey === 'isobar' ? '#FFFFFF' : '#88E0FF', weight: 2, opacity: 0.01, fill: false } } :
-                    { 'default': defaultStyle, 'features': defaultStyle };
-
-                newLayer = L.vectorGrid.protobuf(finalUrl, {
-                    opacity: 0.01,
-                    vectorTileLayerStyles: vectorStyles,
-                    className: 'seamless-layer',
-                    zIndex: zIndex
-                });
-            } catch (error) {
-                newLayer = L.tileLayer(finalUrl, { opacity: 0.01, zIndex: zIndex, attribution: layerOptions.attribution, className: 'seamless-layer' });
-            }
-        } else {
-            newLayer = L.tileLayer(finalUrl, { opacity: 0.01, zIndex: zIndex, attribution: layerOptions.attribution, tms: true, tileSize: 256, className: 'seamless-layer' });
-        }
-
-        if (!newLayer) return;
-        newLayer.addTo(map);
-
-        const layerLoadedPromise = new Promise(resolve => {
-            const timeout = setTimeout(() => resolve(true), 1000);
-            newLayer.once('load', () => { clearTimeout(timeout); resolve(true); });
-            newLayer.once('error', () => { clearTimeout(timeout); resolve(false); });
-        });
-
-        const success = await layerLoadedPromise;
-        
-        const currentType = (document.getElementById(`${layerKey}LayerSelect`) || document.getElementById(`${layerKey}Layer`))?.value || 'none';
-        if (currentType !== layerType || (timestamp !== null && lastPlottedTimestamp === timestamp)) {
-            if (newLayer && map.hasLayer(newLayer)) map.removeLayer(newLayer);
-            return;
-        }
-
-        if (success) {
-            // Update Global Refs
+            let layerOptions, zIndex, currentLayerRef, lastTimestampRef, lastTypeRef, isAnimatingRef;
             switch (layerKey) {
-                case 'satellite': satelliteLayer = newLayer; lastSatelliteTimestamp = timestamp || lastSatelliteTimestamp; lastSatelliteType = layerType; break;
-                case 'radar': radarLayer = newLayer; lastRadarTimestamp = timestamp || lastRadarTimestamp; lastRadarType = layerType; break;
-                case 'isobar': isobarLayer = newLayer; lastIsobarTimestamp = timestamp || lastIsobarTimestamp; lastIsobarType = layerType; break;
-                case 'wind': windLayer = newLayer; lastWindTimestamp = timestamp || lastWindTimestamp; lastWindType = layerType; break;
-                case 'lightning': lightningLayer = newLayer; lastLightningTimestamp = timestamp || lastLightningTimestamp; lastLightningType = layerType; break;
-                case 'tropicalStorms': tropicalStormsLayer = newLayer; lastTropicalStormsTimestamp = timestamp || lastTropicalStormsTimestamp; lastTropicalStormsType = layerType; break;
-                case 'rotation': rotationLayer = newLayer; lastRotationTimestamp = timestamp || lastRotationTimestamp; lastRotationType = layerType; break;
-                case 'surfaceFront': surfaceFrontLayer = newLayer; lastSurfaceFrontTimestamp = timestamp || lastSurfaceFrontTimestamp; lastSurfaceFrontType = layerType; break;
-                case 'observation': observationLayer = newLayer; lastObservationTimestamp = timestamp || lastObservationTimestamp; lastObservationType = layerType; break;
-                case 'nowcast': NowcastLayer = newLayer; lastNowcastTimestamp = timestamp || lastNowcastTimestamp; lastNowcastType = layerType; break;
-                case 'warning': warningLayer = newLayer; lastWarningTimestamp = timestamp || lastWarningTimestamp; lastWarningType = layerType; break;
+                case 'satellite':
+                    layerOptions = satelliteOptions[layerType];
+                    zIndex = SATELLITE_Z_INDEX;
+                    currentLayerRef = satelliteLayer;
+                    lastTimestampRef = 'lastSatelliteTimestamp';
+                    lastTypeRef = 'lastSatelliteType';
+                    isAnimatingRef = 'isSatelliteAnimating';
+                    break;
+                case 'radar':
+                    layerOptions = radarOptions[layerType];
+                    zIndex = RADAR_Z_INDEX;
+                    currentLayerRef = radarLayer;
+                    lastTimestampRef = 'lastRadarTimestamp';
+                    lastTypeRef = 'lastRadarType';
+                    isAnimatingRef = 'isRadarAnimating';
+                    break;
+                case 'isobar':
+                    layerOptions = isobarOptions[layerType];
+                    zIndex = ISOBAR_Z_INDEX;
+                    currentLayerRef = isobarLayer;
+                    lastTimestampRef = 'lastIsobarTimestamp';
+                    lastTypeRef = 'lastIsobarType';
+                    isAnimatingRef = 'isIsobarAnimating';
+                    break;
+                case 'wind':
+                    layerOptions = windOptions[layerType];
+                    zIndex = WIND_Z_INDEX;
+                    currentLayerRef = windLayer;
+                    lastTimestampRef = 'lastWindTimestamp';
+                    lastTypeRef = 'lastWindType';
+                    isAnimatingRef = 'isWindAnimating';
+                    break;
+                case 'lightning':
+                    layerOptions = lightningOptions[layerType];
+                    zIndex = LIGHTNING_Z_INDEX;
+                    currentLayerRef = lightningLayer;
+                    lastTimestampRef = 'lastLightningTimestamp';
+                    lastTypeRef = 'lastLightningType';
+                    isAnimatingRef = 'isLightningAnimating';
+                    break;
+                case 'tropicalStorms':
+                    layerOptions = tropicalStormsOptions[layerType];
+                    zIndex = TROPICAL_STORMS_Z_INDEX;
+                    currentLayerRef = tropicalStormsLayer;
+                    lastTimestampRef = 'lastTropicalStormsTimestamp';
+                    lastTypeRef = 'lastTropicalStormsType';
+                    isAnimatingRef = 'isTropicalStormsAnimating';
+                    break;
+                case 'rotation':
+                    layerOptions = rotationOptions[layerType];
+                    zIndex = ROTATION_Z_INDEX;
+                    currentLayerRef = rotationLayer;
+                    lastTimestampRef = 'lastRotationTimestamp';
+                    lastTypeRef = 'lastRotationType';
+                    isAnimatingRef = 'isRotationAnimating';
+                    break;
+                case 'surfaceFront':
+                    layerOptions = surfaceFrontOptions[layerType];
+                    zIndex = SURFACE_FRONT_Z_INDEX;
+                    currentLayerRef = surfaceFrontLayer;
+                    lastTimestampRef = 'lastSurfaceFrontTimestamp';
+                    lastTypeRef = 'lastSurfaceFrontType';
+                    isAnimatingRef = 'isSurfaceFrontAnimating';
+                    break;
+                case 'observation':
+                    layerOptions = observationOptions[layerType];
+                    zIndex = OBSERVATION_Z_INDEX;
+                    currentLayerRef = observationLayer;
+                    lastTimestampRef = 'lastObservationTimestamp';
+                    lastTypeRef = 'lastObservationType';
+                    isAnimatingRef = 'isObservationAnimating';
+                    break;
+                case 'nowcast':
+                    layerOptions = nowcastOptions[layerType];
+                    zIndex = NOWCAST_Z_INDEX;
+                    currentLayerRef = NowcastLayer;
+                    lastTimestampRef = 'lastNowcastTimestamp';
+                    lastTypeRef = 'lastNowcastType';
+                    isAnimatingRef = 'isNowcastAnimating';
+                    break;
+                case 'warning':
+                    layerOptions = warningOptions[layerType];
+                    zIndex = WARNING_Z_INDEX;
+                    currentLayerRef = warningLayer;
+                    lastTimestampRef = 'lastWarningTimestamp';
+                    lastTypeRef = 'lastWarningType';
+                    isAnimatingRef = 'isWarningAnimating';
+                    break;
+                default:
+                    return;
             }
 
-            if (newLayer.getElement && newLayer.getElement()) newLayer.getElement().style.opacity = currentOpacity;
-            else if (newLayer.setOpacity) newLayer.setOpacity(currentOpacity);
+            const lastPlottedTimestamp = eval(lastTimestampRef);
+            const lastPlottedType = eval(lastTypeRef);
+            const currentOpacity = parseFloat(document.getElementById(`${layerKey}Opacity`)?.value || 0.8);
+            let layerToDispose = currentLayerRef;
+            let newLayer = null;
 
-            // FIX 3: Safety check on removal to prevent 'in null' error
-            if (layerToDispose && map.hasLayer(layerToDispose)) {
-                if (layerToDispose.getElement && layerToDispose.getElement()) layerToDispose.getElement().style.opacity = 0;
-                else if (layerToDispose.setOpacity) layerToDispose.setOpacity(0);
+            try {
+                if (layerOptions.type === 'feature-layer') {
+                    newLayer = L.esri.featureLayer({
+                        url: finalUrl,
+                        pane: 'warningPane',
+                        style: (feature) => {
+                            const colors = { 'Yellow': '#FFD700', 'Amber': '#FF8C00', 'Red': '#D32F2F' };
+                            return {
+                                fillColor: colors[feature.properties.warninglevel] || '#FFD700',
+                                weight: 2,
+                                color: '#222',
+                                fillOpacity: currentOpacity,
+                                dashArray: '3'
+                            };
+                        }
+                    });
+
+                    // FIX 1: Tooltip protection
+                    newLayer.on('createfeature', (e) => {
+                        if (e.layer && e.feature.properties.weathertype) {
+                            e.layer.bindTooltip(e.feature.properties.weathertype, {
+                                permanent: true,
+                                direction: 'center',
+                                className: 'weather-label-style'
+                            }).openTooltip();
+                        }
+                    });
+
+                    // FIX 2: Met Office Popup styled like Xweather
+                    // Met Office Popup with Matrix Dropdown and Versioning
+                    newLayer.bindPopup(function (l) {
+                        const p = l.feature.properties;
+                        const formatTime = (ts) => ts ? new Date(ts).toLocaleString('en-GB', {
+                            weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                        }) : 'N/A';
+
+                        const colors = { 'YELLOW': '#FFD700', 'AMBER': '#FF8C00', 'RED': '#D32F2F' };
+                        const alertColor = colors[p.warninglevel.toUpperCase()] || '#FFD700';
+
+                        const generateMatrix = () => {
+                            const impact = parseInt(p.warningImpact) || 0;
+                            const likelihood = parseInt(p.warningLikelihood) || 0;
+                            const matrixColors = [
+                                ['#00ff00', '#00ff00', '#ccff00', '#ffff00'],
+                                ['#00ff00', '#ccff00', '#ffff00', '#ffcc00'],
+                                ['#ccff00', '#ffff00', '#ffcc00', '#ff6600'],
+                                ['#ffff00', '#ffcc00', '#ff6600', '#ff0000']
+                            ];
+
+                            let gridHtml = '';
+                            for (let r = 3; r >= 0; r--) {
+                                for (let c = 0; c < 4; c++) {
+                                    const isActive = (impact === r + 1 && likelihood === c + 1);
+                                    gridHtml += `<div style="background: ${matrixColors[r][c]}; width:16px; height:16px; border-radius:2px; ${isActive ? 'outline: 2px solid #000; transform: scale(1.2); z-index:2;' : 'opacity:0.3;'}"></div>`;
+                                }
+                            }
+
+                            return `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; margin: 10px 0;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="writing-mode: vertical-rl; transform: rotate(180deg); font-size: 8px; font-weight: 900; color: #888; letter-spacing:1px;">IMPACT →</div>
+                <div style="display: grid; grid-template-columns: repeat(4, 16px); gap: 4px;">
+                    ${gridHtml}
+                </div>
+            </div>
+            <div style="font-size: 8px; font-weight: 900; color: #888; margin-top: 8px; letter-spacing:1px; margin-left: 20px;">
+                LIKELIHOOD &rarr;
+            </div>
+        </div>`;
+                        };
+
+                        return `
+    <div class="weather-popup-container" style="min-width:300px; font-family: 'Inter', sans-serif; color: #333; background: #fff; border-radius: 12px; overflow: hidden; border: 1px solid #ccc; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+        <div style="background: ${alertColor}; padding: 12px 15px;">
+            <div style="color: rgba(0,0,0,0.6); font-weight: 900; font-size: 10px; letter-spacing: 1px;">MET OFFICE WARNING</div>
+            <div style="font-size: 17px; font-weight: 800; color: #000;">${p.weathertype} (${p.warninglevel})</div>
+        </div>
+
+        <div style="background: #fff9e6; padding: 10px 15px; border-bottom: 1px solid #eee; font-size: 12px;">
+            <div style="color: #666; font-size: 9px; font-weight: 800; text-transform: uppercase;">Active Period</div>
+            <div style="font-weight: 600; color: #111;">${formatTime(p.validfromdate)} — ${formatTime(p.validtodate)}</div>
+        </div>
+
+        <div style="padding: 15px; font-size: 14px; font-weight: 600; line-height: 1.4;">${p.warningheadline}</div>
+
+        <div style="border-top: 1px solid #eee;">
+            <div onclick="const content = this.nextElementSibling; content.style.display = content.style.display === 'none' ? 'block' : 'none'; this.querySelector('.arr').innerText = content.style.display === 'none' ? '▼' : '▲';" 
+                 style="padding: 10px 15px; background: #fafafa; font-size: 11px; font-weight: 700; cursor: pointer; display: flex; justify-content: space-between;">
+                RISK ASSESSMENT <span class="arr">▼</span>
+            </div>
+            <div style="display: none; padding: 10px; background: #fff;">${generateMatrix()}</div>
+        </div>
+
+        <div style="border-top: 1px solid #eee;">
+            <div onclick="const content = this.nextElementSibling; content.style.display = content.style.display === 'none' ? 'block' : 'none'; this.querySelector('.arr').innerText = content.style.display === 'none' ? '▼' : '▲';" 
+                 style="padding: 10px 15px; background: #fafafa; font-size: 11px; font-weight: 700; cursor: pointer; display: flex; justify-content: space-between;">
+                WHAT TO EXPECT & DETAILS <span class="arr">▼</span>
+            </div>
+            <div style="display: none; padding: 15px; background: #fff; max-height: 180px; overflow-y: auto; font-size: 12px; line-height: 1.6;">
+                <strong style="display:block; margin-bottom:4px; color:#000;">Expectations:</strong>
+                <div style="margin-bottom:10px;">${p.whatToExpect}</div>
+                <strong style="display:block; margin-bottom:4px; color:#000;">Further Details:</strong>
+                <div>${p.warningFurtherDetails}</div>
+            </div>
+        </div>
+
+        <div style="background: #f7f7f7; padding: 8px 15px; font-size: 9px; color: #888; border-top: 1px solid #eee; display: flex; justify-content: space-between;">
+            <span>Issued: ${p.issuedDateString}</span>
+            <span>v${p.warningVersion}</span>
+        </div>
+    </div>`;
+                    }, {
+                        maxWidth: 350,
+                        className: 'met-office-popup', // Matches the CSS fix above
+                        closeButton: false             // Removes the default 'x' that often looks messy with custom headers
+                    });
+                } else if (layerOptions.type === 'image') {
+                    newLayer = L.imageOverlay(finalUrl, layerOptions.bounds, {
+                        opacity: 0.01,
+                        zIndex: zIndex,
+                        attribution: layerOptions.attribution,
+                        className: 'seamless-layer'
+                    }); newLayer.bindPopup(function (l) {
+                        const p = l.feature.properties;
+
+                        const formatTime = (ts) => ts ? new Date(ts).toLocaleString('en-GB', {
+                            weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                        }) : 'N/A';
+
+                        const colors = { 'YELLOW': '#FFD700', 'AMBER': '#FF8C00', 'RED': '#D32F2F' };
+                        const alertColor = colors[p.warninglevel.toUpperCase()] || '#FFD700';
+
+                        // Matrix Generator with Centered Labels
+                        const generateMatrix = () => {
+                            const impact = parseInt(p.warningImpact) || 0;
+                            const likelihood = parseInt(p.warningLikelihood) || 0;
+                            const matrixColors = [
+                                ['#00ff00', '#00ff00', '#ccff00', '#ffff00'],
+                                ['#00ff00', '#ccff00', '#ffff00', '#ffcc00'],
+                                ['#ccff00', '#ffff00', '#ffcc00', '#ff6600'],
+                                ['#ffff00', '#ffcc00', '#ff6600', '#ff0000']
+                            ];
+
+                            let gridHtml = '';
+                            for (let r = 3; r >= 0; r--) {
+                                for (let c = 0; c < 4; c++) {
+                                    const isActive = (impact === r + 1 && likelihood === c + 1);
+                                    gridHtml += `<div style="background: ${matrixColors[r][c]}; width:16px; height:16px; border-radius:2px; ${isActive ? 'outline: 2px solid #000; transform: scale(1.25); z-index:2; box-shadow: 0 0 5px rgba(0,0,0,0.3);' : 'opacity:0.3;'}"></div>`;
+                                }
+                            }
+
+                            return `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; padding: 10px 0;">
+            <div style="display: flex; align-items: center; gap: 12px; margin-left: -15px;">
+                <div style="writing-mode: vertical-rl; transform: rotate(180deg); font-size: 8px; font-weight: 900; color: #888; letter-spacing:1px;">IMPACT</div>
+                <div style="display: grid; grid-template-columns: repeat(4, 16px); gap: 4px;">
+                    ${gridHtml}
+                </div>
+            </div>
+            <div style="font-size: 8px; font-weight: 900; color: #888; margin-top: 8px; letter-spacing:1px; padding-left: 20px;">
+                LIKELIHOOD &rarr;
+            </div>
+        </div>`;
+                        };
+
+                        // VERSION CHECK LOGIC
+                        const versionNum = parseFloat(p.warningVersion) || 1.0;
+                        const showUpdated = versionNum > 1.0;
+
+                        return `
+    <div class="weather-popup-container" style="min-width:310px; font-family: 'Inter', sans-serif; color: #333; background: #fff; border-radius: 12px; overflow: hidden; border: 1px solid #ccc; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
+        <div style="background: ${alertColor}; padding: 12px 15px;">
+            <div style="color: rgba(0,0,0,0.6); font-weight: 900; font-size: 10px; letter-spacing: 1px;">MET OFFICE WARNING</div>
+            <div style="font-size: 18px; font-weight: 800; color: #000;">${p.weathertype} (${p.warninglevel})</div>
+        </div>
+
+        <div style="background: #fff9e6; padding: 10px 15px; border-bottom: 1px solid #eee; font-size: 12px;">
+            <div style="color: #666; font-size: 9px; font-weight: 800; text-transform: uppercase; margin-bottom: 2px;">Active Period</div>
+            <div style="font-weight: 600; color: #111;">${formatTime(p.validfromdate)} <span style="color:#999;font-weight:400;">to</span> ${formatTime(p.validtodate)}</div>
+        </div>
+
+        <div style="padding: 15px; font-size: 14px; font-weight: 600; line-height: 1.4; color: #111;">${p.warningheadline}</div>
+
+        <div style="border-top: 1px solid #eee;">
+            <div onclick="const c = this.nextElementSibling; c.style.display = c.style.display === 'none' ? 'block' : 'none'; this.querySelector('span').innerText = c.style.display === 'none' ? '▼' : '▲';" 
+                 style="padding: 10px 15px; background: #fafafa; font-size: 11px; font-weight: 700; color: #555; cursor: pointer; display: flex; justify-content: space-between;">
+                RISK ASSESSMENT <span>▼</span>
+            </div>
+            <div style="display: none; padding: 15px; background: #fff; border-bottom: 1px solid #eee;">
+                ${generateMatrix()}
+            </div>
+        </div>
+
+        <div style="border-top: 1px solid #eee;">
+            <div onclick="const c = this.nextElementSibling; c.style.display = c.style.display === 'none' ? 'block' : 'none'; this.querySelector('span').innerText = c.style.display === 'none' ? '▼' : '▲';" 
+                 style="padding: 10px 15px; background: #fafafa; font-size: 11px; font-weight: 700; color: #555; cursor: pointer; display: flex; justify-content: space-between;">
+                WHAT TO EXPECT & DETAILS <span>▼</span>
+            </div>
+            <div style="display: none; padding: 15px; background: #fff; max-height: 200px; overflow-y: auto; font-size: 12px; line-height: 1.6; color: #444;">
+                <p style="margin-top:10px;"><strong>Further Details:</strong><br>${p.warningFurtherDetails}</p>
+                <p><strong>Expectations:</strong><br>${p.whatToExpect}</p>
                 
-                setTimeout(() => {
-                    if (layerToDispose && map.hasLayer(layerToDispose)) {
-                        map.removeLayer(layerToDispose);
+            </div>
+        </div>
+
+        <div style="background: #f7f7f7; padding: 10px 15px; font-size: 9px; color: #888; border-top: 1px solid #eee;">
+            <div style="display: flex; justify-content: space-between;">
+                <span>Issued: ${p.issuedDateString}</span>
+                <span style="font-weight:700;">v${p.warningVersion}</span>
+            </div>
+            ${showUpdated ? `<div style="margin-top: 3px; color: #d32f2f; font-weight: 600;">Updated: ${p.modifiedDateString}</div>` : ''}
+        </div>
+    </div>`;
+                    }, {
+                        maxWidth: 350,
+                        className: 'met-office-popup',
+                        closeButton: false
+                    });
+                } else if (layerOptions.type === 'vector-tile') {
+                    try {
+                        const defaultStyle = { fill: true, opacity: 0.01, fillOpacity: 0.01, weight: 0, color: 'inherit' };
+                        let vectorStyles = (layerKey === 'isobar' || layerKey === 'wind') ?
+                            {
+                                'default': { stroke: true, color: layerKey === 'isobar' ? '#FFFFFF' : '#88E0FF', weight: 2, opacity: 0.01, fill: false },
+                                'features': { stroke: true, color: layerKey === 'isobar' ? '#FFFFFF' : '#88E0FF', weight: 2, opacity: 0.01, fill: false }
+                            } :
+                            { 'default': defaultStyle, 'features': defaultStyle };
+
+                        newLayer = L.vectorGrid.protobuf(finalUrl, {
+                            opacity: 0.01,
+                            vectorTileLayerStyles: vectorStyles,
+                            className: 'seamless-layer',
+                            zIndex: zIndex
+                        });
+                    } catch (error) {
+                        newLayer = L.tileLayer(finalUrl, { opacity: 0.01, zIndex: zIndex, attribution: layerOptions.attribution, className: 'seamless-layer' });
                     }
-                }, 350);
+                } else {
+                    newLayer = L.tileLayer(finalUrl, { opacity: 0.01, zIndex: zIndex, attribution: layerOptions.attribution, tms: true, tileSize: 256, className: 'seamless-layer' });
+                }
+
+                if (!newLayer) return;
+                newLayer.addTo(map);
+
+                const layerLoadedPromise = new Promise(resolve => {
+                    const timeout = setTimeout(() => resolve(true), 1000);
+                    newLayer.once('load', () => { clearTimeout(timeout); resolve(true); });
+                    newLayer.once('error', () => { clearTimeout(timeout); resolve(false); });
+                });
+
+                const success = await layerLoadedPromise;
+
+                const currentType = (document.getElementById(`${layerKey}LayerSelect`) || document.getElementById(`${layerKey}Layer`))?.value || 'none';
+                if (currentType !== layerType || (timestamp !== null && lastPlottedTimestamp === timestamp)) {
+                    if (newLayer && map.hasLayer(newLayer)) map.removeLayer(newLayer);
+                    return;
+                }
+
+                if (success) {
+                    // Update Global Refs
+                    switch (layerKey) {
+                        case 'satellite': satelliteLayer = newLayer; lastSatelliteTimestamp = timestamp || lastSatelliteTimestamp; lastSatelliteType = layerType; break;
+                        case 'radar': radarLayer = newLayer; lastRadarTimestamp = timestamp || lastRadarTimestamp; lastRadarType = layerType; break;
+                        case 'isobar': isobarLayer = newLayer; lastIsobarTimestamp = timestamp || lastIsobarTimestamp; lastIsobarType = layerType; break;
+                        case 'wind': windLayer = newLayer; lastWindTimestamp = timestamp || lastWindTimestamp; lastWindType = layerType; break;
+                        case 'lightning': lightningLayer = newLayer; lastLightningTimestamp = timestamp || lastLightningTimestamp; lastLightningType = layerType; break;
+                        case 'tropicalStorms': tropicalStormsLayer = newLayer; lastTropicalStormsTimestamp = timestamp || lastTropicalStormsTimestamp; lastTropicalStormsType = layerType; break;
+                        case 'rotation': rotationLayer = newLayer; lastRotationTimestamp = timestamp || lastRotationTimestamp; lastRotationType = layerType; break;
+                        case 'surfaceFront': surfaceFrontLayer = newLayer; lastSurfaceFrontTimestamp = timestamp || lastSurfaceFrontTimestamp; lastSurfaceFrontType = layerType; break;
+                        case 'observation': observationLayer = newLayer; lastObservationTimestamp = timestamp || lastObservationTimestamp; lastObservationType = layerType; break;
+                        case 'nowcast': NowcastLayer = newLayer; lastNowcastTimestamp = timestamp || lastNowcastTimestamp; lastNowcastType = layerType; break;
+                        case 'warning': warningLayer = newLayer; lastWarningTimestamp = timestamp || lastWarningTimestamp; lastWarningType = layerType; break;
+                    }
+
+                    if (newLayer.getElement && newLayer.getElement()) newLayer.getElement().style.opacity = currentOpacity;
+                    else if (newLayer.setOpacity) newLayer.setOpacity(currentOpacity);
+
+                    // FIX 3: Safety check on removal to prevent 'in null' error
+                    if (layerToDispose && map.hasLayer(layerToDispose)) {
+                        if (layerToDispose.getElement && layerToDispose.getElement()) layerToDispose.getElement().style.opacity = 0;
+                        else if (layerToDispose.setOpacity) layerToDispose.setOpacity(0);
+
+                        setTimeout(() => {
+                            if (layerToDispose && map.hasLayer(layerToDispose)) {
+                                map.removeLayer(layerToDispose);
+                            }
+                        }, 350);
+                    }
+                    lastValidTileUrls[layerType] = finalUrl;
+                } else {
+                    if (newLayer && map.hasLayer(newLayer)) map.removeLayer(newLayer);
+                }
+            } catch (error) {
+                console.error(`Error plotting ${layerKey}:`, error);
+                if (newLayer && map.hasLayer(newLayer)) map.removeLayer(newLayer);
+            } finally {
+                // Reset animation flags
+                if (layerKey === 'satellite') isSatelliteAnimating = false;
+                else if (layerKey === 'radar') isRadarAnimating = false;
+                else if (layerKey === 'isobar') isIsobarAnimating = false;
+                else if (layerKey === 'wind') isWindAnimating = false;
+                else if (layerKey === 'lightning') isLightningAnimating = false;
+                else if (layerKey === 'tropicalStorms') isTropicalStormsAnimating = false;
+                else if (layerKey === 'rotation') isRotationAnimating = false;
+                else if (layerKey === 'surfaceFront') isSurfaceFrontAnimating = false;
+                else if (layerKey === 'observation') isObservationAnimating = false;
+                else if (layerKey === 'nowcast') isNowcastAnimating = false;
+                else if (layerKey === 'warning') isWarningAnimating = false;
             }
-            lastValidTileUrls[layerType] = finalUrl;
-        } else {
-            if (newLayer && map.hasLayer(newLayer)) map.removeLayer(newLayer);
         }
-    } catch (error) {
-        console.error(`Error plotting ${layerKey}:`, error);
-        if (newLayer && map.hasLayer(newLayer)) map.removeLayer(newLayer);
-    } finally {
-        // Reset animation flags
-        if (layerKey === 'satellite') isSatelliteAnimating = false;
-        else if (layerKey === 'radar') isRadarAnimating = false;
-        else if (layerKey === 'isobar') isIsobarAnimating = false;
-        else if (layerKey === 'wind') isWindAnimating = false;
-        else if (layerKey === 'lightning') isLightningAnimating = false;
-        else if (layerKey === 'tropicalStorms') isTropicalStormsAnimating = false;
-        else if (layerKey === 'rotation') isRotationAnimating = false;
-        else if (layerKey === 'surfaceFront') isSurfaceFrontAnimating = false;
-        else if (layerKey === 'observation') isObservationAnimating = false;
-        else if (layerKey === 'nowcast') isNowcastAnimating = false;
-        else if (layerKey === 'warning') isWarningAnimating = false;
-    }
-}
         async function toggleStormHailCombined() {
             const isEnabled = document.getElementById('storm-hail-threat-toggle').checked;
 
@@ -5591,6 +5737,21 @@
             isPlotting = false;
             updateLegend();
         }
+        window.toggleWeatherDetails = function (headerElement) {
+            const container = headerElement.closest('.weather-popup-container');
+            const content = headerElement.nextElementSibling;
+            const icon = headerElement.querySelector('.toggle-icon');
+
+            if (content.style.display === "none" || content.style.display === "") {
+                content.style.display = "block";
+                if (icon) icon.innerText = "▲";
+                headerElement.style.background = "#f0f0f0";
+            } else {
+                content.style.display = "none";
+                if (icon) icon.innerText = "▼";
+                headerElement.style.background = "#fafafa";
+            }
+        };
         window.toggleWeatherDetails = function (button) {
             // 1. STOP THE BUG: Prevent the click from bubbling up to the map, 
             // which causes the popup to close or the map to refresh.
@@ -5624,6 +5785,29 @@
                         map.panBy([0, 0]);
                     }
                 }, 10);
+            }
+        };
+        window.toggleWeatherDetails = function (btn) {
+            // Find the parent container first to avoid 'null' errors
+            const container = btn.closest('.weather-popup-container');
+            if (!container) return;
+
+            // Find the specific content areas within THIS popup
+            const summary = container.querySelector('.summary-view');
+            const detail = container.querySelector('.detail-view');
+
+            // Toggle visibility logic
+            if (summary && detail) {
+                const isExpanded = container.getAttribute('data-expanded') === 'true';
+                if (isExpanded) {
+                    summary.style.display = 'block';
+                    detail.style.display = 'none';
+                    container.setAttribute('data-expanded', 'false');
+                } else {
+                    summary.style.display = 'none';
+                    detail.style.display = 'block';
+                    container.setAttribute('data-expanded', 'true');
+                }
             }
         };
         function createXweatherPopupContent(props, type) {
