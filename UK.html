@@ -30,20 +30,23 @@
 
     <style>
         /* Styling for MapsGL legends inside your existing Leaflet legend container */
-.legend .awmsgl-legend {
-    background: transparent !important; /* Let your parent .legend handle background */
-    color: inherit !important;
-    padding: 5px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
-}
+        .legend .awmsgl-legend {
+            background: transparent !important;
+            /* Let your parent .legend handle background */
+            color: inherit !important;
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
 
-.legend .awmsgl-legend-title {
-    font-size: 11px;
-    font-weight: bold;
-    text-transform: uppercase;
-    margin-bottom: 5px;
-    color: #ff4444; /* Match your app's red theme */
-}
+        .legend .awmsgl-legend-title {
+            font-size: 11px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+            color: #ff4444;
+            /* Match your app's red theme */
+        }
+
         /* Custom scrollbar for the popup detail view */
         .content-area::-webkit-scrollbar {
             width: 6px;
@@ -64,7 +67,14 @@
 
         .detail-view {
             display: none;
-            /* Hidden by default until "Read Full Statement" is clicked */
+            /* Hidden by default */
+            flex: 1;
+            /* Take remaining space */
+            min-height: 0;
+            /* Critical for scrolling inside flex items */
+            overflow-y: auto;
+            /* Enable vertical scrolling */
+            background: #fff;
         }
 
         .weather-popup-container[data-expanded="true"] .detail-view {
@@ -113,14 +123,14 @@
 
         /* --- 1. CORE CONTAINER & STATE MANAGEMENT --- */
         .weather-popup-container {
-            font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
-            color: #1a1a1a;
-            width: 380px;
-            max-height: 550px;
             display: flex;
             flex-direction: column;
+            max-height: 450px;
+            /* Reduced from 550px to fit better on screens */
+            width: 380px;
             background: #ffffff;
             overflow: hidden;
+            /* Hide overflow of the container itself */
         }
 
         /* Visibility Toggling */
@@ -284,9 +294,18 @@
         }
 
         .detail-view .content-area {
-            padding: 18px;
-            overflow-y: auto;
-            flex: 1;
+            padding: 15px;
+            /* Optional: extra safeguard for older browsers */
+            max-height: 300px;
+        }
+
+        .detail-view::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .detail-view::-webkit-scrollbar-thumb {
+            background: #ccc;
+            border-radius: 4px;
         }
 
         .content-section {
@@ -2520,7 +2539,7 @@
                     </div>
                 </div>
                 <select id="lightningLayerSelect" onchange="lightningLayerTypeHandler();">
-                    
+
                     <option value="xweather-lightning">Global Live Strikes</option>
                     <option value="sevwx-lightning-global-plot">Global Lightning</option>
                     <option value="lightning-flash">Global Lightning (last 5 minutes)</option>
@@ -3376,44 +3395,47 @@
             })
         };
 
-// 1. Initialize the Leaflet Map
-map = L.map('map', { 
-    layers: [baseLayers['mapbox-streets-satellite']], 
-    zoomControl: false 
-}).setView([53.5, -4.5], 5);
+        // 1. Initialize the Leaflet Map
+        map = L.map('map', {
+            layers: [baseLayers['mapbox-streets-satellite']],
+            zoomControl: false
+        }).setView([53.5, -4.5], 5);
+        map.createPane('warningPane');
+        map.getPane('warningPane').style.zIndex = 550; // Ensure it sits above tiles but below markers
+        map.getPane('warningPane').style.pointerEvents = 'none'; // Allow clicks to pass through empty areas
 
-// 2. Credentials (Ensure these are defined)
-const X_ID = 'wgE96YE3scTQLKjnqiMsv';
-const X_SECRET = '1XwHqbCjiTqtzWi8txyN4JtM0ezVNuEfaDXQdkjq';
+        // 2. Credentials (Ensure these are defined)
+        const X_ID = 'wgE96YE3scTQLKjnqiMsv';
+        const X_SECRET = '1XwHqbCjiTqtzWi8txyN4JtM0ezVNuEfaDXQdkjq';
 
-// 3. Initialize the Leaflet-specific Controller
-// Use 'LeafletMapController' instead of 'MapController'
-let mapsglController = null;
+        // 3. Initialize the Leaflet-specific Controller
+        // Use 'LeafletMapController' instead of 'MapController'
+        let mapsglController = null;
 
-try {
-    const account = new aerisweather.mapsgl.Account(X_ID, X_SECRET);
-    mapsglController = new aerisweather.mapsgl.LeafletMapController(map, { 
-        account: account 
-    });
-    console.log("MapsGL Controller initialized for Leaflet");
-} catch (e) {
-    console.error("MapsGL initialization failed:", e);
-}
+        try {
+            const account = new aerisweather.mapsgl.Account(X_ID, X_SECRET);
+            mapsglController = new aerisweather.mapsgl.LeafletMapController(map, {
+                account: account
+            });
+            console.log("MapsGL Controller initialized for Leaflet");
+        } catch (e) {
+            console.error("MapsGL initialization failed:", e);
+        }
 
-// 4. Add the Data Inspector
-// Check if controller exists before adding controls
-if (mapsglController) {
-    const inspectorControl = mapsglController.addDataInspectorControl({
-        eventType: 'click', // Only show data when clicking the map
-        stream: true
-    });
+        // 4. Add the Data Inspector
+        // Check if controller exists before adding controls
+        if (mapsglController) {
+            const inspectorControl = mapsglController.addDataInspectorControl({
+                eventType: 'click', // Only show data when clicking the map
+                stream: true
+            });
 
-    // Optional: Format the data display for specific layers
-    inspectorControl.setEvaluator('lightning-density', {
-        title: 'Strike Density',
-        fn: (value) => `${value.toFixed(2)} strikes / km²`
-    });
-}
+            // Optional: Format the data display for specific layers
+            inspectorControl.setEvaluator('lightning-density', {
+                title: 'Strike Density',
+                fn: (value) => `${value.toFixed(2)} strikes / km²`
+            });
+        }
         map3D = new mapboxgl.Map({
             container: 'map-3d',
             style: 'mapbox://styles/handry-outlook/cm9457ty1009d01sk37353ux2',
@@ -5188,366 +5210,287 @@ if (mapsglController) {
          * @param {string} layerKey - 'satellite', 'radar', 'isobar', or 'wind'.
          */
         async function plotMainLayer(finalUrl, layerType, timestamp, layerKey) {
-            let layerOptions, zIndex, currentLayerRef, lastTimestampRef, lastTypeRef, isAnimatingRef;
-            switch (layerKey) {
-                case 'satellite':
-                    layerOptions = satelliteOptions[layerType];
-                    zIndex = SATELLITE_Z_INDEX;
-                    currentLayerRef = satelliteLayer;
-                    // References for state modification, not direct value access
-                    lastTimestampRef = 'lastSatelliteTimestamp';
-                    lastTypeRef = 'lastSatelliteType';
-                    isAnimatingRef = 'isSatelliteAnimating';
-                    break;
-                case 'radar':
-                    layerOptions = radarOptions[layerType];
-                    zIndex = RADAR_Z_INDEX;
-                    currentLayerRef = radarLayer;
-                    lastTimestampRef = 'lastRadarTimestamp';
-                    lastTypeRef = 'lastRadarType';
-                    isAnimatingRef = 'isRadarAnimating';
-                    break;
-                case 'isobar':
-                    layerOptions = isobarOptions[layerType];
-                    zIndex = ISOBAR_Z_INDEX;
-                    currentLayerRef = isobarLayer;
-                    lastTimestampRef = 'lastIsobarTimestamp';
-                    lastTypeRef = 'lastIsobarType';
-                    isAnimatingRef = 'isIsobarAnimating';
-                    break;
-                case 'wind':
-                    layerOptions = windOptions[layerType];
-                    zIndex = WIND_Z_INDEX;
-                    currentLayerRef = windLayer;
-                    lastTimestampRef = 'lastWindTimestamp';
-                    lastTypeRef = 'lastWindType';
-                    isAnimatingRef = 'isWindAnimating';
-                    break;
-                case 'lightning':
-                    layerOptions = lightningOptions[layerType];
-                    zIndex = LIGHTNING_Z_INDEX;
-                    currentLayerRef = lightningLayer;
-                    lastTimestampRef = 'lastLightningTimestamp';
-                    lastTypeRef = 'lastLightningType';
-                    isAnimatingRef = 'isLightningAnimating';
-                    break;
-                case 'tropicalStorms':
-                    layerOptions = tropicalStormsOptions[layerType];
-                    zIndex = TROPICAL_STORMS_Z_INDEX;
-                    currentLayerRef = tropicalStormsLayer;
-                    lastTimestampRef = 'lastTropicalStormsTimestamp';
-                    lastTypeRef = 'lastTropicalStormsType';
-                    isAnimatingRef = 'isTropicalStormsAnimating';
-                    break;
-                case 'rotation':
-                    layerOptions = rotationOptions[layerType];
-                    zIndex = ROTATION_Z_INDEX;
-                    currentLayerRef = rotationLayer;
-                    lastTimestampRef = 'lastRotationTimestamp';
-                    lastTypeRef = 'lastRotationType';
-                    isAnimatingRef = 'isRotationAnimating';
-                    break;
-                case 'surfaceFront':
-                    layerOptions = surfaceFrontOptions[layerType];
-                    zIndex = SURFACE_FRONT_Z_INDEX;
-                    currentLayerRef = surfaceFrontLayer;
-                    lastTimestampRef = 'lastSurfaceFrontTimestamp';
-                    lastTypeRef = 'lastSurfaceFrontType';
-                    isAnimatingRef = 'isSurfaceFrontAnimating';
-                    break;
-                case 'observation':
-                    layerOptions = observationOptions[layerType];
-                    zIndex = OBSERVATION_Z_INDEX;
-                    currentLayerRef = observationLayer;
-                    lastTimestampRef = 'lastObservationTimestamp';
-                    lastTypeRef = 'lastObservationType';
-                    isAnimatingRef = 'isObservationAnimating';
-                    break;
-                case 'nowcast':
-                    layerOptions = nowcastOptions[layerType];
-                    zIndex = NOWCAST_Z_INDEX;
-                    currentLayerRef = NowcastLayer; // Fixed typo
-                    lastTimestampRef = 'lastNowcastTimestamp';
-                    lastTypeRef = 'lastNowcastType';
-                    isAnimatingRef = 'isNowcastAnimating';
-                    break;
-                case 'warning':
-                    layerOptions = warningOptions[layerType];
-                    zIndex = WARNING_Z_INDEX;
-                    currentLayerRef = warningLayer;
-                    lastTimestampRef = 'lastWarningTimestamp';
-                    lastTypeRef = 'lastWarningType';
-                    isAnimatingRef = 'isWarningAnimating';
-                    break;
-                default:
-                    return;
-            }
-            // Note: Direct use of global variables for comparison before the switch is safer for complex state
-            const lastPlottedTimestamp = eval(lastTimestampRef);
-            const lastPlottedType = eval(lastTypeRef);
-            const currentOpacity = parseFloat(document.getElementById(`${layerKey}Opacity`)?.value || 0.8);
-            let layerToDispose = currentLayerRef;
-            let newLayer = null;
+    let layerOptions, zIndex, currentLayerRef, lastTimestampRef, lastTypeRef, isAnimatingRef;
+    switch (layerKey) {
+        case 'satellite':
+            layerOptions = satelliteOptions[layerType];
+            zIndex = SATELLITE_Z_INDEX;
+            currentLayerRef = satelliteLayer;
+            lastTimestampRef = 'lastSatelliteTimestamp';
+            lastTypeRef = 'lastSatelliteType';
+            isAnimatingRef = 'isSatelliteAnimating';
+            break;
+        case 'radar':
+            layerOptions = radarOptions[layerType];
+            zIndex = RADAR_Z_INDEX;
+            currentLayerRef = radarLayer;
+            lastTimestampRef = 'lastRadarTimestamp';
+            lastTypeRef = 'lastRadarType';
+            isAnimatingRef = 'isRadarAnimating';
+            break;
+        case 'isobar':
+            layerOptions = isobarOptions[layerType];
+            zIndex = ISOBAR_Z_INDEX;
+            currentLayerRef = isobarLayer;
+            lastTimestampRef = 'lastIsobarTimestamp';
+            lastTypeRef = 'lastIsobarType';
+            isAnimatingRef = 'isIsobarAnimating';
+            break;
+        case 'wind':
+            layerOptions = windOptions[layerType];
+            zIndex = WIND_Z_INDEX;
+            currentLayerRef = windLayer;
+            lastTimestampRef = 'lastWindTimestamp';
+            lastTypeRef = 'lastWindType';
+            isAnimatingRef = 'isWindAnimating';
+            break;
+        case 'lightning':
+            layerOptions = lightningOptions[layerType];
+            zIndex = LIGHTNING_Z_INDEX;
+            currentLayerRef = lightningLayer;
+            lastTimestampRef = 'lastLightningTimestamp';
+            lastTypeRef = 'lastLightningType';
+            isAnimatingRef = 'isLightningAnimating';
+            break;
+        case 'tropicalStorms':
+            layerOptions = tropicalStormsOptions[layerType];
+            zIndex = TROPICAL_STORMS_Z_INDEX;
+            currentLayerRef = tropicalStormsLayer;
+            lastTimestampRef = 'lastTropicalStormsTimestamp';
+            lastTypeRef = 'lastTropicalStormsType';
+            isAnimatingRef = 'isTropicalStormsAnimating';
+            break;
+        case 'rotation':
+            layerOptions = rotationOptions[layerType];
+            zIndex = ROTATION_Z_INDEX;
+            currentLayerRef = rotationLayer;
+            lastTimestampRef = 'lastRotationTimestamp';
+            lastTypeRef = 'lastRotationType';
+            isAnimatingRef = 'isRotationAnimating';
+            break;
+        case 'surfaceFront':
+            layerOptions = surfaceFrontOptions[layerType];
+            zIndex = SURFACE_FRONT_Z_INDEX;
+            currentLayerRef = surfaceFrontLayer;
+            lastTimestampRef = 'lastSurfaceFrontTimestamp';
+            lastTypeRef = 'lastSurfaceFrontType';
+            isAnimatingRef = 'isSurfaceFrontAnimating';
+            break;
+        case 'observation':
+            layerOptions = observationOptions[layerType];
+            zIndex = OBSERVATION_Z_INDEX;
+            currentLayerRef = observationLayer;
+            lastTimestampRef = 'lastObservationTimestamp';
+            lastTypeRef = 'lastObservationType';
+            isAnimatingRef = 'isObservationAnimating';
+            break;
+        case 'nowcast':
+            layerOptions = nowcastOptions[layerType];
+            zIndex = NOWCAST_Z_INDEX;
+            currentLayerRef = NowcastLayer;
+            lastTimestampRef = 'lastNowcastTimestamp';
+            lastTypeRef = 'lastNowcastType';
+            isAnimatingRef = 'isNowcastAnimating';
+            break;
+        case 'warning':
+            layerOptions = warningOptions[layerType];
+            zIndex = WARNING_Z_INDEX;
+            currentLayerRef = warningLayer;
+            lastTimestampRef = 'lastWarningTimestamp';
+            lastTypeRef = 'lastWarningType';
+            isAnimatingRef = 'isWarningAnimating';
+            break;
+        default:
+            return;
+    }
+
+    const lastPlottedTimestamp = eval(lastTimestampRef);
+    const lastPlottedType = eval(lastTypeRef);
+    const currentOpacity = parseFloat(document.getElementById(`${layerKey}Opacity`)?.value || 0.8);
+    let layerToDispose = currentLayerRef;
+    let newLayer = null;
+
+    try {
+        if (layerOptions.type === 'feature-layer') {
+            newLayer = L.esri.featureLayer({
+                url: finalUrl,
+                pane: 'warningPane',
+                style: (feature) => {
+                    const colors = { 'Yellow': '#FFD700', 'Amber': '#FF8C00', 'Red': '#D32F2F' };
+                    return {
+                        fillColor: colors[feature.properties.warninglevel] || '#FFD700',
+                        weight: 2,
+                        color: '#222',
+                        fillOpacity: currentOpacity,
+                        dashArray: '3'
+                    };
+                }
+            });
+
+            // FIX 1: Tooltip protection
+            newLayer.on('createfeature', (e) => {
+                if (e.layer && e.feature.properties.weathertype) {
+                    e.layer.bindTooltip(e.feature.properties.weathertype, {
+                        permanent: true,
+                        direction: 'center',
+                        className: 'weather-label-style'
+                    }).openTooltip();
+                }
+            });
+
+            // FIX 2: Met Office Popup styled like Xweather
+            newLayer.bindPopup(function (l) {
+                const p = l.feature.properties;
+                const formatTime = (dateInput) => {
+                    if (!dateInput) return 'N/A';
+                    const d = new Date(dateInput);
+                    return isNaN(d.getTime()) ? 'Invalid' : d.toLocaleString('en-GB', {
+                        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                    });
+                };
+
+                const colors = { 'Yellow': '#FFD700', 'Amber': '#FF8C00', 'Red': '#D32F2F' };
+                const alertColor = colors[p.warninglevel] || '#FFD700';
+                const isYellow = p.warninglevel === 'Yellow';
+
+                return `
+                <div class="weather-popup-container light-theme" style="border-top: 4px solid ${alertColor}">
+                    <div class="weather-popup-header" style="background: #f8f9fa; border-bottom: 1px solid #eee; padding: 12px 15px;">
+                        <div class="warning-type" style="color: ${alertColor}; font-weight: 800; letter-spacing: 1px; font-size: 10px;">
+                            MET OFFICE ${p.weathertype.toUpperCase()} WARNING
+                        </div>
+                        <div class="warning-level-text" style="color: #1a1a1a; font-size: 16px; font-weight: 700;">
+                            ${p.warninglevel} Warning
+                        </div>
+                    </div>
+                    <div class="metadata-row" style="background: #fff; padding: 10px 15px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between;">
+                        <div class="meta-box">
+                            <label style="color: #666; display: block; font-size: 10px;">Valid From</label>
+                            <strong style="color: #000; font-size: 12px;">${formatTime(p.validfromdate)}</strong>
+                        </div>
+                        <div class="meta-box">
+                            <label style="color: #666; display: block; font-size: 10px;">Until</label>
+                            <strong style="color: #000; font-size: 12px;">${formatTime(p.validtodate)}</strong>
+                        </div>
+                    </div>
+                    <div class="summary-view" style="padding: 15px; background: #fff;">
+                        <p style="font-size: 13px; color: #333; margin: 0 0 12px 0; line-height: 1.5; font-weight: 600;">
+                            ${p.warningheadline || 'Weather Warning'}
+                        </p>
+                        <div class="expand-action" onclick="toggleWeatherDetails(this)" style="background: ${alertColor}15; color: ${isYellow ? '#d4a000' : alertColor}; border: 1px solid ${alertColor}30; border-radius: 4px; padding: 8px; text-align: center; font-weight: 600; font-size: 11px; cursor: pointer;">
+                            VIEW FULL DETAILS
+                        </div>
+                    </div>
+                    <div class="detail-view" style="background: #fff; display: none;">
+                        <div class="content-area" style="padding: 0 15px 15px 15px; max-height: 250px; overflow-y: auto;">
+                            <div class="content-section" style="border-left: 3px solid ${alertColor}; background: #fdfdfd; padding: 10px 12px; margin-top: 5px;">
+                                <p style="font-size: 13.5px; line-height: 1.6; white-space: pre-wrap; color: #000;">${p.warningFurtherDetails || 'No details.'}</p>
+                            </div>
+                        </div>
+                        <div class="collapse-action" onclick="toggleWeatherDetails(this)" style="padding: 10px; text-align: center; color: #666; font-size: 11px; font-weight: 600; cursor: pointer; border-top: 1px solid #eee; background: white;">
+                            CLOSE DETAILS
+                        </div>
+                    </div>
+                </div>`;
+            }, { maxWidth: 380, className: 'custom-weather-popup' });
+
+        } else if (layerOptions.type === 'image') {
+            newLayer = L.imageOverlay(finalUrl, layerOptions.bounds, {
+                opacity: 0.01,
+                zIndex: zIndex,
+                attribution: layerOptions.attribution,
+                className: 'seamless-layer'
+            });
+        } else if (layerOptions.type === 'vector-tile') {
             try {
-                if (layerOptions.type === 'feature-layer') {
-                    // ESRI Feature Layer requires L.esri.featureLayer
-                    newLayer = L.esri.featureLayer({
-                        url: finalUrl,
-                        pane: 'warningPane', // Ensure this pane exists or use default
-                        style: (feature) => {
-                            const colors = { 'Yellow': '#fff200', 'Amber': '#FF8C00', 'Red': '#D32F2F' };
-                            return {
-                                fillColor: colors[feature.properties.warninglevel] || '#fff200',
-                                weight: 2,
-                                color: '#222',
-                                fillOpacity: currentOpacity,
-                                dashArray: '3'
-                            };
-                        }
-                    });
+                const defaultStyle = { fill: true, opacity: 0.01, fillOpacity: 0.01, weight: 0, color: 'inherit' };
+                let vectorStyles = (layerKey === 'isobar' || layerKey === 'wind') ? 
+                    { 'default': { stroke: true, color: layerKey === 'isobar' ? '#FFFFFF' : '#88E0FF', weight: 2, opacity: 0.01, fill: false },
+                      'features': { stroke: true, color: layerKey === 'isobar' ? '#FFFFFF' : '#88E0FF', weight: 2, opacity: 0.01, fill: false } } :
+                    { 'default': defaultStyle, 'features': defaultStyle };
 
-                    // Add weather labels (Tooltips)
-                    newLayer.on('createfeature', (e) => {
-                        if (e.feature.properties.weathertype) {
-                            e.layer.bindTooltip(e.feature.properties.weathertype, {
-                                permanent: true,
-                                direction: 'center',
-                                className: 'weather-label-style'
-                            }).openTooltip();
-                        }
-                    });
-
-                    // Bind the detailed UKMO Popup
-                    newLayer.bindPopup(function (l) {
-                        const p = l.feature.properties;
-
-                        // Time Formatter for UK Format
-                        const format24h = (dateInput) => {
-                            if (!dateInput) return 'N/A';
-                            const d = new Date(dateInput);
-                            return isNaN(d.getTime()) ? 'Invalid' : d.toLocaleString('en-GB', {
-                                day: '2-digit', month: '2-digit', year: 'numeric',
-                                hour: '2-digit', minute: '2-digit', hour12: false
-                            }).replace(',', '');
-                        };
-
-                        const accentColor = p.warninglevel === 'Red' ? '#D32F2F' : (p.warninglevel === 'Amber' ? '#EF6C00' : '#fff200');
-                        const headerClass = p.warninglevel === 'Yellow' ? 'text-dark' : 'text-light';
-
-                        return `
-        <div class="weather-popup-container" data-expanded="false">
-          <div class="weather-popup-header ${headerClass}" style="background-color: ${accentColor}">
-            <div class="warning-type">${p.weathertype} WARNING</div>
-            <div class="warning-level-text">${p.warninglevel} Severity</div>
-          </div>
-          <div class="metadata-row">
-            <div class="meta-box"><label>Valid From</label><strong>${format24h(p.validfromdate)}</strong></div>
-            <div class="meta-box"><label>Until</label><strong>${format24h(p.validtodate)}</strong></div>
-          </div>
-          <div class="summary-view">
-             <h4 class="headline-style">${p.warningheadline}</h4>
-             <div class="expand-action" onclick="toggleWeatherDetails(this)">
-                <span>VIEW FULL DETAILS</span> <span class="arrow-icon">▼</span>
-             </div>
-          </div>
-          <div class="detail-view" style="display:none;">
-             <p>${p.warningFurtherDetails || 'No details.'}</p>
-             <div class="collapse-action" onclick="toggleWeatherDetails(this)">
-                <span>BACK</span> <span class="arrow-icon">▲</span>
-             </div>
-          </div>
-        </div>`;
-                    }, { maxWidth: 400, className: 'custom-weather-popup' });
-
-                } else if (layerOptions.type === 'image') {
-                    newLayer = L.imageOverlay(finalUrl, layerOptions.bounds, {
-                        opacity: 0.01,
-                        zIndex: zIndex,
-                        attribution: layerOptions.attribution,
-                        className: 'seamless-layer'
-                    });
-                } else if (layerOptions.type === 'vector-tile') {
-                    try {
-                        const defaultStyle = { fill: true, opacity: 0.01, fillOpacity: 0.01, weight: 0, color: 'inherit' };
-                        let vectorStyles = {};
-                        const baseOpacity = 0.01;
-                        if (layerKey === 'isobar') {
-                            vectorStyles = {
-                                'default': { stroke: true, color: '#FFFFFF', weight: 2, opacity: baseOpacity, fill: false },
-                                'features': { stroke: true, color: '#FFFFFF', weight: 2, opacity: baseOpacity, fill: false }
-                            };
-                        } else if (layerKey === 'wind') {
-                            vectorStyles = {
-                                'default': { stroke: true, color: '#88E0FF', weight: 1, opacity: baseOpacity, fill: false },
-                                'features': { stroke: true, color: '#88E0FF', weight: 1, opacity: baseOpacity, fill: false }
-                            };
-                        } else {
-                            vectorStyles = { 'default': defaultStyle, 'features': defaultStyle };
-                        }
-                        newLayer = L.vectorGrid.protobuf(finalUrl, {
-                            opacity: 0.01,
-                            vectorTileLayerStyles: vectorStyles,
-                            className: 'seamless-layer',
-                            zIndex: zIndex
-                        });
-                    } catch (error) {
-                        newLayer = L.tileLayer(finalUrl, {
-                            opacity: 0.01, zIndex: zIndex, attribution: layerOptions.attribution, className: 'seamless-layer'
-                        });
-                    }
-                } else { // 'tile-layer'
-                    newLayer = L.tileLayer(finalUrl, {
-                        opacity: 0.01,
-                        zIndex: zIndex,
-                        attribution: layerOptions.attribution,
-                        tms: true,
-                        tileSize: 256,
-                        className: 'seamless-layer'
-                    });
-                }
-                if (!newLayer) return;
-                newLayer.addTo(map);
-                // --- Wait for Layer Load ---
-                const layerLoadedPromise = new Promise(resolve => {
-                    const timeout = setTimeout(() => resolve(true), 1000);
-                    newLayer.once('load', () => { clearTimeout(timeout); resolve(true); });
-                    newLayer.once('error', () => { clearTimeout(timeout); resolve(false); });
+                newLayer = L.vectorGrid.protobuf(finalUrl, {
+                    opacity: 0.01,
+                    vectorTileLayerStyles: vectorStyles,
+                    className: 'seamless-layer',
+                    zIndex: zIndex
                 });
-                const success = await layerLoadedPromise;
-                // --- Robustness Check: Requested Timestamp and Layer Type ---
-                // Accessing lastRequested timestamps
-                let requestedTimestamp;
-                switch (layerKey) {
-                    case 'satellite': requestedTimestamp = lastRequestedSatelliteTimestamp; break;
-                    case 'radar': requestedTimestamp = lastRequestedRadarTimestamp; break;
-                    case 'isobar': requestedTimestamp = lastRequestedIsobarTimestamp; break;
-                    case 'wind': requestedTimestamp = lastRequestedWindTimestamp; break;
-                    case 'lightning': requestedTimestamp = lastRequestedLightningTimestamp; break;
-                    case 'tropicalStorms': requestedTimestamp = lastRequestedTropicalStormsTimestamp; break;
-                    case 'rotation': requestedTimestamp = lastRequestedRotationTimestamp; break;
-                    case 'surfaceFront': requestedTimestamp = lastRequestedSurfaceFrontTimestamp; break;
-                    case 'observation': requestedTimestamp = lastRequestedObservationTimestamp; break;
-                    case 'nowcast': requestedTimestamp = lastRequestedNowcastTimestamp; break;
-                    case 'warning': requestedTimestamp = lastRequestedWarningTimestamp; break;
-                }
-                const currentType = (
-                    document.getElementById(`${layerKey}LayerSelect`) ||
-                    document.getElementById(`${layerKey}Layer`)
-                )?.value || 'none';
-                if (currentType !== layerType || (timestamp !== null && lastPlottedTimestamp === timestamp)) {
-                    if (newLayer && map.hasLayer(newLayer)) {
-                        map.removeLayer(newLayer);
-                    }
-                    return;
-                }
-                if (success) {
-                    // 1. Update active layer and state variables (Direct variable modification)
-                    switch (layerKey) {
-                        case 'satellite':
-                            satelliteLayer = newLayer;
-                            lastSatelliteTimestamp = timestamp !== null ? timestamp : lastSatelliteTimestamp;
-                            lastSatelliteType = layerType;
-                            break;
-                        case 'radar':
-                            radarLayer = newLayer;
-                            lastRadarTimestamp = timestamp !== null ? timestamp : lastRadarTimestamp;
-                            lastRadarType = layerType;
-                            break;
-                        case 'isobar':
-                            isobarLayer = newLayer;
-                            lastIsobarTimestamp = timestamp !== null ? timestamp : lastIsobarTimestamp;
-                            lastIsobarType = layerType;
-                            break;
-                        case 'wind':
-                            windLayer = newLayer;
-                            lastWindTimestamp = timestamp !== null ? timestamp : lastWindTimestamp;
-                            lastWindType = layerType;
-                            break;
-                        case 'lightning':
-                            lightningLayer = newLayer;
-                            lastLightningTimestamp = timestamp !== null ? timestamp : lastLightningTimestamp;
-                            lastLightningType = layerType;
-                            break;
-                        case 'tropicalStorms':
-                            tropicalStormsLayer = newLayer;
-                            lastTropicalStormsTimestamp = timestamp !== null ? timestamp : lastTropicalStormsTimestamp;
-                            lastTropicalStormsType = layerType;
-                            break;
-                        case 'rotation':
-                            rotationLayer = newLayer;
-                            lastRotationTimestamp = timestamp !== null ? timestamp : lastRotationTimestamp;
-                            lastRotationType = layerType;
-                            break;
-                        case 'surfaceFront':
-                            surfaceFrontLayer = newLayer;
-                            lastSurfaceFrontTimestamp = timestamp !== null ? timestamp : lastSurfaceFrontTimestamp;
-                            lastSurfaceFrontType = layerType;
-                            break;
-                        case 'observation':
-                            observationLayer = newLayer;
-                            lastObservationTimestamp = timestamp !== null ? timestamp : lastObservationTimestamp;
-                            lastObservationType = layerType;
-                            break;
-                        case 'nowcast':
-                            NowcastLayer = newLayer;
-                            lastNowcastTimestamp = timestamp !== null ? timestamp : lastNowcastTimestamp;
-                            lastNowcastType = layerType;
-                            break;
-                        case 'warning':
-                            warningLayer = newLayer;
-                            lastWarningTimestamp = timestamp !== null ? timestamp : lastWarningTimestamp;
-                            lastWarningType = layerType;
-                            break;
-                    }
-                    // 2. Fade In
-                    if (newLayer.getElement) {
-                        const imgElement = newLayer.getElement();
-                        if (imgElement) imgElement.style.opacity = currentOpacity;
-                    } else if (newLayer.setOpacity) {
-                        newLayer.setOpacity(currentOpacity);
-                    }
-                    // 3. Fade Out & Remove Old Layer
-                    if (layerToDispose && map.hasLayer(layerToDispose)) {
-                        if (layerToDispose.getElement) {
-                            const oldImgElement = layerToDispose.getElement();
-                            if (oldImgElement) oldImgElement.style.opacity = 0;
-                        } else if (layerToDispose.setOpacity) {
-                            layerToDispose.setOpacity(0);
-                        }
-                        setTimeout(() => {
-                            if (map.hasLayer(layerToDispose)) {
-                                map.removeLayer(layerToDispose);
-                            }
-                        }, 350);
-                    }
-                    lastValidTileUrls[layerType] = finalUrl;
-                } else {
-                    if (newLayer && map.hasLayer(newLayer)) {
-                        map.removeLayer(newLayer);
-                    }
-                }
             } catch (error) {
-                console.error(`Critical plotting error during ${layerKey} layer creation/swap:`, error);
-                if (newLayer && map.hasLayer(newLayer)) {
-                    map.removeLayer(newLayer);
-                }
-            } finally {
-                // Reset animation flag for ALL layers
-                switch (layerKey) {
-                    case 'satellite': isSatelliteAnimating = false; break;
-                    case 'radar': isRadarAnimating = false; break;
-                    case 'isobar': isIsobarAnimating = false; break;
-                    case 'wind': isWindAnimating = false; break;
-                    case 'lightning': isLightningAnimating = false; break;
-                    case 'tropicalStorms': isTropicalStormsAnimating = false; break;
-                    case 'rotation': isRotationAnimating = false; break;
-                    case 'surfaceFront': isSurfaceFrontAnimating = false; break;
-                    case 'observation': isObservationAnimating = false; break;
-                    case 'nowcast': isNowcastAnimating = false; break;
-                    case 'warning': isWarningAnimating = false; break;
-                }
+                newLayer = L.tileLayer(finalUrl, { opacity: 0.01, zIndex: zIndex, attribution: layerOptions.attribution, className: 'seamless-layer' });
             }
+        } else {
+            newLayer = L.tileLayer(finalUrl, { opacity: 0.01, zIndex: zIndex, attribution: layerOptions.attribution, tms: true, tileSize: 256, className: 'seamless-layer' });
         }
+
+        if (!newLayer) return;
+        newLayer.addTo(map);
+
+        const layerLoadedPromise = new Promise(resolve => {
+            const timeout = setTimeout(() => resolve(true), 1000);
+            newLayer.once('load', () => { clearTimeout(timeout); resolve(true); });
+            newLayer.once('error', () => { clearTimeout(timeout); resolve(false); });
+        });
+
+        const success = await layerLoadedPromise;
+        
+        const currentType = (document.getElementById(`${layerKey}LayerSelect`) || document.getElementById(`${layerKey}Layer`))?.value || 'none';
+        if (currentType !== layerType || (timestamp !== null && lastPlottedTimestamp === timestamp)) {
+            if (newLayer && map.hasLayer(newLayer)) map.removeLayer(newLayer);
+            return;
+        }
+
+        if (success) {
+            // Update Global Refs
+            switch (layerKey) {
+                case 'satellite': satelliteLayer = newLayer; lastSatelliteTimestamp = timestamp || lastSatelliteTimestamp; lastSatelliteType = layerType; break;
+                case 'radar': radarLayer = newLayer; lastRadarTimestamp = timestamp || lastRadarTimestamp; lastRadarType = layerType; break;
+                case 'isobar': isobarLayer = newLayer; lastIsobarTimestamp = timestamp || lastIsobarTimestamp; lastIsobarType = layerType; break;
+                case 'wind': windLayer = newLayer; lastWindTimestamp = timestamp || lastWindTimestamp; lastWindType = layerType; break;
+                case 'lightning': lightningLayer = newLayer; lastLightningTimestamp = timestamp || lastLightningTimestamp; lastLightningType = layerType; break;
+                case 'tropicalStorms': tropicalStormsLayer = newLayer; lastTropicalStormsTimestamp = timestamp || lastTropicalStormsTimestamp; lastTropicalStormsType = layerType; break;
+                case 'rotation': rotationLayer = newLayer; lastRotationTimestamp = timestamp || lastRotationTimestamp; lastRotationType = layerType; break;
+                case 'surfaceFront': surfaceFrontLayer = newLayer; lastSurfaceFrontTimestamp = timestamp || lastSurfaceFrontTimestamp; lastSurfaceFrontType = layerType; break;
+                case 'observation': observationLayer = newLayer; lastObservationTimestamp = timestamp || lastObservationTimestamp; lastObservationType = layerType; break;
+                case 'nowcast': NowcastLayer = newLayer; lastNowcastTimestamp = timestamp || lastNowcastTimestamp; lastNowcastType = layerType; break;
+                case 'warning': warningLayer = newLayer; lastWarningTimestamp = timestamp || lastWarningTimestamp; lastWarningType = layerType; break;
+            }
+
+            if (newLayer.getElement && newLayer.getElement()) newLayer.getElement().style.opacity = currentOpacity;
+            else if (newLayer.setOpacity) newLayer.setOpacity(currentOpacity);
+
+            // FIX 3: Safety check on removal to prevent 'in null' error
+            if (layerToDispose && map.hasLayer(layerToDispose)) {
+                if (layerToDispose.getElement && layerToDispose.getElement()) layerToDispose.getElement().style.opacity = 0;
+                else if (layerToDispose.setOpacity) layerToDispose.setOpacity(0);
+                
+                setTimeout(() => {
+                    if (layerToDispose && map.hasLayer(layerToDispose)) {
+                        map.removeLayer(layerToDispose);
+                    }
+                }, 350);
+            }
+            lastValidTileUrls[layerType] = finalUrl;
+        } else {
+            if (newLayer && map.hasLayer(newLayer)) map.removeLayer(newLayer);
+        }
+    } catch (error) {
+        console.error(`Error plotting ${layerKey}:`, error);
+        if (newLayer && map.hasLayer(newLayer)) map.removeLayer(newLayer);
+    } finally {
+        // Reset animation flags
+        if (layerKey === 'satellite') isSatelliteAnimating = false;
+        else if (layerKey === 'radar') isRadarAnimating = false;
+        else if (layerKey === 'isobar') isIsobarAnimating = false;
+        else if (layerKey === 'wind') isWindAnimating = false;
+        else if (layerKey === 'lightning') isLightningAnimating = false;
+        else if (layerKey === 'tropicalStorms') isTropicalStormsAnimating = false;
+        else if (layerKey === 'rotation') isRotationAnimating = false;
+        else if (layerKey === 'surfaceFront') isSurfaceFrontAnimating = false;
+        else if (layerKey === 'observation') isObservationAnimating = false;
+        else if (layerKey === 'nowcast') isNowcastAnimating = false;
+        else if (layerKey === 'warning') isWarningAnimating = false;
+    }
+}
         async function toggleStormHailCombined() {
             const isEnabled = document.getElementById('storm-hail-threat-toggle').checked;
 
@@ -5820,17 +5763,26 @@ if (mapsglController) {
                     const stormUrl = `https://data.api.xweather.com/lightning/threats/within?p=${worldP}&limit=500&client_id=${X_ID}&client_secret=${X_SECRET}`;
                     const hailUrl = `https://data.api.xweather.com/hail/threats/within?p=${worldP}&client_id=${X_ID}&client_secret=${X_SECRET}`;
 
-                    const [stormRes, hailRes] = await Promise.all([fetch(stormUrl), fetch(hailUrl)]);
-                    const stormData = await stormRes.json();
-                    const hailData = await hailRes.json();
+                    try {
+                        const [stormRes, hailRes] = await Promise.all([fetch(stormUrl), fetch(hailUrl)]);
 
-                    const stormGeo = processXweatherToGeoJSON(stormData, 'xweather-storm-threats');
-                    const hailGeo = processXweatherToGeoJSON(hailData, 'xweather-hail-threats');
+                        // FIX: Check responses before parsing
+                        if (!stormRes.ok || !hailRes.ok) throw new Error("API response not OK");
 
-                    geojsonData = {
-                        type: "FeatureCollection",
-                        features: [...stormGeo.features, ...hailGeo.features]
-                    };
+                        const stormData = await stormRes.json();
+                        const hailData = await hailRes.json();
+
+                        const stormGeo = processXweatherToGeoJSON(stormData, 'xweather-storm-threats');
+                        const hailGeo = processXweatherToGeoJSON(hailData, 'xweather-hail-threats');
+
+                        geojsonData = {
+                            type: "FeatureCollection",
+                            features: [...stormGeo.features, ...hailGeo.features]
+                        };
+                    } catch (err) {
+                        console.warn("Xweather fetch failed (combined):", err);
+                        return; // Exit gracefully
+                    }
                 } else {
                     let url = "";
                     if (type === 'xweather-storm-threats') url = `https://data.api.xweather.com/lightning/threats/within?p=${worldP}&limit=500&client_id=${X_ID}&client_secret=${X_SECRET}`;
@@ -5839,10 +5791,27 @@ if (mapsglController) {
                     if (type === 'xweather-alerts') url = `https://data.api.xweather.com/alerts/within?p=${worldP}&limit=10000&filter=geo&client_id=${X_ID}&client_secret=${X_SECRET}`;
 
                     if (!url) return;
-                    const res = await fetch(url);
-                    const data = await res.json();
-                    if (!data || !data.success) return;
-                    geojsonData = processXweatherToGeoJSON(data, type);
+
+                    try {
+                        const res = await fetch(url);
+
+                        // FIX: Check response status
+                        if (!res.ok) {
+                            console.warn(`Xweather API Error ${res.status}: ${res.statusText}`);
+                            return;
+                        }
+
+                        // FIX: Check if body is empty to prevent JSON parse error
+                        const text = await res.text();
+                        if (!text) return;
+
+                        const data = JSON.parse(text);
+                        if (!data || !data.success) return;
+                        geojsonData = processXweatherToGeoJSON(data, type);
+                    } catch (err) {
+                        console.warn("Xweather process failed:", err);
+                        return; // Exit gracefully
+                    }
                 }
 
                 if (!geojsonData || !geojsonData.features || geojsonData.features.length === 0) return;
@@ -5853,13 +5822,11 @@ if (mapsglController) {
                     if (window.xWeatherLayers[type]) {
                         // Layer exists: Just swap the data
                         window.xWeatherLayers[type].clearLayers();
-                        window.xWeatherLayers[type].addData(geojsonData)
-                            ;
+                        window.xWeatherLayers[type].addData(geojsonData);
                     } else {
                         // Layer doesn't exist: Create it (First load only)
                         window.xWeatherLayers[type] = L.geoJSON(geojsonData, {
                             // 1. Convert Points (Lightning) to Dots
-
                             pointToLayer: (feature, latlng) => {
                                 return L.circleMarker(latlng, {
                                     radius: 4,
@@ -6188,101 +6155,101 @@ if (mapsglController) {
         function clearNowcastLayers() { if (NowcastLayer && map.hasLayer(NowcastLayer)) map.removeLayer(NowcastLayer); NowcastLayer = null; lastNowcastTimestamp = null; lastNowcastType = null; }
         function clearWarningLayers() { if (warningLayer && map.hasLayer(warningLayer)) map.removeLayer(warningLayer); warningLayer = null; lastWarningTimestamp = null; lastWarningType = null; }
         function updateLayerOpacities() {
-    // 1. Fetch all opacity values
-    const opacities = {
-        radar: parseFloat(document.getElementById('radarOpacity')?.value || 0.8),
-        satellite: parseFloat(document.getElementById('satelliteOpacity')?.value || 0.8),
-        isobar: parseFloat(document.getElementById('isobarOpacity')?.value || 0.8),
-        wind: parseFloat(document.getElementById('windOpacity')?.value || 0.8),
-        lightning: parseFloat(document.getElementById('lightningOpacity')?.value || 0.8),
-        tropicalStorms: parseFloat(document.getElementById('tropicalStormsOpacity')?.value || 0.8),
-        rotation: parseFloat(document.getElementById('rotationOpacity')?.value || 0.8),
-        surfaceFront: parseFloat(document.getElementById('surfaceFrontOpacity')?.value || 0.8),
-        observation: parseFloat(document.getElementById('observationOpacity')?.value || 0.8),
-        nowcast: parseFloat(document.getElementById('nowcastOpacity')?.value || 0.8),
-        warning: parseFloat(document.getElementById('warningOpacity')?.value || 0.8)
-    };
+            // 1. Fetch all opacity values
+            const opacities = {
+                radar: parseFloat(document.getElementById('radarOpacity')?.value || 0.8),
+                satellite: parseFloat(document.getElementById('satelliteOpacity')?.value || 0.8),
+                isobar: parseFloat(document.getElementById('isobarOpacity')?.value || 0.8),
+                wind: parseFloat(document.getElementById('windOpacity')?.value || 0.8),
+                lightning: parseFloat(document.getElementById('lightningOpacity')?.value || 0.8),
+                tropicalStorms: parseFloat(document.getElementById('tropicalStormsOpacity')?.value || 0.8),
+                rotation: parseFloat(document.getElementById('rotationOpacity')?.value || 0.8),
+                surfaceFront: parseFloat(document.getElementById('surfaceFrontOpacity')?.value || 0.8),
+                observation: parseFloat(document.getElementById('observationOpacity')?.value || 0.8),
+                nowcast: parseFloat(document.getElementById('nowcastOpacity')?.value || 0.8),
+                warning: parseFloat(document.getElementById('warningOpacity')?.value || 0.8)
+            };
 
-    // 2. Define standard Leaflet layers
-    const layerList = [
-        { layer: radarLayer, opacity: opacities.radar, color: '#FF8C00', key: 'radar' },
-        { layer: satelliteLayer, opacity: opacities.satellite, color: null, key: 'satellite' },
-        { layer: isobarLayer, opacity: opacities.isobar, color: '#FFFFFF', key: 'isobar' },
-        { layer: windLayer, opacity: opacities.wind, color: '#88E0FF', key: 'wind' },
-        { layer: lightningLayer, opacity: opacities.lightning, color: '#FFFF00', key: 'lightning' },
-        { layer: tropicalStormsLayer, opacity: opacities.tropicalStorms, color: '#FF00FF', key: 'tropicalStorms' },
-        { layer: rotationLayer, opacity: opacities.rotation, color: '#00FFFF', key: 'rotation' },
-        { layer: surfaceFrontLayer, opacity: opacities.surfaceFront, color: '#FFFFFF', key: 'surfaceFront' },
-        { layer: observationLayer, opacity: opacities.observation, color: '#00FF00', key: 'observation' },
-        { layer: NowcastLayer, opacity: opacities.nowcast, color: '#FFA500', key: 'nowcast' },
-        { layer: warningLayer, opacity: opacities.warning, color: '#FF0000', key: 'warning' }
-    ];
+            // 2. Define standard Leaflet layers
+            const layerList = [
+                { layer: radarLayer, opacity: opacities.radar, color: '#FF8C00', key: 'radar' },
+                { layer: satelliteLayer, opacity: opacities.satellite, color: null, key: 'satellite' },
+                { layer: isobarLayer, opacity: opacities.isobar, color: '#FFFFFF', key: 'isobar' },
+                { layer: windLayer, opacity: opacities.wind, color: '#88E0FF', key: 'wind' },
+                { layer: lightningLayer, opacity: opacities.lightning, color: '#FFFF00', key: 'lightning' },
+                { layer: tropicalStormsLayer, opacity: opacities.tropicalStorms, color: '#FF00FF', key: 'tropicalStorms' },
+                { layer: rotationLayer, opacity: opacities.rotation, color: '#00FFFF', key: 'rotation' },
+                { layer: surfaceFrontLayer, opacity: opacities.surfaceFront, color: '#FFFFFF', key: 'surfaceFront' },
+                { layer: observationLayer, opacity: opacities.observation, color: '#00FF00', key: 'observation' },
+                { layer: NowcastLayer, opacity: opacities.nowcast, color: '#FFA500', key: 'nowcast' },
+                { layer: warningLayer, opacity: opacities.warning, color: '#FF0000', key: 'warning' }
+            ];
 
-    // 3. Update Standard Leaflet Layers
-    layerList.forEach(({ layer, opacity, color, key }) => {
-        if (!layer) return;
+            // 3. Update Standard Leaflet Layers
+            layerList.forEach(({ layer, opacity, color, key }) => {
+                if (!layer) return;
 
-        if (key === 'satellite') {
-            const satelliteType = document.getElementById('satelliteLayerSelect')?.value;
-            const config = satelliteOptions[satelliteType];
-            if (config?.type === 'tile-layer' || config?.type === 'image') {
-                if (layer.setOpacity) layer.setOpacity(opacity);
-                else if (layer.getElement) {
+                if (key === 'satellite') {
+                    const satelliteType = document.getElementById('satelliteLayerSelect')?.value;
+                    const config = satelliteOptions[satelliteType];
+                    if (config?.type === 'tile-layer' || config?.type === 'image') {
+                        if (layer.setOpacity) layer.setOpacity(opacity);
+                        else if (layer.getElement) {
+                            const el = layer.getElement();
+                            if (el) el.style.opacity = opacity;
+                        }
+                    }
+                    return;
+                }
+
+                if (layer.setStyle && color) {
+                    layer.setStyle(createVectorLayerStyles(opacity, color));
+                } else if (layer.setOpacity) {
+                    layer.setOpacity(opacity);
+                } else if (layer.getElement) {
                     const el = layer.getElement();
                     if (el) el.style.opacity = opacity;
                 }
+            });
+
+            // 4. Update MapsGL Layers
+            if (mapsglController) {
+                // --- Handle Lightning MapsGL ---
+                const lightningType = document.getElementById('lightningLayerSelect')?.value;
+                const lightningConfig = lightningOptions[lightningType];
+
+                if (lightningConfig?.type === 'mapsgl') {
+                    const layer = mapsglController.getLayer(lightningConfig.id);
+                    if (layer && typeof layer.update === 'function') {
+                        // Per Mapbox GL JS (underlying library for Xweather MapsGL): use paint['raster-opacity'] for raster layers
+                        layer.update({
+                            paint: {
+                                'raster-opacity': opacities.lightning
+                            }
+                        });
+                    }
+                }
+
+                // --- Handle Nowcast MapsGL ---
+                const nowcastType = document.getElementById('nowcastLayerSelect')?.value;
+                const nowcastConfig = nowcastOptions[nowcastType];
+
+                if (nowcastConfig?.type === 'mapsgl') {
+                    const layer = mapsglController.getLayer(nowcastConfig.id);
+                    if (layer && typeof layer.update === 'function') {
+                        // Per Mapbox GL JS (underlying library for Xweather MapsGL): use paint['raster-opacity'] for raster layers
+                        layer.update({
+                            paint: {
+                                'raster-opacity': opacities.nowcast
+                            }
+                        });
+                    }
+                }
             }
-            return;
-        }
 
-        if (layer.setStyle && color) {
-            layer.setStyle(createVectorLayerStyles(opacity, color));
-        } else if (layer.setOpacity) {
-            layer.setOpacity(opacity);
-        } else if (layer.getElement) {
-            const el = layer.getElement();
-            if (el) el.style.opacity = opacity;
+            // Update legend with current values
+            updateLegend();
         }
-    });
-
-    // 4. Update MapsGL Layers
-    if (mapsglController) {
-    // --- Handle Lightning MapsGL ---
-    const lightningType = document.getElementById('lightningLayerSelect')?.value;
-    const lightningConfig = lightningOptions[lightningType];
-    
-    if (lightningConfig?.type === 'mapsgl') {
-        const layer = mapsglController.getLayer(lightningConfig.id);
-        if (layer && typeof layer.update === 'function') {
-            // Per Mapbox GL JS (underlying library for Xweather MapsGL): use paint['raster-opacity'] for raster layers
-            layer.update({
-                paint: {
-                    'raster-opacity': opacities.lightning
-                }
-            });
-        }
-    }
-
-    // --- Handle Nowcast MapsGL ---
-    const nowcastType = document.getElementById('nowcastLayerSelect')?.value;
-    const nowcastConfig = nowcastOptions[nowcastType];
-    
-    if (nowcastConfig?.type === 'mapsgl') {
-        const layer = mapsglController.getLayer(nowcastConfig.id);
-        if (layer && typeof layer.update === 'function') {
-            // Per Mapbox GL JS (underlying library for Xweather MapsGL): use paint['raster-opacity'] for raster layers
-            layer.update({
-                paint: {
-                    'raster-opacity': opacities.nowcast
-                }
-            });
-        }
-    }
-}
-
-    // Update legend with current values
-    updateLegend();
-}
         /**
          * Creates the style object required for L.vectorGrid.setStyle()
          * @param {number} opacity - The target opacity.
@@ -6408,71 +6375,71 @@ if (mapsglController) {
             plotLayerIfNecessary(newType, surfaceFrontOptions, timestamp, 'surfaceFront');
         }
         function lightningLayerTypeHandler() {
-    const select = document.getElementById('lightningLayerSelect');
+            const select = document.getElementById('lightningLayerSelect');
 
-    // 1. Clear everything if disabled
-    if (select?.disabled) {
-        clearLightningLayers();
-        if (window.xWeatherLayers['xweather-lightning']) {
-            map.removeLayer(window.xWeatherLayers['xweather-lightning']);
-            window.xWeatherLayers['xweather-lightning'] = null;
-        }
-        if (mapsglController) {
-            // Remove known MapsGL lightning layers
-            ['lightning-all', 'lightning-density', 'lightning-density-accum'].forEach(id => {
-                mapsglController.removeWeatherLayer(id);
-            });
-        }
-        updateLegend(); // Ensure legend is hidden
-        return;
-    }
-
-    const newType = select.value;
-    const config = lightningOptions[newType];
-
-    // 2. Clear existing standard layers
-    clearLightningLayers();
-
-    // 3. Clear XWeather GeoJSON if switching away
-    if (newType !== 'xweather-lightning') {
-        if (window.xWeatherLayers['xweather-lightning']) {
-            map.removeLayer(window.xWeatherLayers['xweather-lightning']);
-            window.xWeatherLayers['xweather-lightning'] = null;
-        }
-    }
-
-    // 4. Clear MapsGL layers (prevent stacking)
-    if (mapsglController) {
-        ['lightning-all', 'lightning-density', 'lightning-density-accum'].forEach(id => {
-            // Only remove if it's not the one we are currently trying to add
-            if (config?.type !== 'mapsgl' || config.id !== id) {
-                mapsglController.removeWeatherLayer(id);
+            // 1. Clear everything if disabled
+            if (select?.disabled) {
+                clearLightningLayers();
+                if (window.xWeatherLayers['xweather-lightning']) {
+                    map.removeLayer(window.xWeatherLayers['xweather-lightning']);
+                    window.xWeatherLayers['xweather-lightning'] = null;
+                }
+                if (mapsglController) {
+                    // Remove known MapsGL lightning layers
+                    ['lightning-all', 'lightning-density', 'lightning-density-accum'].forEach(id => {
+                        mapsglController.removeWeatherLayer(id);
+                    });
+                }
+                updateLegend(); // Ensure legend is hidden
+                return;
             }
-        });
-    }
 
-    // 5. Handle MapsGL Selection
-    if (config && config.type === 'mapsgl') {
-        // --- ADDED: Get current opacity from slider ---
-        const currentOpacity = parseFloat(document.getElementById('lightningOpacity')?.value || 0.8);
-        
-        console.log(`Adding MapsGL Layer: ${config.id} with opacity: ${currentOpacity}`);
-        
-        // Pass the opacity in the options object
-        mapsglController.addWeatherLayer(config.id, {
-            opacity: currentOpacity
-        });
+            const newType = select.value;
+            const config = lightningOptions[newType];
 
-        updateLegend(); // Show the MapsGL legend in your container
-        return;
-    }
+            // 2. Clear existing standard layers
+            clearLightningLayers();
 
-    // 6. Handle Standard Layers
-    const timestamp = getCurrentSliderTimestamp();
-    plotLayerIfNecessary(newType, lightningOptions, timestamp, 'lightning');
-    
-    updateLegend();
-}
+            // 3. Clear XWeather GeoJSON if switching away
+            if (newType !== 'xweather-lightning') {
+                if (window.xWeatherLayers['xweather-lightning']) {
+                    map.removeLayer(window.xWeatherLayers['xweather-lightning']);
+                    window.xWeatherLayers['xweather-lightning'] = null;
+                }
+            }
+
+            // 4. Clear MapsGL layers (prevent stacking)
+            if (mapsglController) {
+                ['lightning-all', 'lightning-density', 'lightning-density-accum'].forEach(id => {
+                    // Only remove if it's not the one we are currently trying to add
+                    if (config?.type !== 'mapsgl' || config.id !== id) {
+                        mapsglController.removeWeatherLayer(id);
+                    }
+                });
+            }
+
+            // 5. Handle MapsGL Selection
+            if (config && config.type === 'mapsgl') {
+                // --- ADDED: Get current opacity from slider ---
+                const currentOpacity = parseFloat(document.getElementById('lightningOpacity')?.value || 0.8);
+
+                console.log(`Adding MapsGL Layer: ${config.id} with opacity: ${currentOpacity}`);
+
+                // Pass the opacity in the options object
+                mapsglController.addWeatherLayer(config.id, {
+                    opacity: currentOpacity
+                });
+
+                updateLegend(); // Show the MapsGL legend in your container
+                return;
+            }
+
+            // 6. Handle Standard Layers
+            const timestamp = getCurrentSliderTimestamp();
+            plotLayerIfNecessary(newType, lightningOptions, timestamp, 'lightning');
+
+            updateLegend();
+        }
         function observationLayerTypeHandler() {
             const select = document.getElementById('observationLayerSelect');
             if (select?.disabled) {
@@ -6524,68 +6491,68 @@ if (mapsglController) {
             }
         }
         function nowcastLayerTypeHandler() {
-    const select = document.getElementById('nowcastLayerSelect');
-    const type = select.value;
-    const config = nowcastOptions[type];
+            const select = document.getElementById('nowcastLayerSelect');
+            const type = select.value;
+            const config = nowcastOptions[type];
 
-    const nowcastXWeatherKeys = ['xweather-storm-threats', 'xweather-hail-threats', 'stormHailThreat'];
-    const mapsglKeys = ['hail-severe-probability', 'hail-severe-probability-max', 'hail-size', 'hail-size-max', 'hail-threats', 'lightning-threats'];
+            const nowcastXWeatherKeys = ['xweather-storm-threats', 'xweather-hail-threats', 'stormHailThreat'];
+            const mapsglKeys = ['hail-severe-probability', 'hail-severe-probability-max', 'hail-size', 'hail-size-max', 'hail-threats', 'lightning-threats'];
 
-    // 1. Clear XWeather Layers
-    nowcastXWeatherKeys.forEach(key => {
-        if (window.xWeatherLayers && window.xWeatherLayers[key]) {
-            map.removeLayer(window.xWeatherLayers[key]);
-            window.xWeatherLayers[key] = null;
-        }
-    });
+            // 1. Clear XWeather Layers
+            nowcastXWeatherKeys.forEach(key => {
+                if (window.xWeatherLayers && window.xWeatherLayers[key]) {
+                    map.removeLayer(window.xWeatherLayers[key]);
+                    window.xWeatherLayers[key] = null;
+                }
+            });
 
-    // 2. Clear MapsGL Layers
-    if (mapsglController) {
-        mapsglKeys.forEach(id => {
-            // Only remove if it's NOT the one we are about to add
-            if (config?.type !== 'mapsgl' || config.id !== id) {
-                mapsglController.removeWeatherLayer(id);
+            // 2. Clear MapsGL Layers
+            if (mapsglController) {
+                mapsglKeys.forEach(id => {
+                    // Only remove if it's NOT the one we are about to add
+                    if (config?.type !== 'mapsgl' || config.id !== id) {
+                        mapsglController.removeWeatherLayer(id);
+                    }
+                });
             }
-        });
-    }
 
-    // 3. If disabled, stop here
-    if (select.disabled) {
-        // Clear standard raster layers too
-        clearNowcastLayers();
-        updateLegend(); // Hide legend
-        return;
-    }
+            // 3. If disabled, stop here
+            if (select.disabled) {
+                // Clear standard raster layers too
+                clearNowcastLayers();
+                updateLegend(); // Hide legend
+                return;
+            }
 
-    // 4. Handle MapsGL Selection
-    if (config && config.type === 'mapsgl') {
-        clearNowcastLayers(); // Ensure raster nowcasts are gone
-        
-        // --- ADDED: Get current opacity from the nowcast slider ---
-        const currentOpacity = parseFloat(document.getElementById('nowcastOpacity')?.value || 0.8);
-        
-        console.log(`Adding MapsGL Layer: ${config.id} with opacity: ${currentOpacity}`);
-        
-        // Add layer with current opacity setting
-        mapsglController.addWeatherLayer(config.id, {
-            opacity: currentOpacity
-        });
+            // 4. Handle MapsGL Selection
+            if (config && config.type === 'mapsgl') {
+                clearNowcastLayers(); // Ensure raster nowcasts are gone
 
-        updateLegend(); // Show MapsGL legend in your container
-        return;
-    }
+                // --- ADDED: Get current opacity from the nowcast slider ---
+                const currentOpacity = parseFloat(document.getElementById('nowcastOpacity')?.value || 0.8);
 
-    // 5. Handle Standard Selection
-    if (nowcastXWeatherKeys.includes(type)) {
-        clearNowcastLayers();
-        handleXweatherData(type);
-    } else {
-        plotLayerIfNecessary(type, nowcastOptions, getCurrentSliderTimestamp(), 'nowcast');
-    }
+                console.log(`Adding MapsGL Layer: ${config.id} with opacity: ${currentOpacity}`);
 
-    // Ensure legend reflects the new standard layer
-    updateLegend();
-}
+                // Add layer with current opacity setting
+                mapsglController.addWeatherLayer(config.id, {
+                    opacity: currentOpacity
+                });
+
+                updateLegend(); // Show MapsGL legend in your container
+                return;
+            }
+
+            // 5. Handle Standard Selection
+            if (nowcastXWeatherKeys.includes(type)) {
+                clearNowcastLayers();
+                handleXweatherData(type);
+            } else {
+                plotLayerIfNecessary(type, nowcastOptions, getCurrentSliderTimestamp(), 'nowcast');
+            }
+
+            // Ensure legend reflects the new standard layer
+            updateLegend();
+        }
         // --- INITIALIZATION AND EVENT ATTACHMENT ---
         // --- INITIALIZATION AND EVENT ATTACHMENT ---
         document.addEventListener('DOMContentLoaded', () => {
@@ -10310,7 +10277,8 @@ if (mapsglController) {
             const minNowcastConfidence = parseFloat(document.getElementById('min-nowcast-confidence').value);
 
             // 1. Clean up existing layers: CLEAR BOTH OLD cone layer AND NEW polygon layer
-            if (typeof nowcastLayer !== 'undefined') {
+            // FIND THIS in updateNowcast:
+            if (typeof nowcastLayer !== 'undefined' && nowcastLayer) { // Added && nowcastLayer
                 nowcastLayer.clearLayers();
             }
             if (typeof polygonNowcastLayer !== 'undefined') {
