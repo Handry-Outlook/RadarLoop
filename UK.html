@@ -2331,16 +2331,18 @@
                 </div>
 
                 <select id="map-style" onchange="switchBaseMap(this.value)">
-                    <option value="mapbox-streets-satellite">Mapbox Streets-Satellite</option>
-                    <option value="mapbox-navigation">Mapbox Navigation</option>
                     <option value="mapbox-traffic-night">Mapbox Traffic Night</option>
                     <option value="mapbox-traffic-day">Mapbox Traffic Day</option>
+                    <option value="mapbox-streets-satellite">Mapbox Streets-Satellite</option>
+                    <option value="mapbox-navigation">Mapbox Navigation</option>
+                    <option value="mapbox-navigation-night">Mapbox Navigation Night</option>
+                    <option value="mapbox-traffic-night">Mapbox Traffic Night</option>
+                    
                     <option value="custom">Mapbox Classic</option>
                     <option value="mapbox-satellite">Mapbox Satellite</option>
                     <option value="mapbox-outdoors">Mapbox Outdoors</option>
                     <option value="mapbox-dark">Mapbox Dark</option>
                     <option value="mapbox-light">Mapbox Light</option>
-                    <option value="mapbox-navigation-night">Mapbox Navigation Night</option>
                     <option value="osm">OpenStreetMap</option>
                     <option value="opentopo">OpenTopoMap</option>
                     <option value="esri">Esri World Imagery</option>
@@ -3419,7 +3421,7 @@
 
         // 1. Initialize the Leaflet Map
         map = L.map('map', {
-            layers: [baseLayers['mapbox-streets-satellite']],
+            layers: [baseLayers['mapbox-traffic-night']],
             zoomControl: false
         }).setView([53.5, -4.5], 5);
         map.createPane('warningPane');
@@ -8085,8 +8087,8 @@
 
             if (isDark) {
                 // Switch to a good dark base map
-                mapStyleSelect.value = 'mapbox-streets-satellite'; // or 'mapbox-dark' or 'maptiler-dark'
-                switchBaseMap('mapbox-streets-satellite');
+                mapStyleSelect.value = 'mapbox-traffic-night'; // or 'mapbox-dark' or 'maptiler-dark'
+                switchBaseMap('mapbox-traffic-night');
 
                 // Update button text
                 event.target.textContent = '☀️ Light Mode';
