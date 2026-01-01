@@ -3303,11 +3303,13 @@
         };
 
         const region_bounds = {
+            "Zoom-in England" :[[49.35, -6.4], [54.35 ,4.4]],
             "England": [[47.7, -20.4], [57.075, 10.55]],
             "Wales": [[51.4, -5.3], [53.4, -2.8]],
             "Scotland": [[54.6, -7.5], [60.8, -0.7]],
             "Northern Ireland": [[49.98, -20.2], [56.25, 1.175]],
             "Ireland and Northern Ireland": [[49.98, -21.65], [56.25, 1.075]],
+            
             "UK": [[47.8, -31.2], [61.3, 16.6]]
         };
         let is3DMode = false;
@@ -5973,7 +5975,7 @@
                     if (type === 'xweather-storm-threats') url = `https://data.api.xweather.com/lightning/threats/within?p=${worldP}&limit=500&client_id=${X_ID}&client_secret=${X_SECRET}`;
                     if (type === 'xweather-hail-threats') url = `https://data.api.xweather.com/hail/threats/within?p=${worldP}&client_id=${X_ID}&client_secret=${X_SECRET}`;
                     if (type === 'xweather-lightning') url = `https://data.api.xweather.com/lightning/within?p=${worldP}&limit=5000&client_id=${X_ID}&client_secret=${X_SECRET}`;
-                    if (type === 'xweather-alerts') url = `https://data.api.xweather.com/alerts/within?p=${worldP}&limit=10000&filter=geo&client_id=${X_ID}&client_secret=${X_SECRET}`;
+                    if (type === 'xweather-alerts') url = `https://data.api.xweather.com/alerts/within?p=${worldP}&limit=5000&filter=geo&client_id=${X_ID}&client_secret=${X_SECRET}`;
 
                     if (!url) return;
 
