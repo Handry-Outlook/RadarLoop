@@ -2953,7 +2953,7 @@
 
             <label class="pretty-input">
                 Slider Max History
-                <input type="number" id="max-history-hours" value="6" min="1" step="1"
+                <input type="number" id="max-history-hours" value="4" min="1" step="1"
                     onchange="updateHistorySliderMax()">
                 <span class="unit">hours</span>
                 <span class="tooltip">Max hours back for time slider</span>
@@ -3143,7 +3143,7 @@
     <div class="slider-controls" style="display: flex; align-items: center; gap: 10px;">
         <button onclick="stepSlider(-1)">❮❮❮❮❮</button>
         
-        <input type="range" id="history-slider" class="slider" min="0" max="360" value="360" oninput="updateHistory()">
+        <input type="range" id="history-slider" class="slider" min="0" step="5" max="240" value="240" oninput="updateHistory()">
         
         <button onclick="stepSlider(1)">❯❯❯❯❯</button>
     </div>
@@ -6468,7 +6468,7 @@
             const rawValue = historySlider.value;
             const sliderMax = parseInt(historySlider.getAttribute('max') || 100, 10);
             const sliderValue = parseFloat(rawValue);
-            const maxHistoryHours = 6;
+            const maxHistoryHours = 4;
             const maxHistoryMs = maxHistoryHours * 60 * 60 * 1000;
             const normalizedValue = (sliderMax - sliderValue) / sliderMax;
             return Date.now() - normalizedValue * maxHistoryMs;
