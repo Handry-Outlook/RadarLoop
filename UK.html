@@ -2337,7 +2337,7 @@
                     <option value="mapbox-navigation">Mapbox Navigation</option>
                     <option value="mapbox-navigation-night">Mapbox Navigation Night</option>
                     <option value="mapbox-traffic-night">Mapbox Traffic Night</option>
-                    
+
                     <option value="custom">Mapbox Classic</option>
                     <option value="mapbox-satellite">Mapbox Satellite</option>
                     <option value="mapbox-outdoors">Mapbox Outdoors</option>
@@ -2484,8 +2484,8 @@
                     <option value="pressure_two">Mean Sea Level Pressure (every 2 hPa)</option>
                     <option value="pressure_four">Mean Sea Level Pressure (every 4 hPa)</option>
                     <option value="fpressure-msl-isobars">Mean Sea Level Pressure (every 4 hPa)</option>
-                    
-                    
+
+
                 </select>
                 <div class="opacity-control">
                     <input type="range" id="isobarOpacity" min="0" max="1" step="0.05" value="0.8"
@@ -2501,7 +2501,7 @@
                         <span class="tooltip">Select Surface Fronts layer</span>
                     </div>
                     <div class="toggle-switch">
-                        <input type="checkbox" id="surfaceFrontToggle" checked
+                        <input type="checkbox" id="surfaceFrontToggle" 
                             onchange="toggleLayer('surfaceFront', this.checked);">
                         <label for="surfaceFrontToggle" class="switch"></label>
                     </div>
@@ -2524,7 +2524,7 @@
                         <span class="tooltip">Select wind direction data layer</span>
                     </div>
                     <div class="toggle-switch">
-                        <input type="checkbox" id="windToggle" checked onchange="toggleLayer('wind', this.checked);">
+                        <input type="checkbox" id="windToggle"  onchange="toggleLayer('wind', this.checked);">
                         <label for="windToggle" class="switch"></label>
                     </div>
                 </div>
@@ -2554,7 +2554,7 @@
                         <span class="tooltip">Select Global Lightning data layer</span>
                     </div>
                     <div class="toggle-switch">
-                        <input type="checkbox" id="lightningToggle" checked
+                        <input type="checkbox" id="lightningToggle" 
                             onchange="toggleLayer('lightning', this.checked);">
                         <label for="lightningToggle" class="switch"></label>
                     </div>
@@ -2585,7 +2585,7 @@
                         <span class="tooltip">Select Global Nowcast data layer</span>
                     </div>
                     <div class="toggle-switch">
-                        <input type="checkbox" id="nowcastToggle" checked
+                        <input type="checkbox" id="nowcastToggle" 
                             onchange="toggleLayer('nowcast', this.checked);">
                         <label for="nowcastToggle" class="switch"></label>
                     </div>
@@ -2773,15 +2773,14 @@
                         <span class="tooltip">Display official weather warnings</span>
                     </div>
                     <div class="toggle-switch">
-                        <input type="checkbox" id="warningToggle" 
-                            onchange="toggleLayer('warning', this.checked);">
+                        <input type="checkbox" id="warningToggle" onchange="toggleLayer('warning', this.checked);">
                         <label for="warningToggle" class="switch"></label>
                     </div>
                 </div>
                 <select id="warningLayerSelect" onchange="warningLayerTypeHandler();">
                     <option value="ukmo-detail-warning">UK Met Office Warning</option>
                     <option value="xweather-alerts">Global Weather Alerts (Xweather)</option>
-                    
+
                     <option value="alerts">Active Alerts (local)</option>
                     <option value="sevwx-agency-bulletin-zones">Global Weather Bulletins</option>
                     <option value="sevwx-nws-alert-zones">NWS Bulletins</option>
@@ -3136,24 +3135,31 @@
     <div id="map"></div>
     <div id="map-3d"></div>
     <div class="time-slider-container">
-        <label>
-            <span id="history-label">⏱️ Now | </span>
-            <span id="history-time"></span></label>
+    <label>
+        <span id="history-label">⏱️ Now | </span>
+        <span id="history-time"></span>
+    </label>
+
+    <div class="slider-controls" style="display: flex; align-items: center; gap: 10px;">
+        
+        
         <input type="range" id="history-slider" class="slider" min="0" max="360" value="360" oninput="updateHistory()">
-        <div class="animator">
-            <button onclick="playAnimation()">▶️ Play</button>
-            <button onclick="stopAnimation()">⏹️ Stop</button>
-            <label>Speed: <input type="range" id="speed-slider" min="1" max="30" step="1" value="5"
-                    oninput="updateSpeedTextbox()"></label>
-            <label>No. of minutes per second: <input type="number" id="playback-minutes" min="1" max="30" step="1"
-                    value="5" oninput="updateSpeedSlider()"></label>
-        </div>
-        <p id="time-range" class="status-info"></p>
-        <div class="status-info-container">
-            <p id="last-update" class="status-info"></p>
-            <p id="current-time" class="status-info"></p>
-        </div>
+        <button onclick="stepSlider(-1)">❮❮❮❮❮</button>
+        <button onclick="stepSlider(1)">❯❯❯❯❯</button>
     </div>
+
+    <div class="animator">
+        <button onclick="playAnimation()">▶️ Play</button>
+        <button onclick="stopAnimation()">⏹️ Stop</button>
+        <label>Speed: <input type="range" id="speed-slider" min="1" max="30" step="1" value="5" oninput="updateSpeedTextbox()"></label>
+        <label>No. of minutes per second: <input type="number" id="playback-minutes" min="1" max="30" step="1" value="5" oninput="updateSpeedSlider()"></label>
+    </div>
+    <p id="time-range" class="status-info"></p>
+    <div class="status-info-container">
+        <p id="last-update" class="status-info"></p>
+        <p id="current-time" class="status-info"></p>
+    </div>
+</div>
     <button id="settings-button" onclick="toggleControls()">⚙️</button>
     <div id="3d-draw-modal" class="modal" style="display: none;">
         <p>Drawing is only available in 2D mode. Would you like to switch to 2D mode to draw?</p>
@@ -3307,13 +3313,13 @@
         };
 
         const region_bounds = {
-            "Zoom-in England" :[[49.35, -6.4], [54.35 ,4.4]],
+            "Zoom-in England": [[49.35, -6.4], [54.35, 4.4]],
             "England": [[47.7, -20.4], [57.075, 10.55]],
             "Wales": [[51.4, -5.3], [53.4, -2.8]],
             "Scotland": [[54.6, -7.5], [60.8, -0.7]],
             "Northern Ireland": [[49.98, -20.2], [56.25, 1.175]],
             "Ireland and Northern Ireland": [[49.98, -21.65], [56.25, 1.075]],
-            
+
             "UK": [[47.8, -31.2], [61.3, 16.6]]
         };
         let is3DMode = false;
@@ -7392,7 +7398,23 @@
                 expertControls.appendChild(exportButton);
             }
         }
+        function stepSlider(direction) {
+            const slider = document.getElementById('history-slider');
+            const minutesToMove = 5; // Change this value to adjust the jump size
 
+            // Calculate new value: current value + (5 * direction)
+            // direction is -1 for back, 1 for forward
+            let newValue = parseInt(slider.value) + (minutesToMove * direction);
+
+            // Safety check: Don't go past the slider limits
+            if (newValue < parseInt(slider.min)) newValue = parseInt(slider.min);
+            if (newValue > parseInt(slider.max)) newValue = parseInt(slider.max);
+
+            slider.value = newValue;
+
+            // Update the labels and UI
+            updateHistory();
+        }
         function initializeDrawControl3D() {
             // No drawing in 3D mode
         }
