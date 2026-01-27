@@ -2331,6 +2331,7 @@
                 </div>
 
                 <select id="map-style" onchange="switchBaseMap(this.value)">
+                    <option value="opentopo">OpenTopoMap</option>
                     <option value="mapbox-traffic-night">Mapbox Traffic Night</option>
                     <option value="mapbox-traffic-day">Mapbox Traffic Day</option>
                     <option value="mapbox-streets-satellite">Mapbox Streets-Satellite</option>
@@ -2344,7 +2345,7 @@
                     <option value="mapbox-dark">Mapbox Dark</option>
                     <option value="mapbox-light">Mapbox Light</option>
                     <option value="osm">OpenStreetMap</option>
-                    <option value="opentopo">OpenTopoMap</option>
+                    
                     <option value="esri">Esri World Imagery</option>
                     <option value="maptiler-streets">MapTiler Streets</option>
                     <option value="maptiler-outdoor">MapTiler Outdoor</option>
@@ -2373,18 +2374,25 @@
                     </option>
                     <option value="uk-precip-type">UK High Resolution Precipitation Type</option>
                     <option value="uk-precip-intensity">UK High Resolution Rainfall Intensity (Smoothed)</option>
+                    <option value="uk-precip-intensity-pixelated">UK High Resolution Rainfall Intensity (Pixelated)
+                    </option>
+                    <option value="uk-precip-intensity-accessible">UK High Resolution Rainfall Intensity (Accessible)
+                    </option>
+                    
+                    <option value="europe-precip-type">Europe High Resolution Precipitation Type 1</option>
+                    <option value="europe-precip-type-high-foreca">Europe High Resolution Precipitation Type 2
+                    </option>
+                  
+                    <option value="uk-precip-intensity-accu">Europe High Resolution Precipitation Type 3
+                    </option>
                     <option value="europe-precip-intensity">Europe High Resolution Rainfall Intensity</option>
-                    <option value="europe-precip-type">Europe High Resolution Precipitation Type</option>
                     <option value="radar-precip-intensity-us-canada-contours">North America High Resolution Rainfall
                         Intensity</option>
                     <option value="radar-precip-type-us-canada-contours">North America High Resolution Precipitation
                         Type</option>
                     <option value="radar-precip-intensity-australia-contours">Australia High Resolution Rainfall
                         Intensity</option>
-                    <option value="uk-precip-intensity-pixelated">UK High Resolution Rainfall Intensity (Pixelated)
-                    </option>
-                    <option value="uk-precip-intensity-accessible">UK High Resolution Rainfall Intensity (Accessible)
-                    </option>
+                    
                     <option value="radar"> Low Resolution Global Radar</option>
                     <option value="radar-global"> Low Resolution Satellite Derived Radar</option>
 
@@ -2501,7 +2509,7 @@
                         <span class="tooltip">Select Surface Fronts layer</span>
                     </div>
                     <div class="toggle-switch">
-                        <input type="checkbox" id="surfaceFrontToggle" 
+                        <input type="checkbox" id="surfaceFrontToggle"
                             onchange="toggleLayer('surfaceFront', this.checked);">
                         <label for="surfaceFrontToggle" class="switch"></label>
                     </div>
@@ -2524,7 +2532,7 @@
                         <span class="tooltip">Select wind direction data layer</span>
                     </div>
                     <div class="toggle-switch">
-                        <input type="checkbox" id="windToggle"  onchange="toggleLayer('wind', this.checked);">
+                        <input type="checkbox" id="windToggle" onchange="toggleLayer('wind', this.checked);">
                         <label for="windToggle" class="switch"></label>
                     </div>
                 </div>
@@ -2554,20 +2562,16 @@
                         <span class="tooltip">Select Global Lightning data layer</span>
                     </div>
                     <div class="toggle-switch">
-                        <input type="checkbox" id="lightningToggle" 
-                            onchange="toggleLayer('lightning', this.checked);">
+                        <input type="checkbox" id="lightningToggle" onchange="toggleLayer('lightning', this.checked);">
                         <label for="lightningToggle" class="switch"></label>
                     </div>
                 </div>
                 <select id="lightningLayerSelect" onchange="lightningLayerTypeHandler();">
-
+                    <option value="lightning-all-tile">Lightning All (Tile)</option>
                     <option value="xweather-lightning">Global Live Strikes</option>
                     <option value="sevwx-lightning-global-plot">Global Lightning</option>
                     <option value="lightning-flash">Global Lightning (last 5 minutes)</option>
                     <option value="lightning-all">Global Lightning (last 15 minutes)</option>
-
-                    <option value="placeholder" disabled>--- MapsGL Lightning Layers ---</option>
-                    <option value="lightning-all-tile">Lightning All (Tile)</option>
                     <option value="lightning-density">Lightning Density</option>
                     <option value="lightning-density-accum">Lightning Density Accumulation</option>
                 </select>
@@ -2585,8 +2589,7 @@
                         <span class="tooltip">Select Global Nowcast data layer</span>
                     </div>
                     <div class="toggle-switch">
-                        <input type="checkbox" id="nowcastToggle" 
-                            onchange="toggleLayer('nowcast', this.checked);">
+                        <input type="checkbox" id="nowcastToggle" onchange="toggleLayer('nowcast', this.checked);">
                         <label for="nowcastToggle" class="switch"></label>
                     </div>
                 </div>
@@ -2790,7 +2793,7 @@
                 </select>
                 <div class="pretty-slider">
                     <input type="range" id="warningOpacity" min="0" max="1" step="0.1" value="0.7"
-                        oninput="updateLayerOpacity('warning', this.value)">
+                        oninput="updateLayerOpacities()">
 
                 </div>
             </div>
@@ -3135,33 +3138,35 @@
     <div id="map"></div>
     <div id="map-3d"></div>
     <div class="time-slider-container">
-    <label>
-        <span id="history-label">⏱️ Now | </span>
-        <span id="history-time"></span>
-    </label>
+        <label>
+            <span id="history-label">⏱️ Now | </span>
+            <span id="history-time"></span>
+        </label>
 
-    <div class="slider-controls" style="display: flex; align-items: center; gap: 10px;">
-        <button onclick="stepSlider(-1)">❮❮❮❮❮</button>
-        
-        <input type="range" id="history-slider" class="slider" min="0" step="5" max="240" value="240" oninput="updateHistory()">
-        
-        <button onclick="stepSlider(1)">❯❯❯❯❯</button>
-    </div>
+        <div class="slider-controls" style="display: flex; align-items: center; gap: 10px;">
+            <button onclick="stepSlider(-1)">❮❮❮❮❮</button>
 
-    <div class="animator">
-        
-        <button onclick="playAnimation()">▶️ Play</button>
-        <button onclick="stopAnimation()">⏹️ Stop</button>
-        <label>Speed: <input type="range" id="speed-slider" min="1" max="15" step="1" value="5" oninput="updateSpeedTextbox()"></label>
-        
-        
+            <input type="range" id="history-slider" class="slider" min="0" step="5" max="240" value="240"
+                oninput="updateHistory()">
+
+            <button onclick="stepSlider(1)">❯❯❯❯❯</button>
+        </div>
+
+        <div class="animator">
+
+            <button onclick="playAnimation()">▶️ Play</button>
+            <button onclick="stopAnimation()">⏹️ Stop</button>
+            <label>Speed: <input type="range" id="speed-slider" min="1" max="15" step="1" value="5"
+                    oninput="updateSpeedTextbox()"></label>
+
+
+        </div>
+        <p id="time-range" class="status-info"></p>
+        <div class="status-info-container">
+            <p id="last-update" class="status-info"></p>
+            <p id="current-time" class="status-info"></p>
+        </div>
     </div>
-    <p id="time-range" class="status-info"></p>
-    <div class="status-info-container">
-        <p id="last-update" class="status-info"></p>
-        <p id="current-time" class="status-info"></p>
-    </div>
-</div>
     <button id="settings-button" onclick="toggleControls()">⚙️</button>
     <div id="3d-draw-modal" class="modal" style="display: none;">
         <p>Drawing is only available in 2D mode. Would you like to switch to 2D mode to draw?</p>
@@ -3429,7 +3434,7 @@
 
         // 1. Initialize the Leaflet Map
         map = L.map('map', {
-            layers: [baseLayers['mapbox-traffic-night']],
+            layers: [baseLayers['opentopo']],
             zoomControl: false
         }).setView([53.5, -4.5], 5);
         map.createPane('warningPane');
@@ -3600,6 +3605,22 @@
                 bounds: null,
                 attribution: 'DTN Meteoguard'
             },
+            'europe-precip-type-foreca': {
+
+                url: 'https://map-eu.foreca.com/api/v1/image/tile/{z}/{x}/{y}/${iso}/115?token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOlwvXC9wZmEuZm9yZWNhLmNvbVwvYXV0aG9yaXplXC90b2tlbiIsImlhdCI6MTc2OTQzODc0NSwiZXhwIjoxNzY5NDQ5NTQ1LCJuYmYiOjE3Njk0Mzg3NDUsImp0aSI6IjRlNDZjNWMwNDE3MzBmZTgiLCJzdWIiOiJkZXYtZm9yZWNhLWNvbSIsImZtdCI6IlhEY09oakM0MCtBTGpsWVR0amJPaUE9PSJ9.T8MVMxt3x47jD5kCZP_ipUArfzR454yRxU62OmFrQRc&colorscheme=default&analyses=${iso2}%2C${iso2}',
+                interval: 5 * 60 * 1000,
+                type: 'vector-tile',
+                bounds: null,
+                attribution: 'Foreca'
+            },
+            'europe-precip-type-high-foreca': {
+
+                url: 'https://map-tile.foreca.net/fca-tile.png?p=2031&u=${iso2},${iso}&up=${iso2}&cid=h9hag3y&c=d5f0a5a900d54d39c8bcad0f35b48fe2&colorscheme=forecacomradusptdbz&t=${iso2}&z={z}&x={x}&y={y}',
+                interval: 5 * 60 * 1000,
+                type: 'vector-tile',
+                bounds: null,
+                attribution: 'Foreca'
+            },
             'uk-precip-type': {
                 url: 'https://tiles.meteoguard.dtn.com/tiles/radar-precip-type-uk-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
                 interval: 5 * 60 * 1000,
@@ -3609,6 +3630,7 @@
             },
             'europe-precip-intensity': {
                 url: 'https://tiles.meteoguard.dtn.com/tiles/radar-precip-intensity-europe-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+
                 interval: 15 * 60 * 1000,
                 type: 'vector-tile',
                 bounds: null,
@@ -5200,7 +5222,12 @@
 
 
                     // FIX: Use a higher, central zoom tile (6/32/32) instead of the problematic 0/0/0
-                    const checkUrl = tileUrl.replace('{z}/{x}/{y}', '0/0/0');
+                    const checkUrl = tileUrl.replace(
+                        /(\{z\}\/\{x\}\/\{y\}|z=\{z\}&x=\{x\}&y=\{y\})/,
+                        match => match.startsWith('{') ? '0/0/0' : 'z=6&x=31&y=23'
+                    );
+
+
                     for (let retry = 0; retry < 2; retry++) {
                         try {
                             const response = await fetch(checkUrl, { method: 'GET' });
@@ -5338,7 +5365,8 @@
 
             const lastPlottedTimestamp = eval(lastTimestampRef);
             const lastPlottedType = eval(lastTypeRef);
-            const currentOpacity = parseFloat(document.getElementById(`${layerKey}Opacity`)?.value || 0.8);
+            const rawValue = document.getElementById('opacity-value-warning')?.value;
+            const currentOpacity = rawValue ? parseFloat(rawValue) : 0.8;
             let layerToDispose = currentLayerRef;
             let newLayer = null;
 
@@ -5353,7 +5381,8 @@
                                 fillColor: colors[feature.properties.warninglevel] || '#FFD700',
                                 weight: 2,
                                 color: '#222',
-                                fillOpacity: currentOpacity,
+                                fillOpacity: currentOpacity, // Ensure this is 0.0 to 1.0
+                                opacity: currentOpacity,     // Also set the border/line opacity
                                 dashArray: '3'
                             };
                         }
@@ -6388,66 +6417,77 @@
             layerList.forEach(({ layer, opacity, color, key }) => {
                 if (!layer) return;
 
-                if (key === 'satellite') {
-                    const satelliteType = document.getElementById('satelliteLayerSelect')?.value;
-                    const config = satelliteOptions[satelliteType];
-                    if (config?.type === 'tile-layer' || config?.type === 'image') {
-                        if (layer.setOpacity) layer.setOpacity(opacity);
-                        else if (layer.getElement) {
-                            const el = layer.getElement();
-                            if (el) el.style.opacity = opacity;
-                        }
-                    }
-                    return;
+                // A. FORCE CSS OPACITY (Works for almost everything in the DOM)
+                if (layer.getElement && layer.getElement()) {
+                    layer.getElement().style.opacity = opacity;
                 }
 
-                if (layer.setStyle && color) {
-                    layer.setStyle(createVectorLayerStyles(opacity, color));
-                } else if (layer.setOpacity) {
+                // B. IMAGE LAYERS (Radar/Satellite)
+                if (layer.setOpacity) {
                     layer.setOpacity(opacity);
-                } else if (layer.getElement) {
-                    const el = layer.getElement();
-                    if (el) el.style.opacity = opacity;
+                }
+
+                // C. VECTOR LAYERS / GEOJSON (Warning/Nowcast Polygons)
+                if (layer.setStyle) {
+                    if (key === 'warning') {
+                        layer.setStyle((f) => {
+                            const colors = { 'Yellow': '#FFD700', 'Amber': '#FF8C00', 'Red': '#D32F2F' };
+                            return {
+                                fillColor: colors[f.properties.warninglevel] || '#FFD700',
+                                fillOpacity: opacity,
+                                opacity: opacity,
+                                weight: 2,
+                                color: '#222'
+                            };
+                        });
+                    } else if (color && typeof createVectorLayerStyles === 'function') {
+                        // IMPORTANT: You must re-run your style generator to inject the new opacity
+                        layer.setStyle(createVectorLayerStyles(opacity, color));
+                    } else {
+                        layer.setStyle({
+                            fillOpacity: opacity * 0.7,
+                            opacity: opacity
+                        });
+                    }
+                }
+
+                // D. RECURSIVE GROUP UPDATE (For Xweather/Aeris FeatureGroups)
+                if (layer.eachLayer) {
+                    layer.eachLayer(sub => {
+                        if (sub.setOpacity) sub.setOpacity(opacity);
+                        if (sub.setStyle) sub.setStyle({ fillOpacity: opacity * 0.7, opacity: opacity });
+                        if (sub.getElement && sub.getElement()) sub.getElement().style.opacity = opacity;
+                    });
                 }
             });
 
-            // 4. Update MapsGL Layers
-            if (mapsglController) {
-                // --- Handle Lightning MapsGL ---
-                const lightningType = document.getElementById('lightningLayerSelect')?.value;
-                const lightningConfig = lightningOptions[lightningType];
-
-                if (lightningConfig?.type === 'mapsgl') {
-                    const layer = mapsglController.getLayer(lightningConfig.id);
-                    if (layer && typeof layer.update === 'function') {
-                        // Per Mapbox GL JS (underlying library for Xweather MapsGL): use paint['raster-opacity'] for raster layers
-                        layer.update({
+            // 4. Update MapsGL Layers (The WebGL/Xweather Engine)
+            if (typeof mapsglController !== 'undefined' && mapsglController) {
+                const updateMapsGL = (layerId, val) => {
+                    const l = mapsglController.getLayer(layerId);
+                    if (l && typeof l.update === 'function') {
+                        l.update({
                             paint: {
-                                'raster-opacity': opacities.lightning
+                                'raster-opacity': val,
+                                'fill-opacity': val,
+                                'line-opacity': val,
+                                'circle-opacity': val,
+                                'text-opacity': val,
+                                'icon-opacity': val
                             }
                         });
                     }
-                }
+                };
 
-                // --- Handle Nowcast MapsGL ---
-                const nowcastType = document.getElementById('nowcastLayerSelect')?.value;
-                const nowcastConfig = nowcastOptions[nowcastType];
+                // Update specific Xweather Layer IDs based on your selectors
+                const lightningId = lightningOptions[document.getElementById('lightningLayerSelect')?.value]?.id;
+                if (lightningId) updateMapsGL(lightningId, opacities.lightning);
 
-                if (nowcastConfig?.type === 'mapsgl') {
-                    const layer = mapsglController.getLayer(nowcastConfig.id);
-                    if (layer && typeof layer.update === 'function') {
-                        // Per Mapbox GL JS (underlying library for Xweather MapsGL): use paint['raster-opacity'] for raster layers
-                        layer.update({
-                            paint: {
-                                'raster-opacity': opacities.nowcast
-                            }
-                        });
-                    }
-                }
+                const nowcastId = nowcastOptions[document.getElementById('nowcastLayerSelect')?.value]?.id;
+                if (nowcastId) updateMapsGL(nowcastId, opacities.nowcast);
             }
 
-            // Update legend with current values
-            updateLegend();
+            if (typeof updateLegend === 'function') updateLegend();
         }
         /**
          * Creates the style object required for L.vectorGrid.setStyle()
@@ -8111,8 +8151,8 @@
 
             if (isDark) {
                 // Switch to a good dark base map
-                mapStyleSelect.value = 'mapbox-traffic-night'; // or 'mapbox-dark' or 'maptiler-dark'
-                switchBaseMap('mapbox-traffic-night');
+                mapStyleSelect.value = 'opentopo'; // or 'mapbox-dark' or 'maptiler-dark'
+                switchBaseMap('opentopo');
 
                 // Update button text
                 event.target.textContent = '☀️ Light Mode';
