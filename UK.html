@@ -2345,7 +2345,7 @@
                     <option value="mapbox-dark">Mapbox Dark</option>
                     <option value="mapbox-light">Mapbox Light</option>
                     <option value="osm">OpenStreetMap</option>
-                    
+
                     <option value="esri">Esri World Imagery</option>
                     <option value="maptiler-streets">MapTiler Streets</option>
                     <option value="maptiler-outdoor">MapTiler Outdoor</option>
@@ -2353,7 +2353,19 @@
                     <option value="maptiler-dark">MapTiler Dark</option>
                 </select>
             </div>
-
+            <div class="section">
+                <h4>🏷️ Map Overlays</h4>
+                <div class="switch-control overlay-control">
+                    <div class="label-group">
+                        <span class="label-text">Coastline</span>
+                        <span class="tooltip">Show coastline on top of weather</span>
+                    </div>
+                    <div class="toggle-switch">
+                        <input type="checkbox" id="overlay-toggle" checked onchange="toggleReferenceLayer(this.checked)">
+                        <label for="overlay-toggle" class="switch"></label>
+                    </div>
+                </div>
+            </div>
             <div class="section"></div>
             <h4>⛈️ Weather Layers</h4>
 
@@ -2378,11 +2390,11 @@
                     </option>
                     <option value="uk-precip-intensity-accessible">UK High Resolution Rainfall Intensity (Accessible)
                     </option>
-                    
+
                     <option value="europe-precip-type">Europe High Resolution Precipitation Type 1</option>
                     <option value="europe-precip-type-high-foreca">Europe High Resolution Precipitation Type 2
                     </option>
-                  
+
                     <option value="uk-precip-intensity-accu">Europe High Resolution Precipitation Type 3
                     </option>
                     <option value="europe-precip-intensity">Europe High Resolution Rainfall Intensity</option>
@@ -2392,7 +2404,7 @@
                         Type</option>
                     <option value="radar-precip-intensity-australia-contours">Australia High Resolution Rainfall
                         Intensity</option>
-                    
+
                     <option value="radar"> Low Resolution Global Radar</option>
                     <option value="radar-global"> Low Resolution Satellite Derived Radar</option>
 
@@ -3437,6 +3449,26 @@
             layers: [baseLayers['opentopo']],
             zoomControl: false
         }).setView([53.5, -4.5], 5);
+        // --- 1. SETUP HIGH Z-INDEX PANE (Run this after initializing 'map') ---
+        // This ensures labels stay on top of radar (z=150) and warnings (z=550)
+        map.createPane('labelsPane');
+        map.getPane('labelsPane').style.zIndex = 600; // High z-index
+        map.getPane('labelsPane').style.pointerEvents = 'none'; // Click-through (don't block map clicks)
+
+        // --- 2. DEFINE THE REFERENCE LAYER ---
+        // We use Esri's "World Boundaries and Places" which is transparent and high-contrast
+        const referenceLayer = L.tileLayer(`https://api.mapbox.com/styles/v1/handry20191026/cmkxzwlsx000t01sfe7m81tqm/tiles/{z}/{x}/{y}?access_token=` + mapboxAccessToken, {
+            attribution: '© Mapbox',
+            pane: 'labelsPane', // Keeps your custom lines/labels on top of radar
+            opacity: 1.0,
+            tileSize: 512,      // Mapbox Studio uses high-res 512px tiles
+            zoomOffset: -1      // Required for 512px tiles in Leaflet
+        });
+
+
+        // For 3D Mode (Mapbox GL)
+        const referenceSourceId = 'reference-overlay-source';
+        const referenceLayerId = 'reference-overlay-layer';
         map.createPane('warningPane');
         map.getPane('warningPane').style.zIndex = 550; // Ensure it sits above tiles but below markers
         map.getPane('warningPane').style.pointerEvents = 'none'; // Allow clicks to pass through empty areas
@@ -5124,6 +5156,44 @@
         // 3. IMAGE/TILE FETCHING LOGIC (MODIFIED)
         // ==========================================
         const recentTimeThreshold = 15 * 60 * 1000;
+        function toggleReferenceLayer(enabled) {
+            // --- 2D LEAFLET HANDLING ---
+            if (!is3DMode) {
+                if (enabled) {
+                    referenceLayer.addTo(map);
+                } else {
+                    referenceLayer.remove();
+                }
+            }
+
+            // --- 3D MAPBOX HANDLING ---
+            else if (map3D) {
+                if (enabled) {
+                    // Check if source exists, if not add it
+                    if (!map3D.getSource(referenceSourceId)) {
+                        map3D.addSource(referenceSourceId, {
+                            type: 'raster',
+                            tiles: [
+                                'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'
+                            ],
+                            tileSize: 256
+                        });
+                    }
+                    // Add layer if it doesn't exist
+                    if (!map3D.getLayer(referenceLayerId)) {
+                        map3D.addLayer({
+                            id: referenceLayerId,
+                            type: 'raster',
+                            source: referenceSourceId,
+                            paint: { 'raster-opacity': 1.0 }
+                        });
+                    }
+                } else {
+                    if (map3D.getLayer(referenceLayerId)) map3D.removeLayer(referenceLayerId);
+                    if (map3D.getSource(referenceSourceId)) map3D.removeSource(referenceSourceId);
+                }
+            }
+        }
         async function fetchTileUrl(timestamp, layerConfig) {
             let layerTypeKey;
             if (Object.values(radarOptions).includes(layerConfig)) {
@@ -5270,6 +5340,13 @@
          */
         async function plotMainLayer(finalUrl, layerType, timestamp, layerKey) {
             let layerOptions, zIndex, currentLayerRef, lastTimestampRef, lastTypeRef, isAnimatingRef;
+
+            // 1. Determine correct opacity slider ID based on the layerKey
+            // This fixes the bug where opacity resets during animation
+            const opacitySliderId = `${layerKey}Opacity`;
+            const sliderElement = document.getElementById(opacitySliderId);
+            const currentOpacity = sliderElement ? parseFloat(sliderElement.value) : 0.8;
+
             switch (layerKey) {
                 case 'satellite':
                     layerOptions = satelliteOptions[layerType];
@@ -5364,9 +5441,6 @@
             }
 
             const lastPlottedTimestamp = eval(lastTimestampRef);
-            const lastPlottedType = eval(lastTypeRef);
-            const rawValue = document.getElementById('opacity-value-warning')?.value;
-            const currentOpacity = rawValue ? parseFloat(rawValue) : 0.8;
             let layerToDispose = currentLayerRef;
             let newLayer = null;
 
@@ -5381,14 +5455,13 @@
                                 fillColor: colors[feature.properties.warninglevel] || '#FFD700',
                                 weight: 2,
                                 color: '#222',
-                                fillOpacity: currentOpacity, // Ensure this is 0.0 to 1.0
-                                opacity: currentOpacity,     // Also set the border/line opacity
+                                fillOpacity: currentOpacity,
+                                opacity: currentOpacity,
                                 dashArray: '3'
                             };
                         }
                     });
 
-                    // FIX 1: Tooltip protection
                     newLayer.on('createfeature', (e) => {
                         if (e.layer && e.feature.properties.weathertype) {
                             e.layer.bindTooltip(e.feature.properties.weathertype, {
@@ -5399,8 +5472,7 @@
                         }
                     });
 
-                    // FIX 2: Met Office Popup styled like Xweather
-                    // Met Office Popup with Matrix Dropdown and Versioning
+                    // Re-bind Met Office Popup Logic (Abbreviated for clarity, same as your code)
                     newLayer.bindPopup(function (l) {
                         const p = l.feature.properties;
                         const formatTime = (ts) => ts ? new Date(ts).toLocaleString('en-GB', {
@@ -5589,27 +5661,36 @@
                         className: 'met-office-popup',
                         closeButton: false
                     });
+                } else if (layerOptions.type === 'image') {
+                    // Important: Set opacity immediately on creation
+                    newLayer = L.imageOverlay(finalUrl, layerOptions.bounds, {
+                        opacity: currentOpacity, // Use the correct user setting
+                        zIndex: zIndex,
+                        attribution: layerOptions.attribution,
+                        className: 'seamless-layer'
+                    });
                 } else if (layerOptions.type === 'vector-tile') {
                     try {
-                        const defaultStyle = { fill: true, opacity: 0.01, fillOpacity: 0.01, weight: 0, color: 'inherit' };
+                        // Vector grid styles require the opacity passed into the style definition
+                        const defaultStyle = { fill: true, opacity: currentOpacity, fillOpacity: currentOpacity, weight: 0, color: 'inherit' };
                         let vectorStyles = (layerKey === 'isobar' || layerKey === 'wind') ?
                             {
-                                'default': { stroke: true, color: layerKey === 'isobar' ? '#FFFFFF' : '#88E0FF', weight: 2, opacity: 0.01, fill: false },
-                                'features': { stroke: true, color: layerKey === 'isobar' ? '#FFFFFF' : '#88E0FF', weight: 2, opacity: 0.01, fill: false }
+                                'default': { stroke: true, color: layerKey === 'isobar' ? '#FFFFFF' : '#88E0FF', weight: 2, opacity: currentOpacity, fill: false },
+                                'features': { stroke: true, color: layerKey === 'isobar' ? '#FFFFFF' : '#88E0FF', weight: 2, opacity: currentOpacity, fill: false }
                             } :
                             { 'default': defaultStyle, 'features': defaultStyle };
 
                         newLayer = L.vectorGrid.protobuf(finalUrl, {
-                            opacity: 0.01,
+                            opacity: currentOpacity,
                             vectorTileLayerStyles: vectorStyles,
                             className: 'seamless-layer',
                             zIndex: zIndex
                         });
                     } catch (error) {
-                        newLayer = L.tileLayer(finalUrl, { opacity: 0.01, zIndex: zIndex, attribution: layerOptions.attribution, className: 'seamless-layer' });
+                        newLayer = L.tileLayer(finalUrl, { opacity: currentOpacity, zIndex: zIndex, className: 'seamless-layer' });
                     }
                 } else {
-                    newLayer = L.tileLayer(finalUrl, { opacity: 0.01, zIndex: zIndex, attribution: layerOptions.attribution, tms: true, tileSize: 256, className: 'seamless-layer' });
+                    newLayer = L.tileLayer(finalUrl, { opacity: currentOpacity, zIndex: zIndex,   tms: true, tileSize: 256, className: 'seamless-layer' });
                 }
 
                 if (!newLayer) return;
@@ -5624,6 +5705,8 @@
                 const success = await layerLoadedPromise;
 
                 const currentType = (document.getElementById(`${layerKey}LayerSelect`) || document.getElementById(`${layerKey}Layer`))?.value || 'none';
+
+                // Safety check: if user switched layer type while loading
                 if (currentType !== layerType || (timestamp !== null && lastPlottedTimestamp === timestamp)) {
                     if (newLayer && map.hasLayer(newLayer)) map.removeLayer(newLayer);
                     return;
@@ -5645,10 +5728,14 @@
                         case 'warning': warningLayer = newLayer; lastWarningTimestamp = timestamp || lastWarningTimestamp; lastWarningType = layerType; break;
                     }
 
-                    if (newLayer.getElement && newLayer.getElement()) newLayer.getElement().style.opacity = currentOpacity;
-                    else if (newLayer.setOpacity) newLayer.setOpacity(currentOpacity);
+                    // Ensure opacity is applied to the DOM element (double check)
+                    if (newLayer.getElement && newLayer.getElement()) {
+                        newLayer.getElement().style.opacity = currentOpacity;
+                    } else if (newLayer.setOpacity) {
+                        newLayer.setOpacity(currentOpacity);
+                    }
 
-                    // FIX 3: Safety check on removal to prevent 'in null' error
+                    // Handle smooth fade out of the old layer
                     if (layerToDispose && map.hasLayer(layerToDispose)) {
                         if (layerToDispose.getElement && layerToDispose.getElement()) layerToDispose.getElement().style.opacity = 0;
                         else if (layerToDispose.setOpacity) layerToDispose.setOpacity(0);
@@ -11638,5 +11725,6 @@
                 }
             });
         });
+        referenceLayer.addTo(map);
     </script>
     <script>
