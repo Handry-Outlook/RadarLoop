@@ -233,7 +233,7 @@
             color: #333;
         }
 
-        /* Update headline to allow dynamic colors */
+        /* Upfdate headline to allow dynamic colors */
         .headline-style {
             margin: 0 !important;
             font-size: 15px !important;
@@ -2331,6 +2331,7 @@
                 </div>
 
                 <select id="map-style" onchange="switchBaseMap(this.value)">
+                    <option value="mapbox-light">Mapbox Light</option>
                     <option value="opentopo">OpenTopoMap</option>
                     <option value="mapbox-traffic-night">Mapbox Traffic Night</option>
                     <option value="mapbox-traffic-day">Mapbox Traffic Day</option>
@@ -3446,7 +3447,7 @@
 
         // 1. Initialize the Leaflet Map
         map = L.map('map', {
-            layers: [baseLayers['opentopo']],
+            layers: [baseLayers['mapbox-light']],
             zoomControl: false
         }).setView([53.5, -4.5], 5);
         // --- 1. SETUP HIGH Z-INDEX PANE (Run this after initializing 'map') ---
@@ -8238,8 +8239,8 @@
 
             if (isDark) {
                 // Switch to a good dark base map
-                mapStyleSelect.value = 'opentopo'; // or 'mapbox-dark' or 'maptiler-dark'
-                switchBaseMap('opentopo');
+                mapStyleSelect.value = 'mapbox-light'; // or 'mapbox-dark' or 'maptiler-dark'
+                switchBaseMap('mapbox-light');
 
                 // Update button text
                 event.target.textContent = '☀️ Light Mode';
