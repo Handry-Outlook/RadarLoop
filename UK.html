@@ -2362,7 +2362,8 @@
                         <span class="tooltip">Show coastline on top of weather</span>
                     </div>
                     <div class="toggle-switch">
-                        <input type="checkbox" id="overlay-toggle" checked onchange="toggleReferenceLayer(this.checked)">
+                        <input type="checkbox" id="overlay-toggle" checked
+                            onchange="toggleReferenceLayer(this.checked)">
                         <label for="overlay-toggle" class="switch"></label>
                     </div>
                 </div>
@@ -3669,6 +3670,16 @@
                 bounds: null,
                 attribution: 'DTN Meteoguard'
             },
+            'radar-nowcast-forecast': {
+                // Updated URL with ${iso_future} support
+                url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-radar-precip-rate-europe-raster/${iso_now}/${iso_future}/{z}/{x}/{-y}.pbf',
+                interval: 5 * 60 * 1000,
+                type: 'vector-tile',
+                bounds: null,
+                attribution: 'DTN Meteoguard',
+                allowFuture: true,
+                isNowcast: true // Custom flag to trigger dual-timestamp logic
+            },
             'radar-precip-intensity-australia-contours': {
                 url: 'https://tiles.meteoguard.dtn.com/tiles/radar-precip-intensity-australia-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
                 interval: 15 * 60 * 1000,
@@ -4506,6 +4517,13 @@
                 bounds: null,
                 attribution: 'dtn'
             },
+            'radar-nowcast-europe': {
+                url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-radar-base-ref-precip-type-europe-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+                interval: 5 * 60 * 1000,
+                type: 'vector-tile', // Typically vector tiles for lines/contours
+                bounds: null,
+                attribution: 'dtn'
+            },
             'sfcanlys-dew-point-contours': {
                 url: 'https://tiles.meteoguard.dtn.com/tiles/sfcanlys-dew-point-contours/${iso}/${iso}/{z}/{x}/{y}.png',
                 interval: 60 * 60 * 1000, // Hourly update, for example
@@ -5151,6 +5169,9 @@
             if (typeof handler === 'function') {
                 handler();
             }
+            if (layerKey === 'radar') {
+                updateHistorySliderMax();
+            }
             updateLegend();
         }
         // ==========================================
@@ -5223,14 +5244,72 @@
                 console.warn("Unknown layer config passed to fetchTileUrl", layerConfig);
                 return null;
             }
-            if (layerConfig.type === 'tile-layer') {
-                const date = new Date(timestamp);
-                const formatISO = (d) => d.toISOString().replace(/\.\d{3}Z$/, 'Z');
-                const formatISO2 = (d) => d.toISOString().replace(/[-:T.]/g, '').slice(0, 14);
-                // No validation check needed for standard tile layers, just construct the URL
-                return layerConfig.url.replace(/\${iso}/g, formatISO(date));
+
+            // 1. Define Formatters FIRST so all blocks can access them
+            const formatISO = (d) => d.toISOString().replace(/\.\d{3}Z$/, 'Z');
+            const formatISO2 = (d) => d.toISOString().replace(/[-:T.]/g, '').slice(0, 14);
+
+            // --- NOWCAST / FORECAST LOGIC ---
+            if (layerConfig.isNowcast) {
+                // A. CONSTANT VALID TIME: The target time the user selected on the slider
+                const validTime = new Date(timestamp);
+                const iso_future = formatISO(validTime);
+                const iso2_future = formatISO2(validTime);
+
+                // B. INITIAL ISSUE TIME: Start with real-world "Now" rounded down to nearest 5 mins
+                let baseIssueTime = new Date();
+                baseIssueTime.setMinutes(Math.floor(baseIssueTime.getMinutes() / 5) * 5, 0, 0);
+
+                // C. REFETCH LOOP: Step 'iso_now' backward while 'iso_future' stays CONSTANT
+                for (let attempt = 0; attempt < 12; attempt++) {
+                    const currentIssueTime = new Date(baseIssueTime.getTime() - (attempt * 5 * 60 * 1000));
+
+                    // Format the stepping issue time
+                    const iso_now = formatISO(currentIssueTime);
+                    const iso2_now = formatISO2(currentIssueTime);
+
+                    // Generate the URL for this specific attempt
+                    // Replaces ALL variations so it supports different API endpoint structures
+                    const currentAttemptUrl = layerConfig.url
+                        .replace(/\${iso}/g, iso_now)         // Fallback for generic ${iso} targeting issue time
+                        .replace(/\${iso2}/g, iso2_now)       // Fallback for generic ${iso2} targeting issue time
+                        .replace(/\${iso_now}/g, iso_now)
+                        .replace(/\${iso_future}/g, iso_future)
+                        .replace(/\${iso2_future}/g, iso2_future);
+
+                    try {
+                        // Check if this specific model run (iso_now) is available on the server.
+                        // Replaced '0' with standard EU coordinates (z=6, x=31, y=23) to avoid false 404s.
+                        const checkUrl = currentAttemptUrl
+                            .replace(/\{z\}/g, '6')
+                            .replace(/\{x\}/g, '31')
+                            .replace(/\{y\}/g, '23')
+                            .replace(/\{-y\}/g, '23')
+                            .replace(/z=\{z\}&x=\{x\}&y=\{y\}/g, 'z=6&x=31&y=23');
+
+                        const response = await fetch(checkUrl);
+
+                        if (response.ok) {
+                            console.log(`Nowcast Success! Issue: ${iso_now} | Target: ${iso_future}`);
+                            return currentAttemptUrl; // Returns the un-injected {z}/{x}/{y} URL for Leaflet to use
+                        }
+                    } catch (e) {
+                        // Network error, fail silently and try next
+                    }
+                    console.warn(`Nowcast run ${iso_now} not found for target ${iso_future}. Trying earlier run...`);
+                }
+
+                console.error("No valid radar nowcast runs found in the last 60 minutes.");
+                return null;
             }
-            // --- Validation/Cache Logic for Image and Vector-Tile Layers ---
+
+            // --- STANDARD TILE LAYER LOGIC ---
+            else if (layerConfig.type === 'tile-layer') {
+                const date = new Date(timestamp);
+                return layerConfig.url.replace(/\${iso}/g, formatISO(date)).replace(/\${iso2}/g, formatISO2(date));
+            }
+
+            // --- STANDARD CACHED/VALIDATED VECTOR & IMAGE LOGIC ---
             const cacheKey = `${layerTypeKey}_${timestamp}`;
             if (Date.now() - timestamp < recentTimeThreshold) {
                 radarValidationCache.delete(cacheKey);
@@ -5252,10 +5331,9 @@
             date.setMinutes(Math.floor(date.getMinutes() / (interval / 60 / 1000)) * (interval / 60 / 1000));
             date.setSeconds(0);
             date.setMilliseconds(0);
+
             let minTime = new Date(Date.now() - sixDaysInMs);
-            const formatISO = (d) => d.toISOString().replace(/\.\d{3}Z$/, 'Z');
-            const formatISO2 = (d) => d.toISOString().replace(/[-:T.]/g, '').slice(0, 14);
-            // --- ENFORCED LOGIC: Determine search bounds based on current filter time ---
+
             let maxAttempts = layerConfig.type === 'image' ? 4 : 288;
             let isHistoricalView = currentFilterTimestamp && (Date.now() - currentFilterTimestamp) > recentTimeThreshold;
             let currentTimeCheck = new Date(date);
@@ -5264,9 +5342,12 @@
             } else {
                 maxAttempts = layerConfig.type === 'image' ? 4 : 288;
             }
+
             if (layerConfig.type === 'image') {
                 for (let attempt = 0; attempt < maxAttempts && currentTimeCheck >= minTime; attempt++) {
-                    const url = layerConfig.url.replace(/\${iso}/g, formatISO(currentTimeCheck));
+                    const url = layerConfig.url
+                        .replace(/\${iso}/g, formatISO(currentTimeCheck))
+                        .replace(/\${iso2}/g, formatISO2(currentTimeCheck));
                     const img = new Image();
                     img.src = url;
                     const isValid = await new Promise((resolve) => {
@@ -5284,30 +5365,23 @@
             } else {
                 // Tile Logic (Vector Tiles)
                 async function validateTile(checkTime) {
-                    if (checkTime < minTime) return null;
+                    if (checkTime < minTime && !layerConfig.allowFuture) return null;
                     const iso = formatISO(checkTime);
-                    const iso2 = formatISO2(checkTime)
+                    const iso2 = formatISO2(checkTime);
                     let tileUrl = layerConfig.url
                         .replace(/\${iso}/g, iso)
                         .replace(/\${iso2}/g, iso2);
 
-
-                    // FIX: Use a higher, central zoom tile (6/32/32) instead of the problematic 0/0/0
                     const checkUrl = tileUrl.replace(
                         /(\{z\}\/\{x\}\/\{y\}|z=\{z\}&x=\{x\}&y=\{y\})/,
-                        match => match.startsWith('{') ? '0/0/0' : 'z=6&x=31&y=23'
+                        match => match.startsWith('{') ? '6/31/23' : 'z=6&x=31&y=23'
                     );
-
 
                     for (let retry = 0; retry < 2; retry++) {
                         try {
                             const response = await fetch(checkUrl, { method: 'GET' });
                             if (response.ok) {
-                                // REMOVE THE arrayBuffer.byteLength CHECK for vector tiles
-                                // const arrayBuffer = await response.arrayBuffer();
-                                // if (arrayBuffer.byteLength > 0) {
-                                return tileUrl.replace(/\${iso}/g, iso);
-                                // }
+                                return tileUrl;
                             }
                         } catch (error) {
                             // Ignore error
@@ -5446,6 +5520,7 @@
             let newLayer = null;
 
             try {
+
                 if (layerOptions.type === 'feature-layer') {
                     newLayer = L.esri.featureLayer({
                         url: finalUrl,
@@ -5672,7 +5747,6 @@
                     });
                 } else if (layerOptions.type === 'vector-tile') {
                     try {
-                        // Vector grid styles require the opacity passed into the style definition
                         const defaultStyle = { fill: true, opacity: currentOpacity, fillOpacity: currentOpacity, weight: 0, color: 'inherit' };
                         let vectorStyles = (layerKey === 'isobar' || layerKey === 'wind') ?
                             {
@@ -5681,17 +5755,27 @@
                             } :
                             { 'default': defaultStyle, 'features': defaultStyle };
 
+                        // --- UPDATE FOR TMS SUPPORT ---
+                        // Check if this is the Europe forecast layer which needs TMS coordinates
+                        const isEuropeForecast = (layerType === 'radar-nowcast-forecast');
+
                         newLayer = L.vectorGrid.protobuf(finalUrl, {
                             opacity: currentOpacity,
                             vectorTileLayerStyles: vectorStyles,
                             className: 'seamless-layer',
-                            zIndex: zIndex
+                            zIndex: zIndex,
+                            tms: isEuropeForecast // Apply TMS if it's the Europe forecast
                         });
                     } catch (error) {
-                        newLayer = L.tileLayer(finalUrl, { opacity: currentOpacity, zIndex: zIndex, className: 'seamless-layer' });
+                        newLayer = L.tileLayer(finalUrl, {
+                            opacity: currentOpacity,
+                            zIndex: zIndex,
+                            className: 'seamless-layer',
+                            tms: (layerType === 'radar-nowcast-forecast') // Fallback tile layer also gets TMS
+                        });
                     }
                 } else {
-                    newLayer = L.tileLayer(finalUrl, { opacity: currentOpacity, zIndex: zIndex,   tms: true, tileSize: 256, className: 'seamless-layer' });
+                    newLayer = L.tileLayer(finalUrl, { opacity: currentOpacity, zIndex: zIndex, tms: true, tileSize: 256, className: 'seamless-layer' });
                 }
 
                 if (!newLayer) return;
@@ -5800,6 +5884,23 @@
         // ==========================================
         // DEBOUNCED TRIGGER (CLEARS ALL IF NOTHING ENABLED)
         // ==========================================
+        function updateHistorySliderMax() {
+            const maxHours = parseInt(document.getElementById('max-history-hours').value) || 6;
+            let maxMinutes = maxHours * 60;
+            const radarToggle = document.getElementById('radarToggle');
+            const slider = document.getElementById('history-slider');
+
+            if (radarToggle && radarToggle.checked) {
+                maxMinutes += 180; // Add 3 hours for nowcast
+            }
+
+            const oldValue = parseInt(slider.value);
+            slider.max = maxMinutes;
+
+            if (oldValue > maxMinutes) {
+                slider.value = maxMinutes;
+            }
+        }
         const triggerMapUpdate = debounce((timestamp) => {
             currentFilterTimestamp = timestamp;
             const anyEnabled = [
@@ -6322,7 +6423,19 @@
          * @param {string} layerKey - 'satellite', 'radar', 'isobar', or 'wind'.
          */
         async function plotLayerIfNecessary(layerType, optionsMap, targetTimestamp, layerKey) {
-            const layerConfig = optionsMap[layerType];
+            let layerConfig = optionsMap[layerType];
+
+            // --- NEW: Switch to nowcast config if radar is selected and time is in future ---
+            if (layerKey === 'radar' && targetTimestamp > (Date.now() + 2 * 60 * 1000)) {
+                // Switch configuration to the nowcast layer
+                // Note: We use the specific key we defined in radarOptions
+                const nowcastConfig = optionsMap['radar-nowcast-forecast'];
+                if (nowcastConfig) {
+                    layerConfig = nowcastConfig;
+                    // We don't change 'layerType' variable to keep the cache key consistent 
+                    // or we can append a suffix if caching issues arise.
+                }
+            }
             if (layerType.startsWith('xweather-')) {
                 await handleXweatherData(layerType);
                 return; // Exit so it doesn't try to load as a PNG tile
@@ -6593,13 +6706,13 @@
         function getCurrentSliderTimestamp() {
             const historySlider = document.getElementById('history-slider');
             if (!historySlider) return Date.now();
-            const rawValue = historySlider.value;
-            const sliderMax = parseInt(historySlider.getAttribute('max') || 100, 10);
-            const sliderValue = parseFloat(rawValue);
-            const maxHistoryHours = 4;
-            const maxHistoryMs = maxHistoryHours * 60 * 60 * 1000;
-            const normalizedValue = (sliderMax - sliderValue) / sliderMax;
-            return Date.now() - normalizedValue * maxHistoryMs;
+            const maxHoursInput = parseInt(document.getElementById('max-history-hours').value) || 6;
+            const maxMinutes = maxHoursInput * 60;
+            const sliderValue = parseInt(historySlider.value);
+
+            const now = Date.now();
+            const startOfHistory = now - (maxMinutes * 60 * 1000);
+            return startOfHistory + (sliderValue * 60 * 1000);
         }
         function handleTimeSliderChange(event) {
             const historySlider = event.target;
@@ -6621,11 +6734,17 @@
             const select = document.getElementById('radarLayer');
             if (select?.disabled) {
                 clearRadarLayers();
+                // Update history to remove the future 3 hours from slider
+                updateHistory();
                 return;
             }
             fetchData();
             const newType = select.value;
             clearRadarLayers();
+
+            // Update history to ADD the future 3 hours to slider
+            updateHistory();
+
             const timestamp = getCurrentSliderTimestamp();
             plotLayerIfNecessary(newType, radarOptions, timestamp, 'radar');
         }
@@ -8838,19 +8957,31 @@
 
         function formatTimeAgo(minutesBack) {
             if (minutesBack === 0) return '⏱️ Now | ';
+            if (minutesBack < 0) return `⏱️ +${Math.abs(minutesBack)}m | `; // Future
             const hours = Math.floor(minutesBack / 60);
             const minutes = minutesBack % 60;
             let result = '';
             if (hours > 0) result += `${hours}h `;
             if (minutes > 0 || hours === 0) result += `${minutes}m`;
             return '⏱️ ' + result.trim() + ' ago | ';
+            return '⏱️ ' + result.trim() + (minutesBack > 0 ? ' ago | ' : ' from now | ');
         }
 
         function updateHistory() {
             isAdjustingHistory = true;
             const slider = document.getElementById('history-slider');
             const lifespanHours = parseFloat(document.getElementById('lightning-lifespan').value);
+
+            // --- DEFINE VARIABLES ---
             let start, end, sliderMax, sliderValue, minutesBack;
+
+            // --- CHECK RADAR STATUS ---
+            // Check if radar layer is selected and active
+            const radarSelect = document.getElementById('radarLayer');
+            const isRadarActive = radarSelect && !radarSelect.disabled && radarSelect.value !== 'none';
+
+            // Add 180 minutes (3 hours) if radar is on
+            const futureMinutes = isRadarActive ? 180 : 0;
 
             if (lastFilterMode === 'inputs' && customFilterStart && customFilterEnd) {
                 const filterStart = new Date(customFilterStart);
@@ -8879,22 +9010,51 @@
                 document.getElementById('history-label').innerText = formatTimeAgo(minutesBack);
                 document.getElementById('history-time').innerText = `${start.toLocaleString()} - ${end.toLocaleString()}`;
             } else {
-                const maxMinutes = (parseInt(document.getElementById('max-history-hours').value) || 6) * 60;
-                sliderMax = maxMinutes;
-                sliderValue = parseInt(slider.value) || maxMinutes;
-                minutesBack = maxMinutes - sliderValue;
+                const maxHoursInput = parseInt(document.getElementById('max-history-hours').value) || 6;
+                const maxMinutes = maxHoursInput * 60;
+
+                // --- UPDATE SLIDER MAX ---
+                // Max is History + Future
+                sliderMax = maxMinutes + futureMinutes;
+
+                sliderValue = parseInt(slider.value);
+                if (isNaN(sliderValue)) sliderValue = maxMinutes;
+
+                // If user toggles radar OFF and slider was in future, snap back to Now
+                if (!isRadarActive && sliderValue > maxMinutes) {
+                    sliderValue = maxMinutes;
+                }
 
                 const now = new Date();
-                end = new Date(now.getTime() - minutesBack * 60 * 1000);
+                // Calculate "Start of History" (Leftmost point of slider)
+                const startOfHistory = now.getTime() - (maxMinutes * 60 * 1000);
+
+                // Calculate "Current Slider Time"
+                // If sliderValue > maxMinutes, this result will be > Now
+                end = new Date(startOfHistory + (sliderValue * 60 * 1000));
                 start = new Date(end.getTime() - lifespanHours * 3600 * 1000);
 
-                slider.max = maxMinutes;
+                slider.max = sliderMax;
                 slider.min = 0;
-                slider.value = sliderValue;
 
-                //document.getElementById('start-time').value = start.toISOString().slice(0, 16);
-                //document.getElementById('end-time').value = end.toISOString().slice(0, 16);
-                document.getElementById('history-label').innerText = formatTimeAgo(minutesBack);
+                // Only update value if we snapped it back
+                if (slider.value != sliderValue) slider.value = sliderValue;
+
+                // Format Label
+                let labelText = '';
+                if (sliderValue > maxMinutes) {
+                    // Future Label
+                    const minsFuture = sliderValue - maxMinutes;
+                    const h = Math.floor(minsFuture / 60);
+                    const m = minsFuture % 60;
+                    labelText = `🔮 Forecast +${h}h ${m}m | `;
+                } else {
+                    // Past Label
+                    const minutesBackCalc = maxMinutes - sliderValue;
+                    labelText = formatTimeAgo(minutesBackCalc);
+                }
+
+                document.getElementById('history-label').innerText = labelText;
                 document.getElementById('history-time').innerText = `${start.toLocaleString()} - ${end.toLocaleString()}`;
                 document.getElementById('remove-filter').style.display = 'none';
             }
