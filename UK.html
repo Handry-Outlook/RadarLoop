@@ -10290,7 +10290,6 @@
 
             // Remove all layers to re-add them in the correct order
             if (nowcastLayer && map.hasLayer(nowcastLayer)) map.removeLayer(nowcastLayer);
-            if (typeof polygonNowcastLayer !== 'undefined' && map.hasLayer(polygonNowcastLayer)) map.removeLayer(polygonNowcastLayer); // <--- ADDED
             if (strikeLayer && map.hasLayer(strikeLayer)) map.removeLayer(strikeLayer);
             if (kmlLayer && map.hasLayer(kmlLayer)) map.removeLayer(kmlLayer);
             if (pngLayer && map.hasLayer(pngLayer)) map.removeLayer(pngLayer);
@@ -10317,9 +10316,6 @@
                 nowcastLayer.setZIndex(nowcastZ);
                 map.addLayer(nowcastLayer);
             }
-            if (typeof polygonNowcastLayer !== 'undefined' && document.getElementById('nowcast-toggle').checked) {
-                map.addLayer(polygonNowcastLayer); // <--- ADDED (Re-adds it below lightning to keep strikes visible but polygons clickable)
-            }
             if (strikeLayer && document.getElementById('lightning-layer-toggle').checked) {
                 strikeLayer.setZIndex(lightningZ);
                 map.addLayer(strikeLayer);
@@ -10331,7 +10327,6 @@
 
             // In 3D mode, ensure correct layer order by re-adding layers
             if (is3DMode) {
-            // ... [Keep the rest of your 3D logic untouched inside this function] ...
                 // Remove existing 3D layers
                 if (map3D.getLayer('png-layer')) map3D.removeLayer('png-layer');
                 if (map3D.getSource('png-source')) map3D.removeSource('png-source');
@@ -10877,7 +10872,6 @@
                                 <hr style="margin: 4px 0;">
                                 <b>Cell Size:</b> ${cluster.clusterSize} strikes<br>
                                 <b>Potential Impact:</b> ${impactHtml}<br>
-                                
                                 <b>Nowcast Confidence:</b> ${(confidence * 100).toFixed(0)}% (${confidence.toFixed(2)})<br>
                                 <b>Storm Motion:</b> ${cluster.speedKmH.toFixed(1)} km/h @ ${cluster.directionDeg.toFixed(1)}° (${getDirection(cluster.directionDeg)})<br>
                             </div>
@@ -11121,7 +11115,7 @@
             // --- 0. DYNAMIC PARAMETER CALCULATION & FILTERING ---
             const referenceTime = typeof animationEnd !== 'undefined' && animationEnd ? new Date(animationEnd) : new Date();
 
-            const initialMaxTimeRange = 5 * 3600 * 1000;
+            const initialMaxTimeRange = 7 * 3600 * 1000;
             const recentLightning = lightningData.filter(s => (referenceTime.getTime() - s.time.getTime()) <= initialMaxTimeRange);
             const recentLightningLength = recentLightning.length;
 
@@ -11135,7 +11129,7 @@
             // --- BALANCED SOFT TIME WINDOW (Gentle nerf, no hard feelings) ---
 
             // Base dynamic range: high activity → shorter window (more precise), low → longer
-            let baseMaxHours = 4.0 - (2.0 * densityRatio);
+            let baseMaxHours = 6.0 - (2.0 * densityRatio);
             // → High density (ratio≈1): ~2 hours  
             // → Low density (ratio≈0): ~4 hours  
 
@@ -11335,11 +11329,34 @@
                     }
                 }
 
-                // B. Convex Hull (Current Shape Geometry)
+                // B. Convex Hull (Current Shape Geometry - STRICT 30 MIN WINDOW)
                 let hullGeometry = null;
-                if (typeof turf !== 'undefined' && currentCluster.cluster.length >= minClusterSize) {
-                    const points = turf.featureCollection(currentCluster.cluster.map(s => turf.point([s.coordinates[0], s.coordinates[1]])));
-                    hullGeometry = turf.convex(points);
+                
+                if (typeof turf !== 'undefined' && currentCluster.cluster.length >= 3) {
+                    const hullTimeWindowMs = 30 * 60 * 1000; // 30 minutes
+                    
+                    // 1. Sort the current cluster chronologically to ensure we know what's newest
+                    const sortedCluster = [...currentCluster.cluster].sort((a, b) => a.time.getTime() - b.time.getTime());
+                    
+                    // 2. Filter for strikes only in the last 30 minutes
+                    let recentHullStrikes = sortedCluster.filter(s => 
+                        (referenceTime.getTime() - s.time.getTime()) <= hullTimeWindowMs
+                    );
+
+                    // 3. Fallback: If the storm is quiet and dropped < 3 strikes in 30 mins, 
+                    // grab the 3 most recent strikes overall so turf.convex doesn't fail.
+                    if (recentHullStrikes.length < 3) {
+                        recentHullStrikes = sortedCluster.slice(-3); 
+                    }
+
+                    // 4. Generate the Turf polygon
+                    if (recentHullStrikes.length >= 3) {
+                        const points = turf.featureCollection(recentHullStrikes.map(s => turf.point([s.coordinates[0], s.coordinates[1]])));
+                        hullGeometry = turf.convex(points);
+                        
+                        // Edge-case fallback: If points are perfectly in a straight line, convex returns null.
+                        // We can fall back to the raw points if absolutely necessary, but null usually fails gracefully below.
+                    }
                 }
 
                 // C. FUTURE POLYGON PROJECTION 
