@@ -4518,7 +4518,7 @@
                 attribution: 'dtn'
             },
             'radar-nowcast-europe': {
-                url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-radar-base-ref-precip-type-europe-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+                url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-radar-precip-rate-europe-raster/${iso}/${iso}/{z}/{x}/{y}.pbf',
                 interval: 5 * 60 * 1000,
                 type: 'vector-tile', // Typically vector tiles for lines/contours
                 bounds: null,
@@ -10290,6 +10290,7 @@
 
             // Remove all layers to re-add them in the correct order
             if (nowcastLayer && map.hasLayer(nowcastLayer)) map.removeLayer(nowcastLayer);
+            if (typeof polygonNowcastLayer !== 'undefined' && map.hasLayer(polygonNowcastLayer)) map.removeLayer(polygonNowcastLayer); // <--- ADDED
             if (strikeLayer && map.hasLayer(strikeLayer)) map.removeLayer(strikeLayer);
             if (kmlLayer && map.hasLayer(kmlLayer)) map.removeLayer(kmlLayer);
             if (pngLayer && map.hasLayer(pngLayer)) map.removeLayer(pngLayer);
@@ -10316,6 +10317,9 @@
                 nowcastLayer.setZIndex(nowcastZ);
                 map.addLayer(nowcastLayer);
             }
+            if (typeof polygonNowcastLayer !== 'undefined' && document.getElementById('nowcast-toggle').checked) {
+                map.addLayer(polygonNowcastLayer); // <--- ADDED (Re-adds it below lightning to keep strikes visible but polygons clickable)
+            }
             if (strikeLayer && document.getElementById('lightning-layer-toggle').checked) {
                 strikeLayer.setZIndex(lightningZ);
                 map.addLayer(strikeLayer);
@@ -10327,6 +10331,7 @@
 
             // In 3D mode, ensure correct layer order by re-adding layers
             if (is3DMode) {
+            // ... [Keep the rest of your 3D logic untouched inside this function] ...
                 // Remove existing 3D layers
                 if (map3D.getLayer('png-layer')) map3D.removeLayer('png-layer');
                 if (map3D.getSource('png-source')) map3D.removeSource('png-source');
@@ -10872,6 +10877,7 @@
                                 <hr style="margin: 4px 0;">
                                 <b>Cell Size:</b> ${cluster.clusterSize} strikes<br>
                                 <b>Potential Impact:</b> ${impactHtml}<br>
+                                
                                 <b>Nowcast Confidence:</b> ${(confidence * 100).toFixed(0)}% (${confidence.toFixed(2)})<br>
                                 <b>Storm Motion:</b> ${cluster.speedKmH.toFixed(1)} km/h @ ${cluster.directionDeg.toFixed(1)}° (${getDirection(cluster.directionDeg)})<br>
                             </div>
@@ -11717,6 +11723,7 @@
                         cluster.nowcastPolygons.forEach(forecast => {
                             const latLngs = forecast.polygon.map(p => [p[1], p[0]]);
                             const timeDecay = 1.0 - (forecast.timeMinutes / 80);
+                            
                             L.polygon(latLngs, {
                                 color: customStrokeColor !== 'black' ? customStrokeColor : confidenceColor,
                                 weight: forecastStrokeWeight,
@@ -11724,7 +11731,34 @@
                                 fillColor: confidenceColor,
                                 fillOpacity: baseOpacity * timeDecay * 0.3,
                                 dashArray: '5, 5'
-                            }).addTo(polygonNowcastLayer);
+                            }).bindPopup(`
+                                <div class="weather-popup-container light-theme" style="min-width: 260px; border-top: 4px solid ${confidenceColor};">
+                                    <div style="background: #f8f9fa; padding: 12px 15px; border-bottom: 1px solid #eee;">
+                                        <div style="color: ${confidenceColor}; font-weight: 800; font-size: 10px; letter-spacing: 1px; text-transform: uppercase;">STORM PROJECTION</div>
+                                        <div style="font-size: 16px; font-weight: 700; color: #1a1a1a; margin-top: 2px;">+${forecast.timeMinutes} Minutes</div>
+                                    </div>
+                                    <div style="padding: 15px; background: #fff;">
+                                        <div style="margin-bottom: 12px;">
+                                            <div style="font-size: 9px; font-weight: 800; color: #888; text-transform: uppercase;">Potential Impact</div>
+                                            <div style="font-size: 14px; margin-top: 2px;">${impactHtml}</div>
+                                        </div>
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; border-top: 1px solid #f0f0f0; padding-top: 12px;">
+                                            <div>
+                                                <div style="font-size: 9px; font-weight: 800; color: #888; text-transform: uppercase;">Speed</div>
+                                                <div style="font-size: 12px; font-weight: 600; color: #333;">${cluster.speedKmH.toFixed(1)} km/h</div>
+                                            </div>
+                                            <div>
+                                                <div style="font-size: 9px; font-weight: 800; color: #888; text-transform: uppercase;">Heading</div>
+                                                <div style="font-size: 12px; font-weight: 600; color: #333;">${cluster.directionDeg.toFixed(0)}° ${getDirection(cluster.directionDeg)}</div>
+                                            </div>
+                                            <div style="grid-column: span 2;">
+                                                <div style="font-size: 9px; font-weight: 800; color: #888; text-transform: uppercase;">Trajectory Confidence</div>
+                                                <div style="font-size: 12px; font-weight: 600; color: #333;">${(confidence * 100).toFixed(0)}%</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `, { className: 'custom-weather-popup', closeButton: false }).addTo(polygonNowcastLayer);
                         });
                     }
 
@@ -11737,8 +11771,40 @@
                                 weight: customStrokeWeight,
                                 opacity: 0.9
                             }
-                        }).addTo(polygonNowcastLayer);
+                        }).bindPopup(`
+                            <div class="weather-popup-container light-theme" style="min-width: 260px; border-top: 4px solid ${customStrokeColor};">
+                                <div style="background: #f8f9fa; padding: 12px 15px; border-bottom: 1px solid #eee;">
+                                    <div style="color: ${customStrokeColor}; font-weight: 800; font-size: 10px; letter-spacing: 1px; text-transform: uppercase;">ACTIVE CONVECTION</div>
+                                    <div style="font-size: 16px; font-weight: 700; color: #1a1a1a; margin-top: 2px;">Current Storm Cell</div>
+                                </div>
+                                <div style="padding: 15px; background: #fff;">
+                                    <div style="margin-bottom: 12px;">
+                                        <div style="font-size: 9px; font-weight: 800; color: #888; text-transform: uppercase;">Potential Impact</div>
+                                        <div style="font-size: 14px; margin-top: 2px;">${impactHtml}</div>
+                                    </div>
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; border-top: 1px solid #f0f0f0; padding-top: 12px;">
+                                        <div>
+                                            <div style="font-size: 9px; font-weight: 800; color: #888; text-transform: uppercase;">Cell Size</div>
+                                            <div style="font-size: 12px; font-weight: 600; color: #333;">${cluster.clusterSize} strikes</div>
+                                        </div>
+                                        <div>
+                                            <div style="font-size: 9px; font-weight: 800; color: #888; text-transform: uppercase;">Tracking Confidence</div>
+                                            <div style="font-size: 12px; font-weight: 600; color: #333;">${(confidence * 100).toFixed(0)}%</div>
+                                        </div>
+                                        <div>
+                                            <div style="font-size: 9px; font-weight: 800; color: #888; text-transform: uppercase;">Motion</div>
+                                            <div style="font-size: 12px; font-weight: 600; color: #333;">${cluster.speedKmH.toFixed(1)} km/h</div>
+                                        </div>
+                                        <div>
+                                            <div style="font-size: 9px; font-weight: 800; color: #888; text-transform: uppercase;">Heading</div>
+                                            <div style="font-size: 12px; font-weight: 600; color: #333;">${cluster.directionDeg.toFixed(0)}° ${getDirection(cluster.directionDeg)}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `, { className: 'custom-weather-popup', closeButton: false }).addTo(polygonNowcastLayer);
                     }
+                
                 } else {
                     // --- 3D RENDERING ---
                     const radiusKm = confidence * 5 + 5;
