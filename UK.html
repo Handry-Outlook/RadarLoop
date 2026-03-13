@@ -2331,6 +2331,7 @@
                 </div>
 
                 <select id="map-style" onchange="switchBaseMap(this.value)">
+                    <option value="mapbox-dark">Mapbox Dark</option>
                     <option value="mapbox-light">Mapbox Light</option>
                     <option value="opentopo">OpenTopoMap</option>
                     <option value="mapbox-traffic-night">Mapbox Traffic Night</option>
@@ -2343,8 +2344,7 @@
                     <option value="custom">Mapbox Classic</option>
                     <option value="mapbox-satellite">Mapbox Satellite</option>
                     <option value="mapbox-outdoors">Mapbox Outdoors</option>
-                    <option value="mapbox-dark">Mapbox Dark</option>
-                    <option value="mapbox-light">Mapbox Light</option>
+                    
                     <option value="osm">OpenStreetMap</option>
 
                     <option value="esri">Esri World Imagery</option>
@@ -3448,7 +3448,7 @@
 
         // 1. Initialize the Leaflet Map
         map = L.map('map', {
-            layers: [baseLayers['mapbox-light']],
+            layers: [baseLayers['mapbox-dark']],
             zoomControl: false
         }).setView([53.5, -4.5], 5);
         // --- 1. SETUP HIGH Z-INDEX PANE (Run this after initializing 'map') ---
@@ -5891,7 +5891,7 @@
             const slider = document.getElementById('history-slider');
 
             if (radarToggle && radarToggle.checked) {
-                maxMinutes += 180; // Add 3 hours for nowcast
+                maxMinutes += 120; // Add 3 hours for nowcast
             }
 
             const oldValue = parseInt(slider.value);
@@ -8358,8 +8358,8 @@
 
             if (isDark) {
                 // Switch to a good dark base map
-                mapStyleSelect.value = 'mapbox-light'; // or 'mapbox-dark' or 'maptiler-dark'
-                switchBaseMap('mapbox-light');
+                mapStyleSelect.value = 'mapbox-dark'; // or 'mapbox-dark' or 'maptiler-dark'
+                switchBaseMap('mapbox-dark');
 
                 // Update button text
                 event.target.textContent = '☀️ Light Mode';
@@ -8981,7 +8981,7 @@
             const isRadarActive = radarSelect && !radarSelect.disabled && radarSelect.value !== 'none';
 
             // Add 180 minutes (3 hours) if radar is on
-            const futureMinutes = isRadarActive ? 180 : 0;
+            const futureMinutes = isRadarActive ? 120 : 0;
 
             if (lastFilterMode === 'inputs' && customFilterStart && customFilterEnd) {
                 const filterStart = new Date(customFilterStart);
