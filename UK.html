@@ -5265,65 +5265,65 @@
         /**
  * Loads the specific Day and populates the metadata legend
  */
-        function loadHocoByTimestampAndDay(baseSeconds, day) {
+        async function loadHocoByTimestampAndDay(baseSeconds, day) {
     const startRange = new firebase.firestore.Timestamp(parseInt(baseSeconds), 0);
     const endRange = new firebase.firestore.Timestamp(parseInt(baseSeconds) + 60, 0);
 
-    db.collection("hoco_requests")
-        .where("type", "==", "automated")
-        .where("createdAt", ">=", startRange)
-        .where("createdAt", "<", endRange)
-        .get()
-        .then(async (querySnapshot) => {
-            const doc = querySnapshot.docs.find(d => d.data().id.includes(`Day${day}`));
+    try {
+        const querySnapshot = await db.collection("hoco_requests")
+            .where("type", "==", "automated")
+            .where("createdAt", ">=", startRange)
+            .where("createdAt", "<", endRange)
+            .get();
 
-            if (doc && doc.data().geojsonUrl) {
-                const data = doc.data();
-                
-                try {
-                    // --- THE FIX: Refresh the expired token ---
-                    // This gets a fresh download URL even if the one in the DB is expired
-                    const storageRef = firebase.storage().refFromURL(data.geojsonUrl);
-                    const freshUrl = await storageRef.getDownloadURL();
+        const doc = querySnapshot.docs.find(d => d.data().id.includes(`Day${day}`));
 
-                    // Update Metadata
-                    const creationDate = data.createdAt.toDate().toLocaleString('en-GB', {
-                        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
-                    });
-                    document.getElementById('hoco-create-date').textContent = creationDate;
-                    document.getElementById('hoco-start-time').textContent = data.startTime || "N/A";
-                    document.getElementById('hoco-end-time').textContent = data.endTime || "N/A";
-                    document.getElementById('hoco-metadata-legend').style.display = 'block';
+        if (doc && doc.data().geojsonUrl) {
+            const data = doc.data();
 
-                    // Use the FRESH URL instead of the one from the database
-                    const res = await fetch(freshUrl, { mode: 'cors' });
-                    const geojsonData = await res.json();
+            // --- REFRESH TOKEN LOGIC ---
+            // This converts the expired URL into a fresh one
+            const storageRef = firebase.storage().refFromURL(data.geojsonUrl);
+            const freshUrl = await storageRef.getDownloadURL(); 
 
-                    hocoLayerGroup.clearLayers();
-                    L.geoJSON(geojsonData, {
-                        filter: (f) => f.geometry.type.includes('Polygon'),
-                        style: hocoStyle,
-                        onEachFeature: (f, l) => {
-                            l.bindPopup(`
-                                <div style="font-family: 'Inter', sans-serif; min-width: 160px;">
-                                    <strong style="color: #66c2a4;">HOCO Forecast</strong><br>
-                                    <hr style="margin: 5px 0; border: 0; border-top: 1px solid #eee;">
-                                    <strong>Risk:</strong> ${f.properties.risk}%<br>
-                                    <strong>Valid:</strong> ${data.startTime} - ${data.endTime}
-                                </div>
-                            `);
-                        }
-                    }).addTo(hocoLayerGroup);
+            // Update Metadata UI
+            const creationDate = data.createdAt.toDate().toLocaleString('en-GB', {
+                day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+            });
+            document.getElementById('hoco-create-date').textContent = creationDate;
+            document.getElementById('hoco-start-time').textContent = data.startTime || "N/A";
+            document.getElementById('hoco-end-time').textContent = data.endTime || "N/A";
+            document.getElementById('hoco-metadata-legend').style.display = 'block';
 
-                } catch (error) {
-                    console.error("Error refreshing HOCO URL:", error);
-                    alert("Could not load older data. The file might have been deleted from storage.");
+            // Fetch using the FRESH URL
+            const res = await fetch(freshUrl, { mode: 'cors' });
+            
+            // This will now succeed because freshUrl contains a valid token
+            const geojsonData = await res.json();
+
+            hocoLayerGroup.clearLayers();
+            L.geoJSON(geojsonData, {
+                filter: (f) => f.geometry.type.includes('Polygon'),
+                style: hocoStyle,
+                onEachFeature: (f, l) => {
+                    l.bindPopup(`
+                        <div style="font-family: 'Inter', sans-serif; min-width: 160px;">
+                            <strong style="color: #66c2a4;">HOCO Forecast</strong><br>
+                            <hr style="margin: 5px 0; border: 0; border-top: 1px solid #eee;">
+                            <strong>Risk:</strong> ${f.properties.risk}%<br>
+                            <strong>Valid:</strong> ${data.startTime} - ${data.endTime}
+                        </div>
+                    `);
                 }
-            } else {
-                document.getElementById('hoco-metadata-legend').style.display = 'none';
-                hocoLayerGroup.clearLayers();
-            }
-        });
+            }).addTo(hocoLayerGroup);
+        }
+    } catch (error) {
+        console.error("HOCO Load Error:", error);
+        // If it's a 403/404, the file might actually be deleted from Storage
+        if (error.code === 'storage/object-not-found') {
+            alert("This forecast file no longer exists in storage.");
+        }
+    }
 }
         /**
          * Step 3: Handle UI and trigger search
