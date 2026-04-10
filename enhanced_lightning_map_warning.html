@@ -2932,7 +2932,7 @@
                         <span class="tooltip">Select Auto HOCO generation date from new Firebase</span>
                     </div>
                 </div>
-                <select id="hoco-date-select" onchange="fetchHocoData()">
+                <select id="hoco-date-select" onchange="loadRunIntoMap(this.value, 0)">
                     <option value="" disabled selected>Loading Firebase dates...</option>
                     <!-- Firebase dates will be populated here -->
                 </select>
@@ -5180,18 +5180,7 @@
                 console.log(`Successfully loaded ${querySnapshot.size} runs.`);
 
                 // Auto-trigger first run fetch
-                if (!querySnapshot.empty) {
-                    const firstRunId = querySnapshot.docs[0].id;
-                    console.log("Auto-selecting latest run ID:", firstRunId);
-
-                    // Ensure this function exists in your script to handle the map load
-                    if (typeof loadRunIntoMap === "function") {
-                        loadRunIntoMap(firstRunId, 0);
-                    } else {
-                        console.error("Function 'loadRunIntoMap' is not defined!");
-                    }
-                }
-
+                
             } catch (error) {
                 console.error("❌ HOCO Firestore Fetch Failed:", error);
                 dateSelect.innerHTML = '<option value="" disabled>Error loading database</option>';
@@ -5238,23 +5227,29 @@
     });
 }
         function setHocoForecastDay(day) {
-            console.log(`📅 Forecast Day Switched to: Day ${day}`);
+    console.log(`📅 Forecast Day Switched to: Day ${day}`);
+    currentHocoDay = day;
 
-            // Update the global tracking variable
-            currentHocoDay = day;
+    // 1. Update Button Visuals
+    document.querySelectorAll('.hoco-day-btn').forEach(btn => btn.classList.remove('active'));
+    const activeBtn = document.getElementById(`hoco-day-${day}`);
+    if (activeBtn) activeBtn.classList.add('active');
 
-            // Visual feedback for buttons
-            document.querySelectorAll('.hoco-day-btn').forEach(btn => {
-                btn.classList.remove('active');
-            });
+    // 2. Find the ID in your dropdown that matches this day
+    const dateSelect = document.getElementById('hoco-date-select');
+    const options = Array.from(dateSelect.options);
+    
+    // Look for an option that contains "DayX" or matches your naming convention
+    const targetOption = options.find(opt => opt.text.includes(`Day ${day}`) || opt.value.includes(`Day${day}`));
 
-            const activeBtn = document.getElementById(`hoco-day-${day}`);
-            if (activeBtn) activeBtn.classList.add('active');
-
-            // Logic to reload the map for the new day
-            // This usually involves refetching data or filtering the GeoJSON
-            console.log("Triggering map update for day:", day);
-        }
+    if (targetOption) {
+        dateSelect.value = targetOption.value;
+        // 3. Trigger the actual map reload
+        loadRunIntoMap(targetOption.value, 0);
+    } else {
+        console.warn(`Could not find a Firestore record for Day ${day} in the current list.`);
+    }
+}
         // Ensure the DOM is ready and Firebase is initialized
         window.addEventListener('DOMContentLoaded', () => {
             // Small delay to ensure Firebase Auth/Firestore is ready
