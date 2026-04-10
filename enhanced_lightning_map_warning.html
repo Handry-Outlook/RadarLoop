@@ -5117,36 +5117,40 @@ function populateHocoDates() {
             const uniqueDates = new Set();
             
             querySnapshot.forEach((doc) => {
-                let d = doc.data().creation_date;
-                // Fix: If it's a Firestore Timestamp, convert to String
-                if (d && typeof d.toDate === 'function') {
-                    d = d.toDate().toISOString(); 
+                let rawDate = doc.data().creation_date;
+                
+                // CRITICAL FIX: Convert Firestore Timestamp object to a String
+                // If we don't do this, the dropdown stays empty or shows [object Object]
+                if (rawDate && typeof rawDate.toDate === 'function') {
+                    rawDate = rawDate.toDate().toISOString(); 
                 }
-                if (d) uniqueDates.add(d);
+                
+                if (rawDate) uniqueDates.add(rawDate);
             });
 
             dateSelect.innerHTML = '';
             
             if (uniqueDates.size === 0) {
-                dateSelect.innerHTML = '<option value="">No runs available</option>';
+                dateSelect.innerHTML = '<option disabled>No runs found</option>';
                 return;
             }
 
+            // Convert Set to Array and Sort (descending)
             const sortedDates = Array.from(uniqueDates).sort().reverse();
 
             sortedDates.forEach(date => {
                 let option = document.createElement('option');
                 option.value = date;
-                // Make it look pretty: 2024-05-20 12:00
+                // Format for display: 2024-05-20 12:00
                 option.textContent = date.replace('T', ' ').substring(0, 16); 
                 dateSelect.appendChild(option);
             });
 
-            console.log("Unique dates populated and sorted.");
+            console.log("✅ Unique dates populated and sorted.");
         })
         .catch((error) => {
-            console.error("Error populating dates: ", error);
-            dateSelect.innerHTML = '<option value="">Error loading data</option>';
+            console.error("❌ Error populating dates: ", error);
+            dateSelect.innerHTML = '<option disabled>Error loading database</option>';
         });
 }
 
@@ -5155,9 +5159,8 @@ function populateHocoDates() {
  */
 function setHocoForecastDay(day) {
     const activeBtn = document.getElementById(`hoco-day-${day}`);
-    const dateSelect = document.getElementById('hoco-date-select');
     
-    // TOGGLE OFF: If already active, remove layer and deactivate
+    // TOGGLE LOGIC: If already active, remove the layer and deactivate
     if (activeBtn.classList.contains('active')) {
         console.log(`Hiding Day ${day}`);
         hocoLayerGroup.clearLayers();
@@ -5166,17 +5169,15 @@ function setHocoForecastDay(day) {
         return; 
     }
 
-    // TOGGLE ON: Switching to a new day
+    // Otherwise, proceed with showing the day
     console.log(`📅 Switching to: Day ${day}`);
     currentHocoDay = day;
 
     document.querySelectorAll('.hoco-day-btn').forEach(btn => btn.classList.remove('active'));
     activeBtn.classList.add('active');
 
-    const selectedSeconds = dateSelect.value;
-    if (selectedSeconds) {
-        loadHocoByDateAndDay(selectedSeconds, day);
-    }
+    const selectedDate = document.getElementById('hoco-date-select').value;
+    loadHocoByDateAndDay(selectedDate, day);
 }
 
 /**
@@ -5184,12 +5185,12 @@ function setHocoForecastDay(day) {
  */
 function loadHocoByDateAndDay(date, day) {
     console.log(`Searching for Date: ${date} | Day: ${day}`);
-    
-    // Convert string back to Firestore Timestamp for the query
-    const firestoreDate = new Date(date);
+
+    // Convert the string back to a Date object so Firestore can match the Timestamp
+    const queryDate = new Date(date);
 
     db.collection("auto_hoco")
-        .where("creation_date", "==", firestoreDate)
+        .where("creation_date", "==", queryDate)
         .where("forecast_day", "==", parseInt(day)) 
         .limit(1)
         .get()
@@ -5204,7 +5205,12 @@ function loadHocoByDateAndDay(date, day) {
                         hocoLayerGroup.clearLayers();
                         L.geoJSON(geojsonData, {
                             filter: (f) => f.geometry.type.includes('Polygon'),
-                            style: hocoStyle
+                            style: hocoStyle,
+                            onEachFeature: (f, l) => {
+                                if (f.properties && f.properties.risk) {
+                                    l.bindPopup(`<strong>Risk:</strong> ${f.properties.risk}%`);
+                                }
+                            }
                         }).addTo(hocoLayerGroup);
                     });
             } else {
@@ -5212,9 +5218,8 @@ function loadHocoByDateAndDay(date, day) {
                 hocoLayerGroup.clearLayers();
             }
         })
-        .catch(err => console.error("Query error:", err));
+        .catch(err => console.error("Firestore query error:", err));
 }
-
 // Initialize on load
 window.addEventListener('DOMContentLoaded', () => {
     populateHocoDates();
