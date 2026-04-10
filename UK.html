@@ -5151,11 +5151,15 @@
         // 1. INITIALIZE THE APP FIRST
         firebase.initializeApp(firebaseConfig);
 
-        // 2. NOW INITIALIZE FIRESTORE (Global Scope)
+        // 2. INITIALIZE SERVICES
         const db = firebase.firestore();
+        // Add this line to create a global storage reference
+        const storage = firebase.storage();
 
         let hocoLayerGroup = L.layerGroup().addTo(map);
         let currentHocoDay = null;
+
+
 
         const lightning_colors = [
             "#ffffff", "#d0cece", "#d0cece", "#d0cece", "#d0cece", "#bea497", "#bea497", "#bea497", "#bea497", "#bea497",
@@ -5284,7 +5288,13 @@
                     const data = doc.data();
 
                     // --- REFRESH TOKEN LOGIC ---
-                    // This converts the expired URL into a fresh one
+                    // Ensure storage is ready before calling
+                    if (typeof firebase.storage !== 'function') {
+                        console.error("Firebase Storage not loaded yet");
+                        return;
+                    }
+
+                    // Using the global storage reference or the direct firebase call
                     const storageRef = firebase.storage().refFromURL(data.geojsonUrl);
                     const freshUrl = await storageRef.getDownloadURL();
 
@@ -5292,6 +5302,7 @@
                     const creationDate = data.createdAt.toDate().toLocaleString('en-GB', {
                         day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
                     });
+
                     document.getElementById('hoco-create-date').textContent = creationDate;
                     document.getElementById('hoco-start-time').textContent = data.startTime || "N/A";
                     document.getElementById('hoco-end-time').textContent = data.endTime || "N/A";
@@ -5299,8 +5310,6 @@
 
                     // Fetch using the FRESH URL
                     const res = await fetch(freshUrl, { mode: 'cors' });
-
-                    // This will now succeed because freshUrl contains a valid token
                     const geojsonData = await res.json();
 
                     hocoLayerGroup.clearLayers();
@@ -5313,6 +5322,7 @@
                             <strong style="color: #66c2a4;">HOCO Forecast</strong><br>
                             <hr style="margin: 5px 0; border: 0; border-top: 1px solid #eee;">
                             <strong>Risk:</strong> ${f.properties.risk}%<br>
+                            <strong>Created:</strong> ${creationDate}<br>
                             <strong>Valid:</strong> ${data.startTime} - ${data.endTime}
                         </div>
                     `);
@@ -5321,7 +5331,6 @@
                 }
             } catch (error) {
                 console.error("HOCO Load Error:", error);
-                // If it's a 403/404, the file might actually be deleted from Storage
                 if (error.code === 'storage/object-not-found') {
                     alert("This forecast file no longer exists in storage.");
                 }
