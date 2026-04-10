@@ -5104,44 +5104,50 @@ const db = firebase.firestore();
 
 let hocoLayerGroup = L.layerGroup().addTo(map);
 let currentHocoDay = 0;
-
 /**
- * Fetches unique dates and populates the dropdown without duplicates
+ * 1. Fetches unique dates and populates the dropdown without duplicates
+ * Uses 'auto_hoco' collection and ensures newest runs appear first.
  */
 async function fetchHocoData() {
     console.group("🚀 HOCO Data Sync");
     const dateSelect = document.getElementById('hoco-date-select');
 
     try {
-        // Querying hoco_requests (adjust collection name if necessary)
-        const querySnapshot = await db.collection("hoco_requests")
-            .orderBy("createdAt", "desc")
-            .limit(50) 
+        console.log("Querying auto_hoco for unique creation dates...");
+        
+        // Fetch runs ordered by creation_date
+        const querySnapshot = await db.collection("auto_hoco")
+            .orderBy("creation_date", "desc")
             .get();
 
         if (querySnapshot.empty) {
+            console.warn("No data found in auto_hoco.");
             dateSelect.innerHTML = '<option value="" disabled>No runs available</option>';
             return;
         }
 
-        dateSelect.innerHTML = '';
         const uniqueDates = new Set();
-
         querySnapshot.forEach((doc) => {
             const data = doc.data();
-            // Use creation_date as the key for grouping Day 0, 1, 2
-            const dVal = data.creation_date || data.createdAt; 
-            
-            if (dVal && !uniqueDates.has(dVal)) {
-                uniqueDates.add(dVal);
-                const option = document.createElement('option');
-                option.value = dVal;
-                option.textContent = `${dVal} (${data.region || 'UK'})`;
-                dateSelect.appendChild(option);
+            if (data.creation_date) {
+                uniqueDates.add(data.creation_date);
             }
         });
 
-        console.log(`Successfully loaded ${uniqueDates.size} unique runs.`);
+        // Clear and Populate Dropdown
+        dateSelect.innerHTML = '';
+        
+        // Convert Set to Array and Sort (descending) to ensure newest is at top
+        const sortedDates = Array.from(uniqueDates).sort().reverse();
+
+        sortedDates.forEach(date => {
+            const option = document.createElement('option');
+            option.value = date;
+            option.textContent = date; 
+            dateSelect.appendChild(option);
+        });
+
+        console.log(`Successfully grouped into ${uniqueDates.size} unique run times.`);
 
     } catch (error) {
         console.error("❌ HOCO Firestore Fetch Failed:", error);
@@ -5151,7 +5157,8 @@ async function fetchHocoData() {
 }
 
 /**
- * Loads specific Day for a specific Date
+ * 2. Loads specific Day for a specific Date
+ * Filters by both the creation_date string and the forecast_day integer.
  */
 function loadHocoByDateAndDay(dateValue, day) {
     if (!dateValue || day === null) {
@@ -5161,9 +5168,10 @@ function loadHocoByDateAndDay(dateValue, day) {
 
     console.log(`🔍 Searching Firestore | Date: ${dateValue} | Day: ${day}`);
 
-    db.collection("hoco_requests")
+    db.collection("auto_hoco")
         .where("creation_date", "==", dateValue)
         .where("forecast_day", "==", parseInt(day))
+        .limit(1)
         .get()
         .then((querySnapshot) => {
             if (!querySnapshot.empty) {
@@ -5173,20 +5181,23 @@ function loadHocoByDateAndDay(dateValue, day) {
                 fetch(geojsonUrl)
                     .then(res => res.json())
                     .then(geojsonData => {
+                        // Clear old layers
                         hocoLayerGroup.clearLayers();
+
+                        // Add new GeoJSON with Marker Filter
                         L.geoJSON(geojsonData, {
                             filter: (f) => {
-                                // Strictly Polygons only to remove markers
+                                // Strictly Polygons only to remove blue markers
                                 return f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon';
                             },
                             style: hocoStyle,
                             onEachFeature: (f, l) => {
-                                if (f.properties && f.properties.risk) {
+                                if (f.properties && f.properties.risk !== undefined) {
                                     l.bindPopup(`<strong>Risk Level:</strong> ${f.properties.risk}%`);
                                 }
                             }
                         }).addTo(hocoLayerGroup);
-                        console.log(`✅ Loaded Day ${day} for ${dateValue}`);
+                        console.log(`✅ Loaded Day ${day} polygons for ${dateValue}`);
                     });
             } else {
                 console.warn(`No document found for Day ${day} on ${dateValue}`);
@@ -5197,29 +5208,30 @@ function loadHocoByDateAndDay(dateValue, day) {
 }
 
 /**
- * Triggered by Day 0, Day 1, Day 2 buttons
+ * 3. Triggered by Day 0, Day 1, Day 2 buttons
+ * Handles the "Toggle-Off" logic and visual button states.
  */
 function setHocoForecastDay(day) {
     const activeBtn = document.getElementById(`hoco-day-${day}`);
     const dateSelect = document.getElementById('hoco-date-select');
     const selectedDate = dateSelect.value;
 
-    // Toggle Logic: If already active, clear and exit
+    // TOGGLE LOGIC: If user clicks the button that is already active, hide the layer
     if (activeBtn.classList.contains('active')) {
-        console.log(`Resetting view: Hiding Day ${day}`);
+        console.log(`⏹️ Toggling OFF: Hiding Day ${day}`);
         hocoLayerGroup.clearLayers();
         activeBtn.classList.remove('active');
-        currentHocoDay = null;
+        currentHocoDay = null; // Clear tracking
         return;
     }
 
-    // Visual updates
+    // Visual updates: Remove active class from others, add to this one
     document.querySelectorAll('.hoco-day-btn').forEach(btn => btn.classList.remove('active'));
     activeBtn.classList.add('active');
     
     currentHocoDay = day;
 
-    // Load data
+    // Load data based on selected date and chosen day
     if (selectedDate) {
         loadHocoByDateAndDay(selectedDate, day);
     } else {
@@ -5229,6 +5241,7 @@ function setHocoForecastDay(day) {
 
 // Initialize
 window.addEventListener('DOMContentLoaded', () => {
+    // Only populate the list; don't auto-display anything on the map
     setTimeout(() => {
         fetchHocoData();
     }, 1000);
