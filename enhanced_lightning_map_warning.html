@@ -5063,232 +5063,176 @@
         const NOWCAST_Z_INDEX = 190;            // NEW
         const WARNING_Z_INDEX = 135;            // NEW
 
-        /**
+       /**
  * Returns the color associated with a specific risk percentage
  */
-        function getHocoColor(risk) {
-            if (risk === undefined || risk === null) return 'rgba(0,0,0,0)';
-            return risk >= 90 ? '#b83dda' : // Purple (High)
-                risk >= 80 ? '#ec1c24' : // Red (Moderate)
-                    risk >= 60 ? '#ff7f27' : // Orange (Enhanced)
-                        risk >= 40 ? '#fff200' : // Yellow (Slight)
-                            risk >= 20 ? '#66c2a4' : // Green (Low)
-                                'rgba(255,255,255,0)'; // Transparent
+function getHocoColor(risk) {
+    if (risk === undefined || risk === null) return 'rgba(0,0,0,0)';
+    return risk >= 90 ? '#b83dda' : // Purple (High)
+           risk >= 80 ? '#ec1c24' : // Red (Moderate)
+           risk >= 60 ? '#ff7f27' : // Orange (Enhanced)
+           risk >= 40 ? '#fff200' : // Yellow (Slight)
+           risk >= 20 ? '#66c2a4' : // Green (Low)
+                        'rgba(255,255,255,0)'; // Transparent
+}
+
+/**
+ * Defines the style for each GeoJSON feature
+ */
+function hocoStyle(feature) {
+    const risk = feature.properties.risk;
+    return {
+        fillColor: getHocoColor(risk),
+        weight: 1,
+        opacity: 0.3,
+        color: 'white', // Border color
+        fillOpacity: 0.7
+    };
+}
+
+// --- CONFIGURATION ---
+const firebaseConfig = {
+    apiKey: "AIzaSyA8IYTApDl8vhZENPJXIw48rR_SUhfFPVQ",
+    authDomain: "hoco-3b23e.firebaseapp.com",
+    projectId: "hoco-3b23e",
+    storageBucket: "hoco-3b23e.firebasestorage.app",
+    messagingSenderId: "409513272369",
+    appId: "1:409513272369:web:a857d9b039d53710f8a110"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+let hocoLayerGroup = L.layerGroup().addTo(map);
+let currentHocoDay = 0;
+
+/**
+ * Fetches unique dates and populates the dropdown without duplicates
+ */
+async function fetchHocoData() {
+    console.group("🚀 HOCO Data Sync");
+    const dateSelect = document.getElementById('hoco-date-select');
+
+    try {
+        // Querying hoco_requests (adjust collection name if necessary)
+        const querySnapshot = await db.collection("hoco_requests")
+            .orderBy("createdAt", "desc")
+            .limit(50) 
+            .get();
+
+        if (querySnapshot.empty) {
+            dateSelect.innerHTML = '<option value="" disabled>No runs available</option>';
+            return;
         }
 
-        /**
-         * Defines the style for each GeoJSON feature
-         */
-        function hocoStyle(feature) {
-            const risk = feature.properties.risk;
-            return {
-                fillColor: getHocoColor(risk),
-                weight: 1,
-                opacity: 0.3,
-                color: 'white', // Border color
-                fillOpacity: 0.7
-            };
-        }
-        // --- CONFIGURATION ---
-        const firebaseConfig = {
-            apiKey: "AIzaSyA8IYTApDl8vhZENPJXIw48rR_SUhfFPVQ",
-            authDomain: "hoco-3b23e.firebaseapp.com",
-            projectId: "hoco-3b23e",
-            storageBucket: "hoco-3b23e.firebasestorage.app",
-            messagingSenderId: "409513272369",
-            appId: "1:409513272369:web:a857d9b039d53710f8a110"
-        };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
+        dateSelect.innerHTML = '';
+        const uniqueDates = new Set();
 
-        let hocoLayerGroup = L.layerGroup().addTo(map);
-        let currentHocoDay = 0;
-
-        /**
-         * Fetches unique creation dates from Firestore
-         */
-        function populateHocoDates() {
-            const dateSelect = document.getElementById('hoco-date-select');
-
-            db.collection("auto_hoco")
-                .orderBy("creation_date", "desc")
-                .get()
-                .then((querySnapshot) => {
-                    const uniqueDates = new Set();
-                    querySnapshot.forEach((doc) => {
-                        uniqueDates.add(doc.data().creation_date);
-                    });
-
-                    dateSelect.innerHTML = '';
-
-                    // Convert Set to Array and Sort (descending)
-                    const sortedDates = Array.from(uniqueDates).sort().reverse();
-
-                    sortedDates.forEach(date => {
-                        let option = document.createElement('option');
-                        option.value = date;
-                        option.textContent = date; // Shows: 2024-05-20 12:00
-                        dateSelect.appendChild(option);
-                    });
-
-                    console.log("Unique dates populated and sorted.");
-                })
-                .catch((error) => console.error("Error populating dates: ", error));
-        }
-
-        /**
-         * Fetches the GeoJSON for the selected run and day
-         */
-        // --- HOCO Forecast Logic with Enhanced Logging ---
-
-        async function fetchHocoData() {
-            console.group("🚀 HOCO Data Sync");
-            const dateSelect = document.getElementById('hoco-date-select');
-
-            try {
-                console.log("Querying Firestore for HOCO runs using v8 syntax...");
-
-                // Use the 'db' instance already defined in your config
-                // Using collection("hoco_requests") as per your database structure
-                const querySnapshot = await db.collection("hoco_requests")
-                    .orderBy("createdAt", "desc")
-                    .limit(20)
-                    .get();
-
-                if (querySnapshot.empty) {
-                    console.warn("No data found in Firestore hoco_requests.");
-                    dateSelect.innerHTML = '<option value="" disabled>No runs available</option>';
-                    return;
-                }
-
-                // Clear and Populate Dropdown
-                dateSelect.innerHTML = '';
-
-                querySnapshot.forEach((doc) => {
-                    const data = doc.data();
-                    const option = document.createElement('option');
-
-                    // FIX: Store the creation_date, not the random Document ID
-                    option.value = data.creation_date;
-
-                    // Label remains the same for the user
-                    const label = `${data.creation_date} (${data.region || 'UK'})`;
-                    option.textContent = label;
-
-                    dateSelect.appendChild(option);
-                });
-
-                console.log(`Successfully loaded ${querySnapshot.size} runs.`);
-
-                // Auto-trigger first run fetch
-
-            } catch (error) {
-                console.error("❌ HOCO Firestore Fetch Failed:", error);
-                dateSelect.innerHTML = '<option value="" disabled>Error loading database</option>';
+        querySnapshot.forEach((doc) => {
+            const data = doc.data();
+            // Use creation_date as the key for grouping Day 0, 1, 2
+            const dVal = data.creation_date || data.createdAt; 
+            
+            if (dVal && !uniqueDates.has(dVal)) {
+                uniqueDates.add(dVal);
+                const option = document.createElement('option');
+                option.value = dVal;
+                option.textContent = `${dVal} (${data.region || 'UK'})`;
+                dateSelect.appendChild(option);
             }
-            console.groupEnd();
-        }
-        function loadRunIntoMap(runId, mapIndex) {
-            console.log(`Loading Run: ${runId}`);
-
-            db.collection("hoco_requests").doc(runId).get().then((doc) => {
-                if (doc.exists) {
-                    const data = doc.data();
-                    const geojsonUrl = data.geojsonUrl;
-
-                    fetch(geojsonUrl)
-                        .then(response => response.json())
-                        .then(geojsonData => {
-                            // Clear old layers before adding new ones
-                            hocoLayerGroup.clearLayers();
-
-                            // Add new GeoJSON with a strict Polygon-only filter
-                            L.geoJSON(geojsonData, {
-                                filter: function (feature) {
-                                    // This ensures we ONLY draw shapes (Polygons) 
-                                    // and completely ignores Points, MultiPoints, etc.
-                                    const type = feature.geometry.type;
-                                    return type === 'Polygon' || type === 'MultiPolygon';
-                                },
-                                style: hocoStyle,
-                                onEachFeature: function (feature, layer) {
-                                    // Adds the interactive popup back to the polygons
-                                    if (feature.properties && feature.properties.risk !== undefined) {
-                                        layer.bindPopup(`<strong>Risk Level:</strong> ${feature.properties.risk}%`);
-                                    }
-                                }
-                            }).addTo(hocoLayerGroup);
-
-                            console.log("HOCO Layer updated. Markers filtered out.");
-                        })
-                        .catch(err => console.error("Error fetching GeoJSON file:", err));
-                } else {
-                    console.error("Document does not exist in Firestore!");
-                }
-            });
-        }
-        function loadHocoByDateAndDay(dateValue, day) {
-            // If the dateValue is empty or "null", don't query
-            if (!dateValue) return;
-
-            console.log(`Searching for Date: ${dateValue} | Day: ${day}`);
-
-            db.collection("hoco_requests") // Make sure this matches your collection name
-                .where("creation_date", "==", dateValue)
-                .where("forecast_day", "==", parseInt(day)) // Ensure day is an integer
-                .get()
-                .then((querySnapshot) => {
-                    if (!querySnapshot.empty) {
-                        const doc = querySnapshot.docs[0];
-                        const geojsonUrl = doc.data().geojsonUrl;
-
-                        fetch(geojsonUrl)
-                            .then(res => res.json())
-                            .then(geojsonData => {
-                                hocoLayerGroup.clearLayers();
-                                L.geoJSON(geojsonData, {
-                                    filter: (f) => f.geometry.type.includes('Polygon'),
-                                    style: hocoStyle
-                                }).addTo(hocoLayerGroup);
-                                console.log("Successfully loaded Day " + day);
-                            });
-                    } else {
-                        console.warn(`No record found for Date: ${dateValue} at Day ${day}`);
-                        // Optional: keep old data or clear it
-                        hocoLayerGroup.clearLayers();
-                    }
-                })
-                .catch(err => console.error("Firestore Query Error:", err));
-        }
-        function setHocoForecastDay(day) {
-            const activeBtn = document.getElementById(`hoco-day-${day}`);
-
-            // TOGGLE LOGIC: If already active, remove the layer and deactivate
-            if (activeBtn.classList.contains('active')) {
-                console.log(` hiding Day ${day}`);
-                hocoLayerGroup.clearLayers();
-                activeBtn.classList.remove('active');
-                currentHocoDay = null; // Reset tracking
-                return;
-            }
-
-            // Otherwise, proceed with showing the day
-            console.log(`📅 Switching to: Day ${day}`);
-            currentHocoDay = day;
-
-            document.querySelectorAll('.hoco-day-btn').forEach(btn => btn.classList.remove('active'));
-            activeBtn.classList.add('active');
-
-            const selectedDate = document.getElementById('hoco-date-select').value;
-            loadHocoByDateAndDay(selectedDate, day);
-        }
-        // Ensure the DOM is ready and Firebase is initialized
-        window.addEventListener('DOMContentLoaded', () => {
-            // Small delay to ensure Firebase Auth/Firestore is ready
-            setTimeout(() => {
-                fetchHocoData();
-            }, 1000);
         });
+
+        console.log(`Successfully loaded ${uniqueDates.size} unique runs.`);
+
+    } catch (error) {
+        console.error("❌ HOCO Firestore Fetch Failed:", error);
+        dateSelect.innerHTML = '<option value="" disabled>Error loading database</option>';
+    }
+    console.groupEnd();
+}
+
+/**
+ * Loads specific Day for a specific Date
+ */
+function loadHocoByDateAndDay(dateValue, day) {
+    if (!dateValue || day === null) {
+        console.warn("Missing Date or Day for query.");
+        return;
+    }
+
+    console.log(`🔍 Searching Firestore | Date: ${dateValue} | Day: ${day}`);
+
+    db.collection("hoco_requests")
+        .where("creation_date", "==", dateValue)
+        .where("forecast_day", "==", parseInt(day))
+        .get()
+        .then((querySnapshot) => {
+            if (!querySnapshot.empty) {
+                const doc = querySnapshot.docs[0];
+                const geojsonUrl = doc.data().geojsonUrl;
+
+                fetch(geojsonUrl)
+                    .then(res => res.json())
+                    .then(geojsonData => {
+                        hocoLayerGroup.clearLayers();
+                        L.geoJSON(geojsonData, {
+                            filter: (f) => {
+                                // Strictly Polygons only to remove markers
+                                return f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon';
+                            },
+                            style: hocoStyle,
+                            onEachFeature: (f, l) => {
+                                if (f.properties && f.properties.risk) {
+                                    l.bindPopup(`<strong>Risk Level:</strong> ${f.properties.risk}%`);
+                                }
+                            }
+                        }).addTo(hocoLayerGroup);
+                        console.log(`✅ Loaded Day ${day} for ${dateValue}`);
+                    });
+            } else {
+                console.warn(`No document found for Day ${day} on ${dateValue}`);
+                hocoLayerGroup.clearLayers();
+            }
+        })
+        .catch(err => console.error("Firestore Query Error:", err));
+}
+
+/**
+ * Triggered by Day 0, Day 1, Day 2 buttons
+ */
+function setHocoForecastDay(day) {
+    const activeBtn = document.getElementById(`hoco-day-${day}`);
+    const dateSelect = document.getElementById('hoco-date-select');
+    const selectedDate = dateSelect.value;
+
+    // Toggle Logic: If already active, clear and exit
+    if (activeBtn.classList.contains('active')) {
+        console.log(`Resetting view: Hiding Day ${day}`);
+        hocoLayerGroup.clearLayers();
+        activeBtn.classList.remove('active');
+        currentHocoDay = null;
+        return;
+    }
+
+    // Visual updates
+    document.querySelectorAll('.hoco-day-btn').forEach(btn => btn.classList.remove('active'));
+    activeBtn.classList.add('active');
+    
+    currentHocoDay = day;
+
+    // Load data
+    if (selectedDate) {
+        loadHocoByDateAndDay(selectedDate, day);
+    } else {
+        console.error("Please select a date from the dropdown first.");
+    }
+}
+
+// Initialize
+window.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        fetchHocoData();
+    }, 1000);
+});
         // ==========================================
         // 2. HELPER FUNCTIONS
         // ==========================================
