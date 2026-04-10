@@ -3399,48 +3399,50 @@
     </div>
     <div id="overlay" class="overlay" style="display: none;"></div>
     <div id="hoco-metadata-legend"
-    style="display:none; position: fixed; top: 80px; left: 360px; background: rgba(0,0,0,0.9); color: white; padding: 12px; border-radius: 8px; z-index: 1000; font-family: 'Inter', sans-serif; border: 1px solid #3a4785; box-shadow: 0 4px 15px rgba(0,0,0,0.5); min-width: 250px; transition: all 0.3s ease;">
+        style="display:none; position: fixed; top: 80px; left: 360px; background: rgba(0,0,0,0.9); color: white; padding: 12px; border-radius: 8px; z-index: 1000; font-family: 'Inter', sans-serif; border: 1px solid #3a4785; box-shadow: 0 4px 15px rgba(0,0,0,0.5); min-width: 250px; transition: all 0.3s ease;">
 
-    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; padding-bottom: 5px; margin-bottom: 8px;">
-        <div style="color: #66c2a4; font-weight: bold; font-size: 13px; text-transform: uppercase;">
-            HOCO Thunderstorm Forecast
-        </div>
-        <button id="hoco-toggle-btn" onclick="toggleHocoLegend()"
-            style="background: none; border: none; color: #bbb; cursor: pointer; font-size: 16px; line-height: 1; padding: 0 5px; transition: color 0.2s;">
-            ✕
-        </button>
-    </div>
-
-    <div class="hoco-content">
-    <div style="font-size: 11px; line-height: 1.6; opacity: 0.9; font-family: 'Inter', sans-serif;">
-        
-        <div style="margin-bottom: 4px;">
-            <strong style="color: #bbb;">Run Created:</strong> <span id="hoco-create-date">-</span>
-        </div>
-        
-        <div style="margin-bottom: 8px;">
-            <strong style="color: #bbb;">Valid Period:</strong> <br>
-            <span id="hoco-start-time"></span> – <span id="hoco-end-time"></span>
+        <div
+            style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; padding-bottom: 5px; margin-bottom: 8px;">
+            <div style="color: #66c2a4; font-weight: bold; font-size: 13px; text-transform: uppercase;">
+                HOCO Thunderstorm Forecast
+            </div>
+            <button id="hoco-toggle-btn" onclick="toggleHocoLegend()"
+                style="background: none; border: none; color: #bbb; cursor: pointer; font-size: 16px; line-height: 1; padding: 0 5px; transition: color 0.2s;">
+                ✕
+            </button>
         </div>
 
-        <div style="margin-top: 10px;">
-            <strong style="color: #bbb;">Color Scale (Risk %)</strong>
-        </div>
-        
-        <div class="hoco-color-scale"></div>
-        
-        <div style="display: flex; justify-content: space-between; font-size: 9px; color: #bbb; margin-top: 3px; margin-bottom: 12px;">
-            <span>0%</span>
-            <span>50%</span>
-            <span>100%</span>
-        </div>
-    </div>
+        <div class="hoco-content">
+            <div style="font-size: 11px; line-height: 1.6; opacity: 0.9; font-family: 'Inter', sans-serif;">
 
-    <a href="https://handry-outlook.github.io/HOCO-V2.0/index.html" target="_blank" 
-       style="display: block; text-align: center; background: #66c2a4; color: #000; text-decoration: none; font-size: 11px; font-weight: 600; padding: 6px; border-radius: 4px; transition: background 0.2s; margin-top: 5px;">
-        View Detailed Forecast (HOCO V2.0) ➔
-    </a>
-</div>
+                <div style="margin-bottom: 4px;">
+                    <strong style="color: #bbb;">Run Created:</strong> <span id="hoco-create-date">-</span>
+                </div>
+
+                <div style="margin-bottom: 8px;">
+                    <strong style="color: #bbb;">Valid Period:</strong> <br>
+                    <span id="hoco-start-time"></span> – <span id="hoco-end-time"></span>
+                </div>
+
+                <div style="margin-top: 10px;">
+                    <strong style="color: #bbb;">Color Scale (Risk %)</strong>
+                </div>
+
+                <div class="hoco-color-scale"></div>
+
+                <div
+                    style="display: flex; justify-content: space-between; font-size: 9px; color: #bbb; margin-top: 3px; margin-bottom: 12px;">
+                    <span>0%</span>
+                    <span>50%</span>
+                    <span>100%</span>
+                </div>
+            </div>
+
+            <a href="https://handry-outlook.github.io/HOCO-V2.0/index.html" target="_blank"
+                style="display: block; text-align: center; background: #66c2a4; color: #000; text-decoration: none; font-size: 11px; font-weight: 600; padding: 6px; border-radius: 4px; transition: background 0.2s; margin-top: 5px;">
+                View Detailed Forecast (HOCO V2.0) ➔
+            </a>
+        </div>
     </div>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/esri-leaflet@3.0.12/dist/esri-leaflet.js"></script>
@@ -3452,11 +3454,11 @@
     <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.4.3/mapbox-gl-draw.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
-    <!-- Firebase App (the core Firebase SDK) -->
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <!-- Firebase Firestore -->
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
     <script>
         const mapboxAccessToken = 'pk.eyJ1IjoibWV0ZW9ncm91cC1tYXBib3giLCJhIjoiY2pudWJyMWVhMDQ0bjNxdXFsNWJ5M2ZtbSJ9.ANOKYyv5s0VFVbnesnGGUQ';
         const maptilerApiKey = 'd6FiSbcpDtzJ4g4e0oD4';
@@ -5266,47 +5268,47 @@
  * Loads the specific Day and populates the metadata legend
  */
         async function loadHocoByTimestampAndDay(baseSeconds, day) {
-    const startRange = new firebase.firestore.Timestamp(parseInt(baseSeconds), 0);
-    const endRange = new firebase.firestore.Timestamp(parseInt(baseSeconds) + 60, 0);
+            const startRange = new firebase.firestore.Timestamp(parseInt(baseSeconds), 0);
+            const endRange = new firebase.firestore.Timestamp(parseInt(baseSeconds) + 60, 0);
 
-    try {
-        const querySnapshot = await db.collection("hoco_requests")
-            .where("type", "==", "automated")
-            .where("createdAt", ">=", startRange)
-            .where("createdAt", "<", endRange)
-            .get();
+            try {
+                const querySnapshot = await db.collection("hoco_requests")
+                    .where("type", "==", "automated")
+                    .where("createdAt", ">=", startRange)
+                    .where("createdAt", "<", endRange)
+                    .get();
 
-        const doc = querySnapshot.docs.find(d => d.data().id.includes(`Day${day}`));
+                const doc = querySnapshot.docs.find(d => d.data().id.includes(`Day${day}`));
 
-        if (doc && doc.data().geojsonUrl) {
-            const data = doc.data();
+                if (doc && doc.data().geojsonUrl) {
+                    const data = doc.data();
 
-            // --- REFRESH TOKEN LOGIC ---
-            // This converts the expired URL into a fresh one
-            const storageRef = firebase.storage().refFromURL(data.geojsonUrl);
-            const freshUrl = await storageRef.getDownloadURL(); 
+                    // --- REFRESH TOKEN LOGIC ---
+                    // This converts the expired URL into a fresh one
+                    const storageRef = firebase.storage().refFromURL(data.geojsonUrl);
+                    const freshUrl = await storageRef.getDownloadURL();
 
-            // Update Metadata UI
-            const creationDate = data.createdAt.toDate().toLocaleString('en-GB', {
-                day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
-            });
-            document.getElementById('hoco-create-date').textContent = creationDate;
-            document.getElementById('hoco-start-time').textContent = data.startTime || "N/A";
-            document.getElementById('hoco-end-time').textContent = data.endTime || "N/A";
-            document.getElementById('hoco-metadata-legend').style.display = 'block';
+                    // Update Metadata UI
+                    const creationDate = data.createdAt.toDate().toLocaleString('en-GB', {
+                        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                    });
+                    document.getElementById('hoco-create-date').textContent = creationDate;
+                    document.getElementById('hoco-start-time').textContent = data.startTime || "N/A";
+                    document.getElementById('hoco-end-time').textContent = data.endTime || "N/A";
+                    document.getElementById('hoco-metadata-legend').style.display = 'block';
 
-            // Fetch using the FRESH URL
-            const res = await fetch(freshUrl, { mode: 'cors' });
-            
-            // This will now succeed because freshUrl contains a valid token
-            const geojsonData = await res.json();
+                    // Fetch using the FRESH URL
+                    const res = await fetch(freshUrl, { mode: 'cors' });
 
-            hocoLayerGroup.clearLayers();
-            L.geoJSON(geojsonData, {
-                filter: (f) => f.geometry.type.includes('Polygon'),
-                style: hocoStyle,
-                onEachFeature: (f, l) => {
-                    l.bindPopup(`
+                    // This will now succeed because freshUrl contains a valid token
+                    const geojsonData = await res.json();
+
+                    hocoLayerGroup.clearLayers();
+                    L.geoJSON(geojsonData, {
+                        filter: (f) => f.geometry.type.includes('Polygon'),
+                        style: hocoStyle,
+                        onEachFeature: (f, l) => {
+                            l.bindPopup(`
                         <div style="font-family: 'Inter', sans-serif; min-width: 160px;">
                             <strong style="color: #66c2a4;">HOCO Forecast</strong><br>
                             <hr style="margin: 5px 0; border: 0; border-top: 1px solid #eee;">
@@ -5314,17 +5316,17 @@
                             <strong>Valid:</strong> ${data.startTime} - ${data.endTime}
                         </div>
                     `);
+                        }
+                    }).addTo(hocoLayerGroup);
                 }
-            }).addTo(hocoLayerGroup);
+            } catch (error) {
+                console.error("HOCO Load Error:", error);
+                // If it's a 403/404, the file might actually be deleted from Storage
+                if (error.code === 'storage/object-not-found') {
+                    alert("This forecast file no longer exists in storage.");
+                }
+            }
         }
-    } catch (error) {
-        console.error("HOCO Load Error:", error);
-        // If it's a 403/404, the file might actually be deleted from Storage
-        if (error.code === 'storage/object-not-found') {
-            alert("This forecast file no longer exists in storage.");
-        }
-    }
-}
         /**
          * Step 3: Handle UI and trigger search
          */
