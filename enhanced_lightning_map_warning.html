@@ -5063,17 +5063,33 @@
         const NOWCAST_Z_INDEX = 190;            // NEW
         const WARNING_Z_INDEX = 135;            // NEW
 
-        /**
+      
+// --- CONFIGURATION ---
+const firebaseConfig = {
+    apiKey: "AIzaSyA8IYTApDl8vhZENPJXIw48rR_SUhfFPVQ",
+    authDomain: "hoco-3b23e.firebaseapp.com",
+    projectId: "hoco-3b23e",
+    storageBucket: "hoco-3b23e.firebasestorage.app",
+    messagingSenderId: "409513272369",
+    appId: "1:409513272369:web:a857d9b039d53710f8a110"
+};
+
+// 1. Initialize Firestore (Global Scope)
+const db = firebase.firestore();
+let hocoLayerGroup = L.layerGroup().addTo(map);
+let currentHocoDay = null; 
+
+/**
  * Returns the color associated with a specific risk percentage
  */
 function getHocoColor(risk) {
     if (risk === undefined || risk === null) return 'rgba(0,0,0,0)';
-    return risk >= 90 ? '#b83dda' : // Purple (High)
-           risk >= 80 ? '#ec1c24' : // Red (Moderate)
-           risk >= 60 ? '#ff7f27' : // Orange (Enhanced)
-           risk >= 40 ? '#fff200' : // Yellow (Slight)
-           risk >= 20 ? '#66c2a4' : // Green (Low)
-           'rgba(255,255,255,0)';   // Transparent
+    return risk >= 90 ? '#b83dda' : 
+           risk >= 80 ? '#ec1c24' : 
+           risk >= 60 ? '#ff7f27' : 
+           risk >= 40 ? '#fff200' : 
+           risk >= 20 ? '#66c2a4' : 
+           'rgba(255,255,255,0)';
 }
 
 /**
@@ -5085,91 +5101,10 @@ function hocoStyle(feature) {
         fillColor: getHocoColor(risk),
         weight: 1,
         opacity: 0.3,
-        color: 'white', // Border color
+        color: 'white',
         fillOpacity: 0.7
     };
 }
-
-// --- CONFIGURATION ---
-const firebaseConfig = {
-    apiKey: "AIzaSyA8IYTApDl8vhZENPJXIw48rR_SUhfFPVQ",
-    authDomain: "hoco-3b23e.firebaseapp.com",
-    projectId: "hoco-3b23e",
-    storageBucket: "hoco-3b23e.firebasestorage.app",
-    messagingSenderId: "409513272369",
-    appId: "1:409513272369:web:a857d9b039d53710f8a110"
-};
-
-// 1. INITIALIZE APP FIRST
-firebase.initializeApp(firebaseConfig);
-
-// 2. INITIALIZE FIRESTORE SECOND
-const db = firebase.firestore();
-
-let hocoLayerGroup = L.layerGroup().addTo(map);
-let currentHocoDay = null; 
-
-/**
- * Fetches unique runs from hoco_requests (filtering for automated runs)
- */
-async function fetchHocoData() {
-    console.group("🚀 HOCO Data Sync");
-    const dateSelect = document.getElementById('hoco-date-select');
-
-    try {
-        const querySnapshot = await db.collection("hoco_requests")
-            .where("type", "==", "automated")
-            .orderBy("createdAt", "desc")
-            .limit(60) 
-            .get();
-
-        if (querySnapshot.empty) {
-            console.warn("No automated runs found in hoco_requests.");
-            dateSelect.innerHTML = '<option value="" disabled>No runs available</option>';
-            return;
-        }
-
-        const uniqueRunTimes = new Set();
-        querySnapshot.forEach((doc) => {
-            const data = doc.data();
-            if (data.startTime) {
-                uniqueRunTimes.add(data.startTime);
-            }
-        });
-
-        dateSelect.innerHTML = '';
-        const sortedTimes = Array.from(uniqueRunTimes).sort().reverse();
-
-        sortedTimes.forEach(time => {
-            const option = document.createElement('option');
-            option.value = time; 
-            option.textContent = time; 
-            dateSelect.appendChild(option);
-        });
-
-        console.log(`Loaded ${sortedTimes.length} unique automated runs.`);
-
-        if (sortedTimes.length > 0) {
-            dateSelect.value = sortedTimes[0];
-            setHocoForecastDay(0); 
-        }
-
-    } catch (error) {
-        console.error("❌ HOCO Firestore Fetch Failed:", error);
-        dateSelect.innerHTML = '<option value="" disabled>Error loading database</option>';
-    }
-    console.groupEnd();
-}
-
-/**
- * Handles dropdown changes
- */
-function handleHocoDateChange(selectedTime) {
-    const dayToLoad = (currentHocoDay !== null) ? currentHocoDay : 0;
-    setHocoForecastDay(dayToLoad);
-}
-
-// ... getHocoColor and hocoStyle stay the same ...
 
 /**
  * Fetches unique runs from hoco_requests
@@ -5182,7 +5117,7 @@ async function fetchHocoData() {
         const querySnapshot = await db.collection("hoco_requests")
             .where("type", "==", "automated")
             .orderBy("createdAt", "desc")
-            .limit(90) // 30 runs * 3 days = 90 docs
+            .limit(90) 
             .get();
 
         if (querySnapshot.empty) {
@@ -5191,14 +5126,11 @@ async function fetchHocoData() {
         }
 
         const uniqueRuns = new Map();
-
         querySnapshot.forEach((doc) => {
             const data = doc.data();
             if (data.createdAt) {
-                // Firebase Timestamps need toMillis() for a unique key
                 const ts = data.createdAt.toMillis();
                 if (!uniqueRuns.has(ts)) {
-                    // Convert Timestamp to readable string for the dropdown
                     const dateObj = data.createdAt.toDate();
                     const displayDate = dateObj.toLocaleString('en-GB', {
                         day: '2-digit', month: '2-digit', year: 'numeric',
@@ -5210,12 +5142,11 @@ async function fetchHocoData() {
         });
 
         dateSelect.innerHTML = '';
-        // Map is already somewhat ordered by the query, but we ensure order
         const sortedTimestamps = Array.from(uniqueRuns.keys()).sort((a, b) => b - a);
 
         sortedTimestamps.forEach(ts => {
             const option = document.createElement('option');
-            option.value = ts; // We store the numeric timestamp as the value
+            option.value = ts;
             option.textContent = uniqueRuns.get(ts); 
             dateSelect.appendChild(option);
         });
@@ -5232,30 +5163,64 @@ async function fetchHocoData() {
 }
 
 /**
- * Loads the specific GeoJSON using the createdAt timestamp
+ * Handles dropdown changes
  */
-function loadHocoByStartTimeAndDay(timestampMillis, day) {
-    // Convert the value back to a Firebase Timestamp for the query
+function handleHocoDateChange(timestampMillis) {
+    const dayToLoad = (currentHocoDay !== null) ? currentHocoDay : 0;
+    // We clear active class from all buttons then call setHoco
+    [0, 1, 2].forEach(d => {
+        const btn = document.getElementById(`hoco-day-${d}`);
+        if(btn) btn.classList.remove('active');
+    });
+    setHocoForecastDay(dayToLoad);
+}
+
+/**
+ * Day button logic (Day 0, 1, 2)
+ */
+function setHocoForecastDay(day) {
+    const activeBtn = document.getElementById(`hoco-day-${day}`);
+    if (!activeBtn) return;
+
+    // Logic: If already active, toggle off
+    if (activeBtn.classList.contains('active')) {
+        hocoLayerGroup.clearLayers();
+        activeBtn.classList.remove('active');
+        currentHocoDay = null;
+        return;
+    }
+
+    currentHocoDay = day;
+
+    // Reset UI
+    [0, 1, 2].forEach(d => {
+        const btn = document.getElementById(`hoco-day-${d}`);
+        if(btn) btn.classList.remove('active');
+    });
+    activeBtn.classList.add('active');
+
+    const selectedTs = document.getElementById('hoco-date-select').value;
+    if (selectedTs) {
+        loadHocoByTimestampAndDay(selectedTs, day);
+    }
+}
+
+/**
+ * Final Loader - Uses the createdAt timestamp to find the specific Day
+ */
+function loadHocoByTimestampAndDay(timestampMillis, day) {
     const targetTimestamp = firebase.firestore.Timestamp.fromMillis(parseInt(timestampMillis));
     
-    console.log(`🔎 Searching: CreatedAt: ${timestampMillis} | Day: ${day}`);
-
     db.collection("hoco_requests")
         .where("type", "==", "automated")
         .where("createdAt", "==", targetTimestamp)
-        .where("id", ">=", "AUTO") // Safety filter
         .get()
         .then((querySnapshot) => {
-            // Find the specific day within this specific run
-            const doc = querySnapshot.docs.find(d => {
-                const data = d.data();
-                // Check if ID contains "Day0", "Day1", etc OR use forecast_day
-                return data.id.includes(`Day${day}`) || data.forecast_day === parseInt(day);
-            });
+            // Find the doc where ID contains "DayX"
+            const doc = querySnapshot.docs.find(d => d.data().id.includes(`Day${day}`));
 
-            if (doc) {
-                const geojsonUrl = doc.data().geojsonUrl;
-                fetch(geojsonUrl)
+            if (doc && doc.data().geojsonUrl) {
+                fetch(doc.data().geojsonUrl)
                     .then(res => res.json())
                     .then(geojsonData => {
                         hocoLayerGroup.clearLayers();
@@ -5270,13 +5235,13 @@ function loadHocoByStartTimeAndDay(timestampMillis, day) {
                         }).addTo(hocoLayerGroup);
                     });
             } else {
-                console.warn(`No document found for Day ${day} in this run.`);
+                console.warn(`Day ${day} not found for this run.`);
                 hocoLayerGroup.clearLayers();
             }
-        })
-        .catch(err => console.error("Firestore Query Error:", err));
+        });
 }
 
+// Initialization Listener
 window.addEventListener('DOMContentLoaded', () => {
     const dateSelect = document.getElementById('hoco-date-select');
     if (dateSelect) {
