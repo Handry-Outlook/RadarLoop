@@ -5074,10 +5074,14 @@ const firebaseConfig = {
     appId: "1:409513272369:web:a857d9b039d53710f8a110"
 };
 
-// 1. Initialize Firestore (Global Scope)
+// 1. INITIALIZE THE APP FIRST
+firebase.initializeApp(firebaseConfig);
+
+// 2. NOW INITIALIZE FIRESTORE (Global Scope)
 const db = firebase.firestore();
+
 let hocoLayerGroup = L.layerGroup().addTo(map);
-let currentHocoDay = null; 
+let currentHocoDay = null;
 
 /**
  * Returns the color associated with a specific risk percentage
