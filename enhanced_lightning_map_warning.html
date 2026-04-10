@@ -5066,39 +5066,44 @@
         /**
  * Returns the color associated with a specific risk percentage
  */
-        function getHocoColor(risk) {
-            if (risk === undefined || risk === null) return 'rgba(0,0,0,0)';
-            return risk >= 90 ? '#b83dda' : // Purple (High)
-                risk >= 80 ? '#ec1c24' : // Red (Moderate)
-                    risk >= 60 ? '#ff7f27' : // Orange (Enhanced)
-                        risk >= 40 ? '#fff200' : // Yellow (Slight)
-                            risk >= 20 ? '#66c2a4' : // Green (Low)
-                                'rgba(255,255,255,0)'; // Transparent
-        }
+function getHocoColor(risk) {
+    if (risk === undefined || risk === null) return 'rgba(0,0,0,0)';
+    return risk >= 90 ? '#b83dda' : // Purple (High)
+           risk >= 80 ? '#ec1c24' : // Red (Moderate)
+           risk >= 60 ? '#ff7f27' : // Orange (Enhanced)
+           risk >= 40 ? '#fff200' : // Yellow (Slight)
+           risk >= 20 ? '#66c2a4' : // Green (Low)
+           'rgba(255,255,255,0)';   // Transparent
+}
 
-        /**
-         * Defines the style for each GeoJSON feature
-         */
-        function hocoStyle(feature) {
-            const risk = feature.properties.risk;
-            return {
-                fillColor: getHocoColor(risk),
-                weight: 1,
-                opacity: 0.3,
-                color: 'white', // Border color
-                fillOpacity: 0.7
-            };
-        }
-        // --- CONFIGURATION ---
-        const firebaseConfig = {
-            apiKey: "AIzaSyA8IYTApDl8vhZENPJXIw48rR_SUhfFPVQ",
-            authDomain: "hoco-3b23e.firebaseapp.com",
-            projectId: "hoco-3b23e",
-            storageBucket: "hoco-3b23e.firebasestorage.app",
-            messagingSenderId: "409513272369",
-            appId: "1:409513272369:web:a857d9b039d53710f8a110"
-        };
-       // 1. Initialize Firestore (This was missing and caused the error)
+/**
+ * Defines the style for each GeoJSON feature
+ */
+function hocoStyle(feature) {
+    const risk = feature.properties.risk;
+    return {
+        fillColor: getHocoColor(risk),
+        weight: 1,
+        opacity: 0.3,
+        color: 'white', // Border color
+        fillOpacity: 0.7
+    };
+}
+
+// --- CONFIGURATION ---
+const firebaseConfig = {
+    apiKey: "AIzaSyA8IYTApDl8vhZENPJXIw48rR_SUhfFPVQ",
+    authDomain: "hoco-3b23e.firebaseapp.com",
+    projectId: "hoco-3b23e",
+    storageBucket: "hoco-3b23e.firebasestorage.app",
+    messagingSenderId: "409513272369",
+    appId: "1:409513272369:web:a857d9b039d53710f8a110"
+};
+
+// 1. INITIALIZE APP FIRST
+firebase.initializeApp(firebaseConfig);
+
+// 2. INITIALIZE FIRESTORE SECOND
 const db = firebase.firestore();
 
 let hocoLayerGroup = L.layerGroup().addTo(map);
@@ -5112,11 +5117,10 @@ async function fetchHocoData() {
     const dateSelect = document.getElementById('hoco-date-select');
 
     try {
-        // Query hoco_requests where type is automated
         const querySnapshot = await db.collection("hoco_requests")
             .where("type", "==", "automated")
             .orderBy("createdAt", "desc")
-            .limit(60) // Increased limit to ensure we get enough unique runs
+            .limit(60) 
             .get();
 
         if (querySnapshot.empty) {
@@ -5125,7 +5129,6 @@ async function fetchHocoData() {
             return;
         }
 
-        // Deduplicate by the startTime string
         const uniqueRunTimes = new Set();
         querySnapshot.forEach((doc) => {
             const data = doc.data();
@@ -5146,7 +5149,6 @@ async function fetchHocoData() {
 
         console.log(`Loaded ${sortedTimes.length} unique automated runs.`);
 
-        // Default to latest run, Day 0
         if (sortedTimes.length > 0) {
             dateSelect.value = sortedTimes[0];
             setHocoForecastDay(0); 
@@ -5164,13 +5166,6 @@ async function fetchHocoData() {
  */
 function handleHocoDateChange(selectedTime) {
     const dayToLoad = (currentHocoDay !== null) ? currentHocoDay : 0;
-    
-    // Reset button visuals
-    [0, 1, 2].forEach(d => {
-        const btn = document.getElementById(`hoco-day-${d}`);
-        if(btn) btn.classList.remove('active');
-    });
-    
     setHocoForecastDay(dayToLoad);
 }
 
@@ -5181,7 +5176,9 @@ function setHocoForecastDay(day) {
     const activeBtn = document.getElementById(`hoco-day-${day}`);
     if (!activeBtn) return;
 
-    // Toggle off if already active
+    // Logic: If user clicks an already active button, we could hide it, 
+    // but usually in these maps, we want one day always visible.
+    // To allow toggling OFF completely:
     if (activeBtn.classList.contains('active')) {
         hocoLayerGroup.clearLayers();
         activeBtn.classList.remove('active');
@@ -5191,7 +5188,7 @@ function setHocoForecastDay(day) {
 
     currentHocoDay = day;
 
-    // UI Updates: Clear all and set current one to active
+    // UI Updates
     [0, 1, 2].forEach(d => {
         const btn = document.getElementById(`hoco-day-${d}`);
         if(btn) btn.classList.remove('active');
@@ -5205,10 +5202,10 @@ function setHocoForecastDay(day) {
 }
 
 /**
- * Loads the specific GeoJSON for the combination of Run Time and Forecast Day
+ * Loads the specific GeoJSON
  */
 function loadHocoByStartTimeAndDay(startTime, day) {
-    console.log(`Loading: ${startTime} | Day: ${day}`);
+    console.log(`Searching for: ${startTime} | Day: ${day}`);
 
     db.collection("hoco_requests")
         .where("type", "==", "automated")
@@ -5226,33 +5223,30 @@ function loadHocoByStartTimeAndDay(startTime, day) {
                             hocoLayerGroup.clearLayers();
                             L.geoJSON(geojsonData, {
                                 filter: (f) => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'),
-                                style: typeof hocoStyle !== 'undefined' ? hocoStyle : { color: 'red', weight: 2 },
+                                style: hocoStyle,
                                 onEachFeature: (f, l) => {
                                     if (f.properties && f.properties.risk !== undefined) {
                                         l.bindPopup(`<strong>Risk Level:</strong> ${f.properties.risk}%`);
                                     }
                                 }
                             }).addTo(hocoLayerGroup);
-                        });
+                        })
+                        .catch(err => console.error("GeoJSON Fetch Error:", err));
                 }
             } else {
-                console.warn("No data for this Day/Time combination in hoco_requests.");
+                console.warn("No data for this Day/Time combo.");
                 hocoLayerGroup.clearLayers();
             }
         })
         .catch(err => console.error("Firestore Query Error:", err));
 }
 
-// Initialization logic
 window.addEventListener('DOMContentLoaded', () => {
     const dateSelect = document.getElementById('hoco-date-select');
     if (dateSelect) {
-        // Use an anonymous function to pass the value correctly
         dateSelect.onchange = (e) => handleHocoDateChange(e.target.value);
     }
-
-    // Delay start slightly to ensure Firebase is ready
-    setTimeout(fetchHocoData, 1000);
+    setTimeout(fetchHocoData, 1200);
 });
         // ==========================================
         // 2. HELPER FUNCTIONS
