@@ -2922,18 +2922,18 @@
 
         </div>
         <div class="section" id="hoco-control-section">
-            <h4>🌪️ Auto HOCO Forecast</h4>
+            <h4>🌩️ Auto HOCO Thunderstorm Forecast</h4>
 
             <!-- HOCO Creation Date Dropdown -->
             <div class="layer-control neutral-control" style="margin-bottom: 10px;">
                 <div class="top-row">
                     <div class="label-group">
                         <span class="label-text">Creation Date</span>
-                        <span class="tooltip">Select Auto HOCO generation date from new Firebase</span>
+                        <span class="tooltip">Select Auto Handry Outlook Convective Outlook</span>
                     </div>
                 </div>
                 <select id="hoco-date-select" onchange="loadRunIntoMap(this.value, 0)">
-                    <option value="" disabled selected>Loading Firebase dates...</option>
+                    <option value="" disabled selected>Loading HOCO runs...</option>
                     <!-- Firebase dates will be populated here -->
                 </select>
             </div>
@@ -2949,13 +2949,13 @@
             <div class="layer-control neutral-control">
                 <div class="top-row">
                     <div class="label-group">
-                        <span class="label-text">Layer Opacity</span>
+                        <span class="label-text">HOCO Layer Opacity</span>
                     </div>
                 </div>
                 <div class="opacity-control">
-                    <input type="range" id="hoco-opacity" min="0" max="1" step="0.05" value="0.8"
+                    <input type="range" id="hoco-opacity" min="0" max="1" step="0.05" value="0.25"
                         oninput="updateHocoOpacity(this.value); this.parentElement.querySelector('.opacity-value').innerText = Math.round(this.value * 100) + '%'">
-                    <span class="opacity-value">80%</span>
+                    <span class="opacity-value">25%</span>
                 </div>
             </div>
         </div>
@@ -5160,7 +5160,6 @@
                 const querySnapshot = await db.collection("hoco_requests")
                     .where("type", "==", "automated")
                     .orderBy("createdAt", "desc")
-                    .limit(90)
                     .get();
 
                 const uniqueRuns = new Map();
