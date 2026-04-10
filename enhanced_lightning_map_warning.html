@@ -3371,16 +3371,14 @@
     </div>
     <div id="overlay" class="overlay" style="display: none;"></div>
     <div id="hoco-metadata-legend"
-        style="display:none; position: fixed; bottom: 20px; left: 20px; background: rgba(0,0,0,0.85); color: white; padding: 12px; border-radius: 8px; z-index: 1000; font-family: 'Inter', sans-serif; border: 1px solid #3a4785; box-shadow: 0 4px 15px rgba(0,0,0,0.5); min-width: 220px;">
+        style="display:none; position: fixed; bottom: 20px; left: 20px; background: rgba(0,0,0,0.85); color: white; padding: 12px; border-radius: 8px; z-index: 1000; font-family: 'Inter', sans-serif; border: 1px solid #3a4785; box-shadow: 0 4px 15px rgba(0,0,0,0.5); min-width: 240px;">
         <div
-            style="color: #66c2a4; font-weight: bold; margin-bottom: 5px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px;">
-            HOCO Forecast Period
+            style="color: #66c2a4; font-weight: bold; margin-bottom: 8px; font-size: 14px; text-transform: uppercase; border-bottom: 1px solid #333; padding-bottom: 5px;">
+            HOCO Automated Run
         </div>
         <div style="font-size: 12px; line-height: 1.6; opacity: 0.9;">
-            <span style="color: #ffca28;">●</span> <strong>Start:</strong> <span id="hoco-start-time"
-                style="margin-left:5px;">-</span><br>
-            <span style="color: #ffca28;">●</span> <strong>End:</strong> <span id="hoco-end-time"
-                style="margin-left:11px;">-</span>
+            <strong>Created:</strong> <span id="hoco-create-date" style="color: #66c2a4;">-</span><br>
+            <strong>Valid:</strong> <span id="hoco-start-time"></span> — <span id="hoco-end-time"></span>
         </div>
     </div>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -5185,41 +5183,38 @@
                 .where("createdAt", "<", endRange)
                 .get()
                 .then((querySnapshot) => {
-                    // 1. Find the document for the selected Day (0, 1, or 2)
                     const doc = querySnapshot.docs.find(d => d.data().id.includes(`Day${day}`));
 
                     if (doc && doc.data().geojsonUrl) {
                         const data = doc.data();
 
-                        // 2. Update the Metadata Legend Text
-                        const metaBox = document.getElementById('hoco-metadata-legend');
-                        const startEl = document.getElementById('hoco-start-time');
-                        const endEl = document.getElementById('hoco-end-time');
+                        // 1. POPULATE METADATA
+                        const creationDate = data.createdAt.toDate().toLocaleString('en-GB', {
+                            day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                        });
 
-                        if (metaBox) {
-                            metaBox.style.display = 'block'; // Make it visible
-                            startEl.textContent = data.startTime || "N/A";
-                            endEl.textContent = data.endTime || "N/A";
-                        }
+                        document.getElementById('hoco-create-date').textContent = creationDate;
+                        document.getElementById('hoco-start-time').textContent = data.startTime || "N/A";
+                        document.getElementById('hoco-end-time').textContent = data.endTime || "N/A";
+                        document.getElementById('hoco-metadata-legend').style.display = 'block';
 
-                        // 3. Fetch the actual map data
+                        // 2. FETCH AND FILTER MAP DATA
                         fetch(data.geojsonUrl, { mode: 'cors' })
                             .then(res => res.json())
                             .then(geojsonData => {
                                 hocoLayerGroup.clearLayers();
                                 L.geoJSON(geojsonData, {
+                                    // THIS LINE REMOVES LOCATION MARKERS / POINTS
+                                    filter: (feature) => {
+                                        return feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon';
+                                    },
                                     style: hocoStyle,
                                     onEachFeature: (f, l) => {
-                                        // Optional: You can also add the metadata to the click popup
-                                        l.bindPopup(`
-                                    <strong>Risk Level:</strong> ${f.properties.risk}%<br>
-                                    <small>Valid until: ${data.endTime}</small>
-                                `);
+                                        l.bindPopup(`<strong>Risk Level:</strong> ${f.properties.risk}%`);
                                     }
                                 }).addTo(hocoLayerGroup);
                             });
                     } else {
-                        // Hide legend if no data found
                         document.getElementById('hoco-metadata-legend').style.display = 'none';
                         hocoLayerGroup.clearLayers();
                     }
