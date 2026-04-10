@@ -5114,40 +5114,40 @@ function populateHocoDates() {
         .orderBy("creation_date", "desc")
         .get()
         .then((querySnapshot) => {
-            if (querySnapshot.empty) {
-                dateSelect.innerHTML = '<option disabled>No runs available</option>';
+            const uniqueDates = new Set();
+            
+            querySnapshot.forEach((doc) => {
+                let d = doc.data().creation_date;
+                // Fix: If it's a Firestore Timestamp, convert to String
+                if (d && typeof d.toDate === 'function') {
+                    d = d.toDate().toISOString(); 
+                }
+                if (d) uniqueDates.add(d);
+            });
+
+            dateSelect.innerHTML = '';
+            
+            if (uniqueDates.size === 0) {
+                dateSelect.innerHTML = '<option value="">No runs available</option>';
                 return;
             }
 
-            // Map to store unique human-readable strings and their original seconds
-            const uniqueDatesMap = new Map();
+            const sortedDates = Array.from(uniqueDates).sort().reverse();
 
-            querySnapshot.forEach((doc) => {
-                const ts = doc.data().creation_date;
-                if (ts && typeof ts.toDate === 'function') {
-                    const dateObj = ts.toDate();
-                    // Create a readable string for the user
-                    const displayString = dateObj.toLocaleString(); 
-                    
-                    if (!uniqueDatesMap.has(displayString)) {
-                        // Store the seconds so we can query it later
-                        uniqueDatesMap.set(displayString, ts.seconds);
-                    }
-                }
-            });
-
-            dateSelect.innerHTML = ''; // Clear "Loading..."
-
-            uniqueDatesMap.forEach((seconds, displayString) => {
+            sortedDates.forEach(date => {
                 let option = document.createElement('option');
-                option.value = seconds; // Numeric value for the query
-                option.textContent = displayString;
+                option.value = date;
+                // Make it look pretty: 2024-05-20 12:00
+                option.textContent = date.replace('T', ' ').substring(0, 16); 
                 dateSelect.appendChild(option);
             });
 
-            console.log("✅ Dropdown populated with unique timestamps.");
+            console.log("Unique dates populated and sorted.");
         })
-        .catch((error) => console.error("❌ Error populating dates: ", error));
+        .catch((error) => {
+            console.error("Error populating dates: ", error);
+            dateSelect.innerHTML = '<option value="">Error loading data</option>';
+        });
 }
 
 /**
@@ -5182,17 +5182,15 @@ function setHocoForecastDay(day) {
 /**
  * 3. Load by Date + Day (Using Range Query for Timestamps)
  */
-function loadHocoByDateAndDay(secondsValue, day) {
-    // Firestore Timestamps have nanoseconds. We query a 1-second range to find the match.
-    const start = new firebase.firestore.Timestamp(parseInt(secondsValue), 0);
-    const end = new firebase.firestore.Timestamp(parseInt(secondsValue) + 1, 0);
-
-    console.log(`🔍 Searching for Day: ${day} between ${start.seconds} and ${end.seconds}`);
+function loadHocoByDateAndDay(date, day) {
+    console.log(`Searching for Date: ${date} | Day: ${day}`);
+    
+    // Convert string back to Firestore Timestamp for the query
+    const firestoreDate = new Date(date);
 
     db.collection("auto_hoco")
-        .where("creation_date", ">=", start)
-        .where("creation_date", "<", end)
-        .where("forecast_day", "==", parseInt(day))
+        .where("creation_date", "==", firestoreDate)
+        .where("forecast_day", "==", parseInt(day)) 
         .limit(1)
         .get()
         .then((querySnapshot) => {
@@ -5214,7 +5212,7 @@ function loadHocoByDateAndDay(secondsValue, day) {
                 hocoLayerGroup.clearLayers();
             }
         })
-        .catch(err => console.error("Query Error:", err));
+        .catch(err => console.error("Query error:", err));
 }
 
 // Initialize on load
