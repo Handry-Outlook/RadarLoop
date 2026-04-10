@@ -5098,8 +5098,10 @@
             messagingSenderId: "409513272369",
             appId: "1:409513272369:web:a857d9b039d53710f8a110"
         };
-        firebase.initializeApp(firebaseConfig);
-        let hocoLayerGroup = L.layerGroup().addTo(map);
+       // 1. Initialize Firestore (This was missing and caused the error)
+const db = firebase.firestore();
+
+let hocoLayerGroup = L.layerGroup().addTo(map);
 let currentHocoDay = null; 
 
 /**
@@ -5111,11 +5113,10 @@ async function fetchHocoData() {
 
     try {
         // Query hoco_requests where type is automated
-        // This matches the logic seen in your Pro Forecaster app
         const querySnapshot = await db.collection("hoco_requests")
             .where("type", "==", "automated")
             .orderBy("createdAt", "desc")
-            .limit(50) 
+            .limit(60) // Increased limit to ensure we get enough unique runs
             .get();
 
         if (querySnapshot.empty) {
@@ -5124,7 +5125,7 @@ async function fetchHocoData() {
             return;
         }
 
-        // Deduplicate by the startTime string (e.g., "2024-05-20 12:00")
+        // Deduplicate by the startTime string
         const uniqueRunTimes = new Set();
         querySnapshot.forEach((doc) => {
             const data = doc.data();
@@ -5162,16 +5163,19 @@ async function fetchHocoData() {
  * Handles dropdown changes
  */
 function handleHocoDateChange(selectedTime) {
-    // If a day was already selected, stay on that day for the new time
     const dayToLoad = (currentHocoDay !== null) ? currentHocoDay : 0;
     
-    // Reset button states and trigger the load
-    [0, 1, 2].forEach(d => document.getElementById(`hoco-day-${d}`).classList.remove('active'));
+    // Reset button visuals
+    [0, 1, 2].forEach(d => {
+        const btn = document.getElementById(`hoco-day-${d}`);
+        if(btn) btn.classList.remove('active');
+    });
+    
     setHocoForecastDay(dayToLoad);
 }
 
 /**
- * Day button logic
+ * Day button logic (Day 0, 1, 2)
  */
 function setHocoForecastDay(day) {
     const activeBtn = document.getElementById(`hoco-day-${day}`);
@@ -5187,8 +5191,11 @@ function setHocoForecastDay(day) {
 
     currentHocoDay = day;
 
-    // UI Updates
-    [0, 1, 2].forEach(d => document.getElementById(`hoco-day-${d}`).classList.remove('active'));
+    // UI Updates: Clear all and set current one to active
+    [0, 1, 2].forEach(d => {
+        const btn = document.getElementById(`hoco-day-${d}`);
+        if(btn) btn.classList.remove('active');
+    });
     activeBtn.classList.add('active');
 
     const selectedTime = document.getElementById('hoco-date-select').value;
@@ -5198,7 +5205,7 @@ function setHocoForecastDay(day) {
 }
 
 /**
- * Loads the specific GeoJSON
+ * Loads the specific GeoJSON for the combination of Run Time and Forecast Day
  */
 function loadHocoByStartTimeAndDay(startTime, day) {
     console.log(`Loading: ${startTime} | Day: ${day}`);
@@ -5219,29 +5226,32 @@ function loadHocoByStartTimeAndDay(startTime, day) {
                             hocoLayerGroup.clearLayers();
                             L.geoJSON(geojsonData, {
                                 filter: (f) => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'),
-                                style: typeof hocoStyle !== 'undefined' ? hocoStyle : { color: 'red' },
+                                style: typeof hocoStyle !== 'undefined' ? hocoStyle : { color: 'red', weight: 2 },
                                 onEachFeature: (f, l) => {
-                                    if (f.properties && f.properties.risk) {
-                                        l.bindPopup(`Risk Level: ${f.properties.risk}%`);
+                                    if (f.properties && f.properties.risk !== undefined) {
+                                        l.bindPopup(`<strong>Risk Level:</strong> ${f.properties.risk}%`);
                                     }
                                 }
                             }).addTo(hocoLayerGroup);
                         });
                 }
             } else {
-                console.warn("No data for this Day/Time combination.");
+                console.warn("No data for this Day/Time combination in hoco_requests.");
                 hocoLayerGroup.clearLayers();
             }
-        });
+        })
+        .catch(err => console.error("Firestore Query Error:", err));
 }
 
-// Initialization
+// Initialization logic
 window.addEventListener('DOMContentLoaded', () => {
     const dateSelect = document.getElementById('hoco-date-select');
     if (dateSelect) {
+        // Use an anonymous function to pass the value correctly
         dateSelect.onchange = (e) => handleHocoDateChange(e.target.value);
     }
 
+    // Delay start slightly to ensure Firebase is ready
     setTimeout(fetchHocoData, 1000);
 });
         // ==========================================
