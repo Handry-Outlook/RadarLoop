@@ -2306,6 +2306,34 @@
             box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
             border: 2px solid #ffffff;
         }
+
+        /* Hide the legend on mobile devices (screens smaller than 768px) */
+        @media (max-width: 767px) {
+            #hoco-metadata-legend {
+                display: none !important;
+            }
+        }
+
+        /* Collapsed state for the legend */
+        #hoco-metadata-legend.collapsed {
+            min-width: 200px !important;
+        }
+
+        #hoco-metadata-legend.collapsed .hoco-content {
+            display: none;
+        }
+
+        .hoco-color-scale {
+            height: 12px;
+            width: 100%;
+            border-radius: 4px;
+            margin-top: 10px;
+            border: 1px solid #444;
+            background: linear-gradient(to right,
+                    #ffffff, #d0cece, #bea497, #66c2a4, #b3ff00,
+                    #fff200, #ffb327, #ff7f27, #ff5227, #ec1c24,
+                    #b83dba, #3e00e9, #2600ff);
+        }
     </style>
 </head>
 <!-- Google tag (gtag.js) -->
@@ -3371,21 +3399,48 @@
     </div>
     <div id="overlay" class="overlay" style="display: none;"></div>
     <div id="hoco-metadata-legend"
-        style="display:none; position: fixed; bottom: 25px; left: 20px; background: rgba(0,0,0,0.85); color: white; padding: 12px; border-radius: 8px; z-index: 1000; font-family: 'Inter', sans-serif; border: 1px solid #3a4785; box-shadow: 0 4px 15px rgba(0,0,0,0.5); min-width: 250px;">
-        <div
-            style="color: #66c2a4; font-weight: bold; margin-bottom: 8px; font-size: 13px; text-transform: uppercase; border-bottom: 1px solid #444; padding-bottom: 5px;">
-            HOCO Automated Forecast
+    style="display:none; position: fixed; top: 80px; left: 360px; background: rgba(0,0,0,0.9); color: white; padding: 12px; border-radius: 8px; z-index: 1000; font-family: 'Inter', sans-serif; border: 1px solid #3a4785; box-shadow: 0 4px 15px rgba(0,0,0,0.5); min-width: 250px; transition: all 0.3s ease;">
+
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; padding-bottom: 5px; margin-bottom: 8px;">
+        <div style="color: #66c2a4; font-weight: bold; font-size: 13px; text-transform: uppercase;">
+            HOCO Thunderstorm Forecast
         </div>
-        <div style="font-size: 12px; line-height: 1.7; opacity: 0.9;">
-            <div style="margin-bottom: 4px;">
-                <strong style="color: #bbb;">Run Created:</strong> <br>
-                <span id="hoco-create-date">-</span>
-            </div>
-            <div>
-                <strong style="color: #bbb;">Valid Period:</strong> <br>
-                <span id="hoco-start-time"></span> – <span id="hoco-end-time"></span>
-            </div>
+        <button id="hoco-toggle-btn" onclick="toggleHocoLegend()"
+            style="background: none; border: none; color: #bbb; cursor: pointer; font-size: 16px; line-height: 1; padding: 0 5px; transition: color 0.2s;">
+            ✕
+        </button>
+    </div>
+
+    <div class="hoco-content">
+    <div style="font-size: 11px; line-height: 1.6; opacity: 0.9; font-family: 'Inter', sans-serif;">
+        
+        <div style="margin-bottom: 4px;">
+            <strong style="color: #bbb;">Run Created:</strong> <span id="hoco-create-date">-</span>
         </div>
+        
+        <div style="margin-bottom: 8px;">
+            <strong style="color: #bbb;">Valid Period:</strong> <br>
+            <span id="hoco-start-time"></span> – <span id="hoco-end-time"></span>
+        </div>
+
+        <div style="margin-top: 10px;">
+            <strong style="color: #bbb;">Color Scale (Risk %)</strong>
+        </div>
+        
+        <div class="hoco-color-scale"></div>
+        
+        <div style="display: flex; justify-content: space-between; font-size: 9px; color: #bbb; margin-top: 3px; margin-bottom: 12px;">
+            <span>0%</span>
+            <span>50%</span>
+            <span>100%</span>
+        </div>
+    </div>
+
+    <a href="https://handry-outlook.github.io/HOCO-V2.0/index.html" target="_blank" 
+       style="display: block; text-align: center; background: #66c2a4; color: #000; text-decoration: none; font-size: 11px; font-weight: 600; padding: 6px; border-radius: 4px; transition: background 0.2s; margin-top: 5px;">
+        View Detailed Forecast (HOCO V2.0) ➔
+    </a>
+</div>
     </div>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/esri-leaflet@3.0.12/dist/esri-leaflet.js"></script>
@@ -5289,7 +5344,25 @@
             const dayToLoad = (currentHocoDay !== null) ? currentHocoDay : 0;
             setHocoForecastDay(dayToLoad);
         }
+        /**
+ * Toggles the visibility of the HOCO legend content
+ */
+        function toggleHocoLegend() {
+            const legend = document.getElementById('hoco-metadata-legend');
+            const btn = document.getElementById('hoco-toggle-btn');
 
+            if (legend.classList.contains('collapsed')) {
+                // Expand
+                legend.classList.remove('collapsed');
+                btn.innerHTML = '✕';
+                btn.style.color = '#bbb';
+            } else {
+                // Collapse
+                legend.classList.add('collapsed');
+                btn.innerHTML = '+';
+                btn.style.color = '#66c2a4'; // Highlight the plus so it's visible
+            }
+        }
         // Initialization Listener
         window.addEventListener('DOMContentLoaded', () => {
             const dateSelect = document.getElementById('hoco-date-select');
