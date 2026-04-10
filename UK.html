@@ -2283,6 +2283,29 @@
             /* Show 3D map */
             opacity: 1;
         }
+
+        .button-group button.active {
+            background-color: #007bff;
+            /* Or your primary theme color */
+            color: white;
+            border-color: #0056b1;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .neutral-control select {
+            width: 100%;
+            padding: 8px;
+            background: #2c2c2c;
+            color: white;
+            border: 1px solid #444;
+            border-radius: 4px;
+        }
+
+        .button-group button.active {
+            background-color: #1976D2 !important;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+            border: 2px solid #ffffff;
+        }
     </style>
 </head>
 <!-- Google tag (gtag.js) -->
@@ -2344,7 +2367,7 @@
                     <option value="custom">Mapbox Classic</option>
                     <option value="mapbox-satellite">Mapbox Satellite</option>
                     <option value="mapbox-outdoors">Mapbox Outdoors</option>
-                    
+
                     <option value="osm">OpenStreetMap</option>
 
                     <option value="esri">Esri World Imagery</option>
@@ -2898,6 +2921,44 @@
             </div>
 
         </div>
+        <div class="section" id="hoco-control-section">
+            <h4>🌩️ Auto HOCO Thunderstorm Forecast</h4>
+
+            <!-- HOCO Creation Date Dropdown -->
+            <div class="layer-control neutral-control" style="margin-bottom: 10px;">
+                <div class="top-row">
+                    <div class="label-group">
+                        <span class="label-text">Creation Date</span>
+                        <span class="tooltip">Select Auto Handry Outlook Convective Outlook</span>
+                    </div>
+                </div>
+                <select id="hoco-date-select" onchange="loadRunIntoMap(this.value, 0)">
+                    <option value="" disabled selected>Loading HOCO runs...</option>
+                    <!-- Firebase dates will be populated here -->
+                </select>
+            </div>
+
+            <!-- Forecast Day Buttons -->
+            <div class="button-group" style="margin-bottom: 10px;">
+                <button id="hoco-day-0" onclick="setHocoForecastDay(0)">Day 0</button>
+                <button id="hoco-day-1" onclick="setHocoForecastDay(1)">Day 1</button>
+                <button id="hoco-day-2" onclick="setHocoForecastDay(2)">Day 2</button>
+            </div>
+
+            <!-- Opacity Slider -->
+            <div class="layer-control neutral-control">
+                <div class="top-row">
+                    <div class="label-group">
+                        <span class="label-text">HOCO Layer Opacity</span>
+                    </div>
+                </div>
+                <div class="opacity-control">
+                    <input type="range" id="hoco-opacity" min="0" max="1" step="0.05" value="0.25"
+                        oninput="updateHocoOpacity(this.value); this.parentElement.querySelector('.opacity-value').innerText = Math.round(this.value * 100) + '%'">
+                    <span class="opacity-value">25%</span>
+                </div>
+            </div>
+        </div>
         <div class="section">
             <h4>➕ Extras & Nowcasting</h4>
             <div class="switch-control sound-control">
@@ -3309,7 +3370,23 @@
         <button onclick="confirmAutoTimeFilter(false)">No</button>
     </div>
     <div id="overlay" class="overlay" style="display: none;"></div>
-
+    <div id="hoco-metadata-legend"
+        style="display:none; position: fixed; bottom: 25px; left: 20px; background: rgba(0,0,0,0.85); color: white; padding: 12px; border-radius: 8px; z-index: 1000; font-family: 'Inter', sans-serif; border: 1px solid #3a4785; box-shadow: 0 4px 15px rgba(0,0,0,0.5); min-width: 250px;">
+        <div
+            style="color: #66c2a4; font-weight: bold; margin-bottom: 8px; font-size: 13px; text-transform: uppercase; border-bottom: 1px solid #444; padding-bottom: 5px;">
+            HOCO Automated Forecast
+        </div>
+        <div style="font-size: 12px; line-height: 1.7; opacity: 0.9;">
+            <div style="margin-bottom: 4px;">
+                <strong style="color: #bbb;">Run Created:</strong> <br>
+                <span id="hoco-create-date">-</span>
+            </div>
+            <div>
+                <strong style="color: #bbb;">Valid Period:</strong> <br>
+                <span id="hoco-start-time"></span> – <span id="hoco-end-time"></span>
+            </div>
+        </div>
+    </div>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/esri-leaflet@3.0.12/dist/esri-leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/leaflet.heat/dist/leaflet-heat.js"></script>
@@ -3320,6 +3397,10 @@
     <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.4.3/mapbox-gl-draw.js"></script>
+    <!-- Firebase App (the core Firebase SDK) -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <!-- Firebase Firestore -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
     <script>
         const mapboxAccessToken = 'pk.eyJ1IjoibWV0ZW9ncm91cC1tYXBib3giLCJhIjoiY2pudWJyMWVhMDQ0bjNxdXFsNWJ5M2ZtbSJ9.ANOKYyv5s0VFVbnesnGGUQ';
         const maptilerApiKey = 'd6FiSbcpDtzJ4g4e0oD4';
@@ -4998,6 +5079,225 @@
         const NOWCAST_Z_INDEX = 190;            // NEW
         const WARNING_Z_INDEX = 135;            // NEW
 
+
+        // --- CONFIGURATION ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyA8IYTApDl8vhZENPJXIw48rR_SUhfFPVQ",
+            authDomain: "hoco-3b23e.firebaseapp.com",
+            projectId: "hoco-3b23e",
+            storageBucket: "hoco-3b23e.firebasestorage.app",
+            messagingSenderId: "409513272369",
+            appId: "1:409513272369:web:a857d9b039d53710f8a110"
+        };
+
+        // 1. INITIALIZE THE APP FIRST
+        firebase.initializeApp(firebaseConfig);
+
+        // 2. NOW INITIALIZE FIRESTORE (Global Scope)
+        const db = firebase.firestore();
+
+        let hocoLayerGroup = L.layerGroup().addTo(map);
+        let currentHocoDay = null;
+
+        const lightning_colors = [
+            "#ffffff", "#d0cece", "#d0cece", "#d0cece", "#d0cece", "#bea497", "#bea497", "#bea497", "#bea497", "#bea497",
+            "#66c2a4", "#66c2a4", "#66c2a4", "#66c2a4", "#66c2a4", "#66c2a4", "#66c2a4", "#66c2a4", "#66c2a4", "#66c2a4",
+            "#b3ff00", "#b3ff00", "#b3ff00", "#b3ff00", "#b3ff00", "#b3ff00", "#b3ff00", "#b3ff00", "#b3ff00", "#b3ff00",
+            "#fff200", "#fff200", "#fff200", "#fff200", "#fff200", "#fff200", "#fff200", "#fff200", "#fff200", "#fff200",
+            "#ffb327", "#ffb327", "#ffb327", "#ffb327", "#ffb327", "#ffb327", "#ffb327", "#ffb327", "#ffb327", "#ffb327",
+            "#ff7f27", "#ff7f27", "#ff7f27", "#ff7f27", "#ff7f27", "#ff7f27", "#ff7f27", "#ff7f27", "#ff7f27", "#ff7f27",
+            "#ff5227", "#ff5227", "#ff5227", "#ff5227", "#ff5227", "#ff2e27", "#ff2e27", "#ff2e27", "#ff2e27", "#ff2e27",
+            "#ec1c24", "#ec1c24", "#ec1c24", "#ec1c24", "#ec1c24", "#ec1c5a", "#ec1c5a", "#ec1c5a", "#ec1c5a", "#ec1c5a",
+            "#b83dba", "#b83dba", "#b83dba", "#b83dba", "#b83dba", "#5a099c", "#5a099c", "#5a099c", "#5a099c", "#5a099c",
+            "#3e00e9", "#3e00e9", "#3e00e9", "#3e00e9", "#3e00e9", "#2600ff", "#2600ff", "#2600ff", "#2600ff", "#2600ff",
+        ];
+
+        /**
+         * Uses the risk percentage as an index for the lightning_colors array
+         */
+        function getHocoColor(risk) {
+            if (risk === undefined || risk === null) return 'rgba(0,0,0,0)';
+            // Ensure risk is an integer between 0 and 99
+            const index = Math.min(Math.max(Math.floor(risk), 0), lightning_colors.length - 1);
+            return lightning_colors[index];
+        }
+
+        function hocoStyle(feature) {
+            const risk = feature.properties.risk;
+            // Fallback to 0.7 if the slider hasn't been touched yet
+            const targetOpacity = window.currentHocoOpacity !== undefined ? window.currentHocoOpacity : 0.7;
+
+            return {
+                fillColor: getHocoColor(risk),
+                weight: 1,
+                opacity: targetOpacity * 2, // Border opacity
+                color: 'white',
+                fillOpacity: targetOpacity    // Fill opacity
+            };
+        }
+        /**
+ * Updates the opacity of the HOCO layer group based on slider input
+ */
+        function updateHocoOpacity(value) {
+            const opacity = parseFloat(value);
+
+            // Update the global variable if you use one for styling
+            // (Optional: ensures new polygons drawn also use this opacity)
+            window.currentHocoOpacity = opacity;
+
+            hocoLayerGroup.eachLayer(layer => {
+                if (layer.setStyle) {
+                    layer.setStyle({
+                        fillOpacity: opacity,
+                        opacity: opacity * 2 // Keep border slightly lighter than fill
+                    });
+                }
+            });
+        }
+        async function fetchHocoData() {
+            const dateSelect = document.getElementById('hoco-date-select');
+            try {
+                const querySnapshot = await db.collection("hoco_requests")
+                    .where("type", "==", "automated")
+                    .orderBy("createdAt", "desc")
+                    .get();
+
+                const uniqueRuns = new Map();
+
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    const dateObj = data.createdAt.toDate();
+
+                    // Key based on YYYY-MM-DD-HH-mm (ignoring seconds)
+                    const minuteKey = `${dateObj.getFullYear()}-${dateObj.getMonth()}-${dateObj.getDate()}-${dateObj.getHours()}-${dateObj.getMinutes()}`;
+
+                    if (!uniqueRuns.has(minuteKey)) {
+                        const displayDate = dateObj.toLocaleString('en-GB', {
+                            day: '2-digit', month: '2-digit', year: 'numeric',
+                            hour: '2-digit', minute: '2-digit'
+                        });
+
+                        // We store the date object reset to 0 seconds to use as a baseline for the range search
+                        const baseDate = new Date(dateObj);
+                        baseDate.setSeconds(0);
+                        baseDate.setMilliseconds(0);
+
+                        uniqueRuns.set(minuteKey, {
+                            display: displayDate,
+                            baseSeconds: Math.floor(baseDate.getTime() / 1000)
+                        });
+                    }
+                });
+
+                dateSelect.innerHTML = '';
+                uniqueRuns.forEach((run) => {
+                    const option = document.createElement('option');
+                    option.value = run.baseSeconds; // Store the start of that minute
+                    option.textContent = run.display;
+                    dateSelect.appendChild(option);
+                });
+
+                if (uniqueRuns.size > 0) {
+                    setHocoForecastDay(0);
+                }
+            } catch (e) { console.error("Fetch Error:", e); }
+        }
+
+        /**
+         * Step 2: Search the ENTIRE MINUTE to find the specific Day doc
+         */
+        /**
+ * Loads the specific Day and populates the metadata legend
+ */
+        function loadHocoByTimestampAndDay(baseSeconds, day) {
+            const startRange = new firebase.firestore.Timestamp(parseInt(baseSeconds), 0);
+            const endRange = new firebase.firestore.Timestamp(parseInt(baseSeconds) + 60, 0);
+
+            db.collection("hoco_requests")
+                .where("type", "==", "automated")
+                .where("createdAt", ">=", startRange)
+                .where("createdAt", "<", endRange)
+                .get()
+                .then((querySnapshot) => {
+                    const doc = querySnapshot.docs.find(d => d.data().id.includes(`Day${day}`));
+
+                    if (doc && doc.data().geojsonUrl) {
+                        const data = doc.data();
+
+                        // 1. POPULATE METADATA LEGEND
+                        const creationDate = data.createdAt.toDate().toLocaleString('en-GB', {
+                            day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                        });
+
+                        document.getElementById('hoco-create-date').textContent = creationDate;
+                        document.getElementById('hoco-start-time').textContent = data.startTime || "N/A";
+                        document.getElementById('hoco-end-time').textContent = data.endTime || "N/A";
+                        document.getElementById('hoco-metadata-legend').style.display = 'block';
+
+                        // 2. FETCH AND DISPLAY POLYGONS ONLY (No Markers)
+                        fetch(data.geojsonUrl, { mode: 'cors' })
+                            .then(res => res.json())
+                            .then(geojsonData => {
+                                hocoLayerGroup.clearLayers();
+                                L.geoJSON(geojsonData, {
+                                    // Filter out anything that isn't a polygon
+                                    filter: (f) => f.geometry.type.includes('Polygon'),
+                                    style: hocoStyle,
+                                    onEachFeature: (f, l) => {
+                                        // --- UPDATED POPUP CONTENT ---
+                                        l.bindPopup(`
+                                    <div style="font-family: 'Inter', sans-serif; min-width: 160px;">
+                                        <strong style="color: #66c2a4; font-size: 14px;">HOCO Forecast</strong><br>
+                                        <hr style="margin: 5px 0; border: 0; border-top: 1px solid #eee;">
+                                        <strong>Risk Level:</strong> ${f.properties.risk}%<br>
+                                        <strong>Created:</strong> ${creationDate}<br>
+                                        <strong>Valid:</strong> ${data.startTime} - ${data.endTime}
+                                    </div>
+                                `);
+                                    }
+                                }).addTo(hocoLayerGroup);
+                            });
+                    } else {
+                        document.getElementById('hoco-metadata-legend').style.display = 'none';
+                        hocoLayerGroup.clearLayers();
+                    }
+                });
+        }
+        /**
+         * Step 3: Handle UI and trigger search
+         */
+        function setHocoForecastDay(day) {
+            const activeBtn = document.getElementById(`hoco-day-${day}`);
+            if (!activeBtn) return;
+
+            // Reset UI buttons
+            [0, 1, 2].forEach(d => {
+                const btn = document.getElementById(`hoco-day-${d}`);
+                if (btn) btn.classList.remove('active');
+            });
+            activeBtn.classList.add('active');
+
+            currentHocoDay = day;
+
+            const selectedBaseSeconds = document.getElementById('hoco-date-select').value;
+            if (selectedBaseSeconds) {
+                loadHocoByTimestampAndDay(selectedBaseSeconds, day);
+            }
+        }
+
+        function handleHocoDateChange(val) {
+            const dayToLoad = (currentHocoDay !== null) ? currentHocoDay : 0;
+            setHocoForecastDay(dayToLoad);
+        }
+
+        // Initialization Listener
+        window.addEventListener('DOMContentLoaded', () => {
+            const dateSelect = document.getElementById('hoco-date-select');
+            if (dateSelect) {
+                dateSelect.onchange = (e) => handleHocoDateChange(e.target.value);
+            }
+            setTimeout(fetchHocoData, 1200);
+        });
         // ==========================================
         // 2. HELPER FUNCTIONS
         // ==========================================
@@ -11331,29 +11631,29 @@
 
                 // B. Convex Hull (Current Shape Geometry - STRICT 30 MIN WINDOW)
                 let hullGeometry = null;
-                
+
                 if (typeof turf !== 'undefined' && currentCluster.cluster.length >= 3) {
                     const hullTimeWindowMs = 30 * 60 * 1000; // 30 minutes
-                    
+
                     // 1. Sort the current cluster chronologically to ensure we know what's newest
                     const sortedCluster = [...currentCluster.cluster].sort((a, b) => a.time.getTime() - b.time.getTime());
-                    
+
                     // 2. Filter for strikes only in the last 30 minutes
-                    let recentHullStrikes = sortedCluster.filter(s => 
+                    let recentHullStrikes = sortedCluster.filter(s =>
                         (referenceTime.getTime() - s.time.getTime()) <= hullTimeWindowMs
                     );
 
                     // 3. Fallback: If the storm is quiet and dropped < 3 strikes in 30 mins, 
                     // grab the 3 most recent strikes overall so turf.convex doesn't fail.
                     if (recentHullStrikes.length < 3) {
-                        recentHullStrikes = sortedCluster.slice(-3); 
+                        recentHullStrikes = sortedCluster.slice(-3);
                     }
 
                     // 4. Generate the Turf polygon
                     if (recentHullStrikes.length >= 3) {
                         const points = turf.featureCollection(recentHullStrikes.map(s => turf.point([s.coordinates[0], s.coordinates[1]])));
                         hullGeometry = turf.convex(points);
-                        
+
                         // Edge-case fallback: If points are perfectly in a straight line, convex returns null.
                         // We can fall back to the raw points if absolutely necessary, but null usually fails gracefully below.
                     }
@@ -11740,7 +12040,7 @@
                         cluster.nowcastPolygons.forEach(forecast => {
                             const latLngs = forecast.polygon.map(p => [p[1], p[0]]);
                             const timeDecay = 1.0 - (forecast.timeMinutes / 80);
-                            
+
                             L.polygon(latLngs, {
                                 color: customStrokeColor !== 'black' ? customStrokeColor : confidenceColor,
                                 weight: forecastStrokeWeight,
@@ -11821,7 +12121,7 @@
                             </div>
                         `, { className: 'custom-weather-popup', closeButton: false }).addTo(polygonNowcastLayer);
                     }
-                
+
                 } else {
                     // --- 3D RENDERING ---
                     const radiusKm = confidence * 5 + 5;
