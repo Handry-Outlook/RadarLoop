@@ -5063,7 +5063,32 @@
         const NOWCAST_Z_INDEX = 190;            // NEW
         const WARNING_Z_INDEX = 135;            // NEW
 
+        /**
+ * Returns the color associated with a specific risk percentage
+ */
+        function getHocoColor(risk) {
+            if (risk === undefined || risk === null) return 'rgba(0,0,0,0)';
+            return risk >= 90 ? '#b83dda' : // Purple (High)
+                risk >= 80 ? '#ec1c24' : // Red (Moderate)
+                    risk >= 60 ? '#ff7f27' : // Orange (Enhanced)
+                        risk >= 40 ? '#fff200' : // Yellow (Slight)
+                            risk >= 20 ? '#66c2a4' : // Green (Low)
+                                'rgba(255,255,255,0)'; // Transparent
+        }
 
+        /**
+         * Defines the style for each GeoJSON feature
+         */
+        function hocoStyle(feature) {
+            const risk = feature.properties.risk;
+            return {
+                fillColor: getHocoColor(risk),
+                weight: 1,
+                opacity: 0.3,
+                color: 'white', // Border color
+                fillOpacity: 0.7
+            };
+        }
         // --- CONFIGURATION ---
         const firebaseConfig = {
             apiKey: "AIzaSyA8IYTApDl8vhZENPJXIw48rR_SUhfFPVQ",
@@ -5116,109 +5141,120 @@
         // --- HOCO Forecast Logic with Enhanced Logging ---
 
         async function fetchHocoData() {
-    console.group("🚀 HOCO Data Sync");
-    const dateSelect = document.getElementById('hoco-date-select');
+            console.group("🚀 HOCO Data Sync");
+            const dateSelect = document.getElementById('hoco-date-select');
 
-    try {
-        console.log("Querying Firestore for HOCO runs using v8 syntax...");
+            try {
+                console.log("Querying Firestore for HOCO runs using v8 syntax...");
 
-        // Use the 'db' instance already defined in your config
-        // Using collection("hoco_requests") as per your database structure
-        const querySnapshot = await db.collection("hoco_requests")
-            .orderBy("createdAt", "desc")
-            .limit(20)
-            .get();
+                // Use the 'db' instance already defined in your config
+                // Using collection("hoco_requests") as per your database structure
+                const querySnapshot = await db.collection("hoco_requests")
+                    .orderBy("createdAt", "desc")
+                    .limit(20)
+                    .get();
 
-        if (querySnapshot.empty) {
-            console.warn("No data found in Firestore hoco_requests.");
-            dateSelect.innerHTML = '<option value="" disabled>No runs available</option>';
-            return;
-        }
+                if (querySnapshot.empty) {
+                    console.warn("No data found in Firestore hoco_requests.");
+                    dateSelect.innerHTML = '<option value="" disabled>No runs available</option>';
+                    return;
+                }
 
-        // Clear and Populate Dropdown
-        dateSelect.innerHTML = '';
-        
-        querySnapshot.forEach((doc) => {
-            const data = doc.data();
-            const option = document.createElement('option');
-            
-            // Store the document ID as the value
-            option.value = doc.id; 
-            
-            // Format label: "StartTime (Region)"
-            const label = `${data.startTime || 'Unknown Time'} (${data.region || 'UK'})`;
-            option.textContent = label;
-            
-            dateSelect.appendChild(option);
-        });
+                // Clear and Populate Dropdown
+                dateSelect.innerHTML = '';
 
-        console.log(`Successfully loaded ${querySnapshot.size} runs.`);
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    const option = document.createElement('option');
 
-        // Auto-trigger first run fetch
-        if (!querySnapshot.empty) {
-            const firstRunId = querySnapshot.docs[0].id;
-            console.log("Auto-selecting latest run ID:", firstRunId);
-            
-            // Ensure this function exists in your script to handle the map load
-            if (typeof loadRunIntoMap === "function") {
-                loadRunIntoMap(firstRunId, 0); 
-            } else {
-                console.error("Function 'loadRunIntoMap' is not defined!");
+                    // Store the document ID as the value
+                    option.value = doc.id;
+
+                    // Format label: "StartTime (Region)"
+                    const label = `${data.startTime || 'Unknown Time'} (${data.region || 'UK'})`;
+                    option.textContent = label;
+
+                    dateSelect.appendChild(option);
+                });
+
+                console.log(`Successfully loaded ${querySnapshot.size} runs.`);
+
+                // Auto-trigger first run fetch
+                if (!querySnapshot.empty) {
+                    const firstRunId = querySnapshot.docs[0].id;
+                    console.log("Auto-selecting latest run ID:", firstRunId);
+
+                    // Ensure this function exists in your script to handle the map load
+                    if (typeof loadRunIntoMap === "function") {
+                        loadRunIntoMap(firstRunId, 0);
+                    } else {
+                        console.error("Function 'loadRunIntoMap' is not defined!");
+                    }
+                }
+
+            } catch (error) {
+                console.error("❌ HOCO Firestore Fetch Failed:", error);
+                dateSelect.innerHTML = '<option value="" disabled>Error loading database</option>';
             }
+            console.groupEnd();
         }
-
-    } catch (error) {
-        console.error("❌ HOCO Firestore Fetch Failed:", error);
-        dateSelect.innerHTML = '<option value="" disabled>Error loading database</option>';
-    }
-    console.groupEnd();
-}
-function loadRunIntoMap(runId, mapIndex) {
-    console.log(`Loading Run: ${runId} into Map Index: ${mapIndex}`);
+        function loadRunIntoMap(runId, mapIndex) {
+    console.log(`Loading Run: ${runId}`);
     
-    // 1. Fetch the specific document from Firestore
     db.collection("hoco_requests").doc(runId).get().then((doc) => {
         if (doc.exists) {
             const data = doc.data();
-            const geojsonUrl = data.geojsonUrl; // Or wherever your URL is stored
+            const geojsonUrl = data.geojsonUrl; 
             
-            // 2. Add to Leaflet (assuming 'map' is your Leaflet instance)
             fetch(geojsonUrl)
                 .then(response => response.json())
                 .then(geojsonData => {
                     // Clear old layers
                     hocoLayerGroup.clearLayers();
-                    // Add new one
-                    L.geoJSON(geojsonData).addTo(hocoLayerGroup);
-                });
+
+                    // Add new GeoJSON with styling
+                    L.geoJSON(geojsonData, {
+                        style: hocoStyle,
+                        onEachFeature: function (feature, layer) {
+                            if (feature.properties && feature.properties.risk) {
+                                layer.bindPopup(`<strong>Risk Level:</strong> ${feature.properties.risk}%`);
+                            }
+                        }
+                    }).addTo(hocoLayerGroup);
+                    
+                    console.log("HOCO Layer updated successfully.");
+                })
+                .catch(err => console.error("Error fetching GeoJSON file:", err));
+        } else {
+            console.error("Document does not exist in Firestore!");
         }
     });
 }
-function setHocoForecastDay(day) {
-    console.log(`📅 Forecast Day Switched to: Day ${day}`);
+        function setHocoForecastDay(day) {
+            console.log(`📅 Forecast Day Switched to: Day ${day}`);
 
-    // Update the global tracking variable
-    currentHocoDay = day;
+            // Update the global tracking variable
+            currentHocoDay = day;
 
-    // Visual feedback for buttons
-    document.querySelectorAll('.hoco-day-btn').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    
-    const activeBtn = document.getElementById(`hoco-day-${day}`);
-    if (activeBtn) activeBtn.classList.add('active');
+            // Visual feedback for buttons
+            document.querySelectorAll('.hoco-day-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
 
-    // Logic to reload the map for the new day
-    // This usually involves refetching data or filtering the GeoJSON
-    console.log("Triggering map update for day:", day);
-}
-// Ensure the DOM is ready and Firebase is initialized
-window.addEventListener('DOMContentLoaded', () => {
-    // Small delay to ensure Firebase Auth/Firestore is ready
-    setTimeout(() => {
-        fetchHocoData();
-    }, 1000);
-});
+            const activeBtn = document.getElementById(`hoco-day-${day}`);
+            if (activeBtn) activeBtn.classList.add('active');
+
+            // Logic to reload the map for the new day
+            // This usually involves refetching data or filtering the GeoJSON
+            console.log("Triggering map update for day:", day);
+        }
+        // Ensure the DOM is ready and Firebase is initialized
+        window.addEventListener('DOMContentLoaded', () => {
+            // Small delay to ensure Firebase Auth/Firestore is ready
+            setTimeout(() => {
+                fetchHocoData();
+            }, 1000);
+        });
         // ==========================================
         // 2. HELPER FUNCTIONS
         // ==========================================
