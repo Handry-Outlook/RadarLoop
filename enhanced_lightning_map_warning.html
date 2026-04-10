@@ -5114,70 +5114,50 @@
          * Fetches unique runs from hoco_requests
          */
         async function fetchHocoData() {
-    console.group("🚀 HOCO Data Sync");
-    const dateSelect = document.getElementById('hoco-date-select');
+            const dateSelect = document.getElementById('hoco-date-select');
+            try {
+                const querySnapshot = await db.collection("hoco_requests")
+                    .where("type", "==", "automated")
+                    .orderBy("createdAt", "desc")
+                    .limit(90)
+                    .get();
 
-    try {
-        const querySnapshot = await db.collection("hoco_requests")
-            .where("type", "==", "automated")
-            .orderBy("createdAt", "desc")
-            .limit(90) // Fetch enough to cover several days of runs
-            .get();
+                const uniqueRuns = new Map();
 
-        if (querySnapshot.empty) {
-            dateSelect.innerHTML = '<option value="" disabled>No runs available</option>';
-            return;
-        }
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    const dateObj = data.createdAt.toDate();
 
-        const uniqueRuns = new Map();
+                    // Create a key for the Minute: "YYYY-MM-DD-HH-mm"
+                    const minuteKey = `${dateObj.getFullYear()}-${dateObj.getMonth()}-${dateObj.getDate()}-${dateObj.getHours()}-${dateObj.getMinutes()}`;
 
-        querySnapshot.forEach((doc) => {
-            const data = doc.data();
-            if (data.createdAt) {
-                const dateObj = data.createdAt.toDate();
-                
-                // 1. Create a key unique to the YEAR-MONTH-DAY-HOUR-MINUTE
-                // This strips off seconds and milliseconds to group the 3 documents
-                const minuteKey = `${dateObj.getFullYear()}-${dateObj.getMonth()}-${dateObj.getDate()}-${dateObj.getHours()}-${dateObj.getMinutes()}`;
+                    if (!uniqueRuns.has(minuteKey)) {
+                        const displayDate = dateObj.toLocaleString('en-GB', {
+                            day: '2-digit', month: '2-digit', year: 'numeric',
+                            hour: '2-digit', minute: '2-digit'
+                        });
+                        uniqueRuns.set(minuteKey, {
+                            display: displayDate,
+                            timestamp: data.createdAt // Store the Firebase Timestamp
+                        });
+                    }
+                });
 
-                if (!uniqueRuns.has(minuteKey)) {
-                    const displayDate = dateObj.toLocaleString('en-GB', {
-                        day: '2-digit', month: '2-digit', year: 'numeric',
-                        hour: '2-digit', minute: '2-digit'
-                    });
+                dateSelect.innerHTML = '';
+                uniqueRuns.forEach((run) => {
+                    const option = document.createElement('option');
+                    // Store the seconds of the creation time as the value
+                    option.value = run.timestamp.seconds;
+                    option.textContent = run.display;
+                    dateSelect.appendChild(option);
+                });
 
-                    uniqueRuns.set(minuteKey, {
-                        display: displayDate,
-                        // We store the specific millisecond value to use in the query later
-                        millis: data.createdAt.toMillis() 
-                    });
+                if (uniqueRuns.size > 0) {
+                    setHocoForecastDay(0); // Load Day 0 for the latest run
                 }
-            }
-        });
-
-        dateSelect.innerHTML = '';
-        // Map maintains insertion order, and since we ordered by createdAt desc, 
-        // the first items in the Map are the most recent.
-        uniqueRuns.forEach((run) => {
-            const option = document.createElement('option');
-            option.value = run.millis;
-            option.textContent = run.display; 
-            dateSelect.appendChild(option);
-        });
-
-        if (uniqueRuns.size > 0) {
-            // Select the most recent run automatically
-            const latestRun = uniqueRuns.values().next().value;
-            dateSelect.value = latestRun.millis;
-            setHocoForecastDay(0); 
+            } catch (e) { console.error(e); }
         }
 
-    } catch (error) {
-        console.error("❌ HOCO Fetch Failed:", error);
-    }
-    console.groupEnd();
-}
-        
 
         /**
          * Handles dropdown changes
@@ -5194,89 +5174,76 @@
 
         /**
          * Day button logic (Day 0, 1, 2)
-         */
+            */
+        // DELETE the first version of setHocoForecastDay and use this one at the bottom:
         function setHocoForecastDay(day) {
             const activeBtn = document.getElementById(`hoco-day-${day}`);
             if (!activeBtn) return;
 
-            // Logic: If already active, toggle off
-            if (activeBtn.classList.contains('active')) {
-                hocoLayerGroup.clearLayers();
-                activeBtn.classList.remove('active');
-                currentHocoDay = null;
-                return;
-            }
-
-            currentHocoDay = day;
-
-            // Reset UI
+            // UI Reset
             [0, 1, 2].forEach(d => {
                 const btn = document.getElementById(`hoco-day-${d}`);
                 if (btn) btn.classList.remove('active');
             });
             activeBtn.classList.add('active');
 
-            const selectedTs = document.getElementById('hoco-date-select').value;
-            if (selectedTs) {
-                loadHocoByTimestampAndDay(selectedTs, day);
+            currentHocoDay = day;
+
+            const selectedSeconds = document.getElementById('hoco-date-select').value;
+            if (selectedSeconds) {
+                loadHocoByTimestampAndDay(selectedSeconds, day);
             }
         }
 
         /**
          * Final Loader - Uses the createdAt timestamp to find the specific Day
          */
-        function loadHocoByTimestampAndDay(timestampMillis, day) {
-    const targetTimestamp = firebase.firestore.Timestamp.fromMillis(parseInt(timestampMillis));
-    const metaLegend = document.getElementById('hoco-metadata-legend');
-    
-    db.collection("hoco_requests")
-        .where("type", "==", "automated")
-        .where("createdAt", "==", targetTimestamp)
-        .get()
-        .then((querySnapshot) => {
-            // Filter the batch for the specific Day
-            const doc = querySnapshot.docs.find(d => d.data().id.includes(`Day${day}`));
+        function loadHocoByTimestampAndDay(secondsValue, day) {
+            const startRange = new firebase.firestore.Timestamp(parseInt(secondsValue), 0);
+            // We search for any document created within the same 60 seconds (the same minute)
+            const endRange = new firebase.firestore.Timestamp(parseInt(secondsValue) + 60, 0);
 
-            if (doc && doc.data().geojsonUrl) {
-                const data = doc.data();
+            db.collection("hoco_requests")
+                .where("type", "==", "automated")
+                .where("createdAt", ">=", startRange)
+                .where("createdAt", "<", endRange)
+                .get()
+                .then((querySnapshot) => {
+                    // Now we find the specific day within that minute-based batch
+                    const doc = querySnapshot.docs.find(d => d.data().id.includes(`Day${day}`));
 
-                // Update the Legend UI
-                if (metaLegend) {
-                    metaLegend.style.display = 'block';
-                    document.getElementById('hoco-start-time').textContent = data.startTime;
-                    document.getElementById('hoco-end-time').textContent = data.endTime;
-                }
+                    if (doc && doc.data().geojsonUrl) {
+                        const data = doc.data();
 
-                fetch(data.geojsonUrl, {
-                    method: 'GET',
-                    mode: 'cors',
-                    headers: { 'Accept': 'application/json' }
-                })
-                .then(res => res.json())
-                .then(geojsonData => {
-                    hocoLayerGroup.clearLayers();
-                    L.geoJSON(geojsonData, {
-                        filter: (f) => f.geometry && (f.geometry.type.includes('Polygon')),
-                        style: hocoStyle,
-                        onEachFeature: (f, l) => {
-                            if (f.properties && f.properties.risk !== undefined) {
-                                l.bindPopup(`
-                                    <div style="font-family: sans-serif;">
-                                        <strong>Risk:</strong> ${f.properties.risk}%<br>
-                                        <strong>Valid from:</strong> ${data.startTime}
-                                    </div>
-                                `);
-                            }
-                        }
-                    }).addTo(hocoLayerGroup);
+                        // Update your Metadata Legend
+                        document.getElementById('hoco-start-time').textContent = data.startTime;
+                        document.getElementById('hoco-end-time').textContent = data.endTime;
+                        document.getElementById('hoco-metadata-legend').style.display = 'block';
+
+                        fetch(data.geojsonUrl, { mode: 'cors' })
+                            .then(res => res.json())
+                            .then(geojsonData => {
+                                hocoLayerGroup.clearLayers();
+                                L.geoJSON(geojsonData, {
+                                    style: hocoStyle,
+                                    onEachFeature: (f, l) => {
+                                        l.bindPopup(`<strong>Risk:</strong> ${f.properties.risk}%`);
+                                    }
+                                }).addTo(hocoLayerGroup);
+                            });
+                    } else {
+                        console.warn("No document for Day " + day + " in this run.");
+                        hocoLayerGroup.clearLayers();
+                    }
                 });
-            } else {
-                console.warn(`No data for Day ${day}`);
-                hocoLayerGroup.clearLayers();
-                if (metaLegend) metaLegend.style.display = 'none';
+        }
+        function setHocoForecastDay(day) {
+            // UI logic to toggle active buttons...
+            const selectedSeconds = document.getElementById('hoco-date-select').value;
+            if (selectedSeconds) {
+                loadHocoByTimestampAndDay(selectedSeconds, day);
             }
-        });
-}
+        }
         // Initialization Listener
         window.addEventListener('DOMContentLoaded', () => {
             const dateSelect = document.getElementById('hoco-date-select');
