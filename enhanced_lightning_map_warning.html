@@ -5109,98 +5109,71 @@ let currentHocoDay = 0;
  * Uses 'auto_hoco' collection and ensures newest runs appear first.
  */
 async function fetchHocoData() {
-    console.group("🚀 HOCO Data Sync");
     const dateSelect = document.getElementById('hoco-date-select');
-
     try {
-        console.log("Querying auto_hoco for unique creation dates...");
-        
-        // Fetch runs ordered by creation_date
         const querySnapshot = await db.collection("auto_hoco")
             .orderBy("creation_date", "desc")
             .get();
 
-        if (querySnapshot.empty) {
-            console.warn("No data found in auto_hoco.");
-            dateSelect.innerHTML = '<option value="" disabled>No runs available</option>';
-            return;
-        }
+        dateSelect.innerHTML = '';
+        const uniqueTimestamps = new Map(); // Use Map to store Display String -> Raw Timestamp
 
-        const uniqueDates = new Set();
         querySnapshot.forEach((doc) => {
-            const data = doc.data();
-            if (data.creation_date) {
-                uniqueDates.add(data.creation_date);
+            const ts = doc.data().creation_date;
+            if (ts && typeof ts.toDate === 'function') {
+                const dateString = ts.toDate().toLocaleString(); // Human readable
+                if (!uniqueTimestamps.has(dateString)) {
+                    // Store the seconds so we can rebuild the Timestamp later
+                    uniqueTimestamps.set(dateString, ts.seconds);
+                }
             }
         });
 
-        // Clear and Populate Dropdown
-        dateSelect.innerHTML = '';
-        
-        // Convert Set to Array and Sort (descending) to ensure newest is at top
-        const sortedDates = Array.from(uniqueDates).sort().reverse();
-
-        sortedDates.forEach(date => {
+        uniqueTimestamps.forEach((seconds, dateString) => {
             const option = document.createElement('option');
-            option.value = date;
-            option.textContent = date; 
+            option.value = seconds; // We store the numeric seconds here
+            option.textContent = dateString;
             dateSelect.appendChild(option);
         });
 
-        console.log(`Successfully grouped into ${uniqueDates.size} unique run times.`);
-
     } catch (error) {
-        console.error("❌ HOCO Firestore Fetch Failed:", error);
-        dateSelect.innerHTML = '<option value="" disabled>Error loading database</option>';
+        console.error("❌ Fetch Failed:", error);
     }
-    console.groupEnd();
 }
 
 /**
  * 2. Loads specific Day for a specific Date
  * Filters by both the creation_date string and the forecast_day integer.
  */
-function loadHocoByDateAndDay(dateValue, day) {
-    if (!dateValue || day === null) {
-        console.warn("Missing Date or Day for query.");
-        return;
-    }
+function loadHocoByDateAndDay(secondsValue, day) {
+    if (!secondsValue) return;
 
-    console.log(`🔍 Searching Firestore | Date: ${dateValue} | Day: ${day}`);
+    // Convert the numeric seconds back into a Firestore Timestamp
+    const targetTimestamp = new firebase.firestore.Timestamp(parseInt(secondsValue), 0);
+
+    console.log(`🔍 Querying: Day ${day} at Timestamp Seconds ${secondsValue}`);
 
     db.collection("auto_hoco")
-        .where("creation_date", "==", dateValue)
+        .where("creation_date", ">=", targetTimestamp) // Query range to account for nanoseconds
+        .where("creation_date", "<", new firebase.firestore.Timestamp(parseInt(secondsValue) + 1, 0))
         .where("forecast_day", "==", parseInt(day))
         .limit(1)
         .get()
         .then((querySnapshot) => {
             if (!querySnapshot.empty) {
-                const doc = querySnapshot.docs[0];
-                const geojsonUrl = doc.data().geojsonUrl;
-
+                const geojsonUrl = querySnapshot.docs[0].data().geojsonUrl;
                 fetch(geojsonUrl)
                     .then(res => res.json())
                     .then(geojsonData => {
-                        // Clear old layers
                         hocoLayerGroup.clearLayers();
-
-                        // Add new GeoJSON with Marker Filter
                         L.geoJSON(geojsonData, {
-                            filter: (f) => {
-                                // Strictly Polygons only to remove blue markers
-                                return f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon';
-                            },
-                            style: hocoStyle,
-                            onEachFeature: (f, l) => {
-                                if (f.properties && f.properties.risk !== undefined) {
-                                    l.bindPopup(`<strong>Risk Level:</strong> ${f.properties.risk}%`);
-                                }
-                            }
+                            filter: (f) => f.geometry.type.includes('Polygon'),
+                            style: hocoStyle
                         }).addTo(hocoLayerGroup);
-                        console.log(`✅ Loaded Day ${day} polygons for ${dateValue}`);
+                        console.log("✅ Success");
                     });
             } else {
-                console.warn(`No document found for Day ${day} on ${dateValue}`);
+                console.warn("No document found for this timestamp.");
                 hocoLayerGroup.clearLayers();
             }
         })
