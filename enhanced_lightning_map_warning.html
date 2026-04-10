@@ -5199,41 +5199,44 @@
             console.groupEnd();
         }
         function loadRunIntoMap(runId, mapIndex) {
-            console.log(`Loading Run: ${runId}`);
+    console.log(`Loading Run: ${runId}`);
 
-            db.collection("hoco_requests").doc(runId).get().then((doc) => {
-                if (doc.exists) {
-                    const data = doc.data();
-                    const geojsonUrl = data.geojsonUrl;
+    db.collection("hoco_requests").doc(runId).get().then((doc) => {
+        if (doc.exists) {
+            const data = doc.data();
+            const geojsonUrl = data.geojsonUrl;
 
-                    fetch(geojsonUrl)
-                        .then(response => response.json())
-                        .then(geojsonData => {
-                            // Clear old layers
-                            hocoLayerGroup.clearLayers();
+            fetch(geojsonUrl)
+                .then(response => response.json())
+                .then(geojsonData => {
+                    // Clear old layers before adding new ones
+                    hocoLayerGroup.clearLayers();
 
-                            // Add new GeoJSON with styling
-                            L.geoJSON(geojsonData, {
-                                filter: function (feature) {
-                                    // Only show Polygons; hide Points/Markers
-                                    return feature.geometry.type !== 'Point';
-                                },
-                                style: hocoStyle,
-                                onEachFeature: function (feature, layer) {
-                                    if (feature.properties && feature.properties.risk) {
-                                        layer.bindPopup(`<strong>Risk Level:</strong> ${feature.properties.risk}%`);
-                                    }
-                                }
-                            }).addTo(hocoLayerGroup);
+                    // Add new GeoJSON with a strict Polygon-only filter
+                    L.geoJSON(geojsonData, {
+                        filter: function (feature) {
+                            // This ensures we ONLY draw shapes (Polygons) 
+                            // and completely ignores Points, MultiPoints, etc.
+                            const type = feature.geometry.type;
+                            return type === 'Polygon' || type === 'MultiPolygon';
+                        },
+                        style: hocoStyle,
+                        onEachFeature: function (feature, layer) {
+                            // Adds the interactive popup back to the polygons
+                            if (feature.properties && feature.properties.risk !== undefined) {
+                                layer.bindPopup(`<strong>Risk Level:</strong> ${feature.properties.risk}%`);
+                            }
+                        }
+                    }).addTo(hocoLayerGroup);
 
-                            console.log("HOCO Layer updated successfully.");
-                        })
-                        .catch(err => console.error("Error fetching GeoJSON file:", err));
-                } else {
-                    console.error("Document does not exist in Firestore!");
-                }
-            });
+                    console.log("HOCO Layer updated. Markers filtered out.");
+                })
+                .catch(err => console.error("Error fetching GeoJSON file:", err));
+        } else {
+            console.error("Document does not exist in Firestore!");
         }
+    });
+}
         function setHocoForecastDay(day) {
             console.log(`📅 Forecast Day Switched to: Day ${day}`);
 
