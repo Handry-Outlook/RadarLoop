@@ -5123,18 +5123,18 @@
         }
 
         function hocoStyle(feature) {
-    const risk = feature.properties.risk;
-    // Fallback to 0.7 if the slider hasn't been touched yet
-    const targetOpacity = window.currentHocoOpacity !== undefined ? window.currentHocoOpacity : 0.7;
+            const risk = feature.properties.risk;
+            // Fallback to 0.7 if the slider hasn't been touched yet
+            const targetOpacity = window.currentHocoOpacity !== undefined ? window.currentHocoOpacity : 0.7;
 
-    return {
-        fillColor: getHocoColor(risk),
-        weight: 1,
-        opacity: targetOpacity * 0.4, // Border opacity
-        color: 'white',
-        fillOpacity: targetOpacity    // Fill opacity
-    };
-}
+            return {
+                fillColor: getHocoColor(risk),
+                weight: 1,
+                opacity: targetOpacity * 2, // Border opacity
+                color: 'white',
+                fillOpacity: targetOpacity    // Fill opacity
+            };
+        }
         /**
  * Updates the opacity of the HOCO layer group based on slider input
  */
@@ -5245,7 +5245,16 @@
                                     filter: (f) => f.geometry.type.includes('Polygon'),
                                     style: hocoStyle,
                                     onEachFeature: (f, l) => {
-                                        l.bindPopup(`<strong>Risk Level:</strong> ${f.properties.risk}%`);
+                                        // --- UPDATED POPUP CONTENT ---
+                                        l.bindPopup(`
+                                    <div style="font-family: 'Inter', sans-serif; min-width: 160px;">
+                                        <strong style="color: #66c2a4; font-size: 14px;">HOCO Forecast</strong><br>
+                                        <hr style="margin: 5px 0; border: 0; border-top: 1px solid #eee;">
+                                        <strong>Risk Level:</strong> ${f.properties.risk}%<br>
+                                        <strong>Created:</strong> ${creationDate}<br>
+                                        <strong>Valid:</strong> ${data.startTime} - ${data.endTime}
+                                    </div>
+                                `);
                                     }
                                 }).addTo(hocoLayerGroup);
                             });
