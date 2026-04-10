@@ -5169,72 +5169,108 @@ function handleHocoDateChange(selectedTime) {
     setHocoForecastDay(dayToLoad);
 }
 
+// ... getHocoColor and hocoStyle stay the same ...
+
 /**
- * Day button logic (Day 0, 1, 2)
+ * Fetches unique runs from hoco_requests
  */
-function setHocoForecastDay(day) {
-    const activeBtn = document.getElementById(`hoco-day-${day}`);
-    if (!activeBtn) return;
+async function fetchHocoData() {
+    console.group("🚀 HOCO Data Sync");
+    const dateSelect = document.getElementById('hoco-date-select');
 
-    // Logic: If user clicks an already active button, we could hide it, 
-    // but usually in these maps, we want one day always visible.
-    // To allow toggling OFF completely:
-    if (activeBtn.classList.contains('active')) {
-        hocoLayerGroup.clearLayers();
-        activeBtn.classList.remove('active');
-        currentHocoDay = null;
-        return;
+    try {
+        const querySnapshot = await db.collection("hoco_requests")
+            .where("type", "==", "automated")
+            .orderBy("createdAt", "desc")
+            .limit(90) // 30 runs * 3 days = 90 docs
+            .get();
+
+        if (querySnapshot.empty) {
+            dateSelect.innerHTML = '<option value="" disabled>No runs available</option>';
+            return;
+        }
+
+        const uniqueRuns = new Map();
+
+        querySnapshot.forEach((doc) => {
+            const data = doc.data();
+            if (data.createdAt) {
+                // Firebase Timestamps need toMillis() for a unique key
+                const ts = data.createdAt.toMillis();
+                if (!uniqueRuns.has(ts)) {
+                    // Convert Timestamp to readable string for the dropdown
+                    const dateObj = data.createdAt.toDate();
+                    const displayDate = dateObj.toLocaleString('en-GB', {
+                        day: '2-digit', month: '2-digit', year: 'numeric',
+                        hour: '2-digit', minute: '2-digit'
+                    });
+                    uniqueRuns.set(ts, displayDate);
+                }
+            }
+        });
+
+        dateSelect.innerHTML = '';
+        // Map is already somewhat ordered by the query, but we ensure order
+        const sortedTimestamps = Array.from(uniqueRuns.keys()).sort((a, b) => b - a);
+
+        sortedTimestamps.forEach(ts => {
+            const option = document.createElement('option');
+            option.value = ts; // We store the numeric timestamp as the value
+            option.textContent = uniqueRuns.get(ts); 
+            dateSelect.appendChild(option);
+        });
+
+        if (sortedTimestamps.length > 0) {
+            dateSelect.value = sortedTimestamps[0];
+            setHocoForecastDay(0); 
+        }
+
+    } catch (error) {
+        console.error("❌ HOCO Fetch Failed:", error);
     }
-
-    currentHocoDay = day;
-
-    // UI Updates
-    [0, 1, 2].forEach(d => {
-        const btn = document.getElementById(`hoco-day-${d}`);
-        if(btn) btn.classList.remove('active');
-    });
-    activeBtn.classList.add('active');
-
-    const selectedTime = document.getElementById('hoco-date-select').value;
-    if (selectedTime) {
-        loadHocoByStartTimeAndDay(selectedTime, day);
-    }
+    console.groupEnd();
 }
 
 /**
- * Loads the specific GeoJSON
+ * Loads the specific GeoJSON using the createdAt timestamp
  */
-function loadHocoByStartTimeAndDay(startTime, day) {
-    console.log(`Searching for: ${startTime} | Day: ${day}`);
+function loadHocoByStartTimeAndDay(timestampMillis, day) {
+    // Convert the value back to a Firebase Timestamp for the query
+    const targetTimestamp = firebase.firestore.Timestamp.fromMillis(parseInt(timestampMillis));
+    
+    console.log(`🔎 Searching: CreatedAt: ${timestampMillis} | Day: ${day}`);
 
     db.collection("hoco_requests")
         .where("type", "==", "automated")
-        .where("startTime", "==", startTime)
-        .where("forecast_day", "==", parseInt(day))
-        .limit(1)
+        .where("createdAt", "==", targetTimestamp)
+        .where("id", ">=", "AUTO") // Safety filter
         .get()
         .then((querySnapshot) => {
-            if (!querySnapshot.empty) {
-                const data = querySnapshot.docs[0].data();
-                if (data.geojsonUrl) {
-                    fetch(data.geojsonUrl)
-                        .then(res => res.json())
-                        .then(geojsonData => {
-                            hocoLayerGroup.clearLayers();
-                            L.geoJSON(geojsonData, {
-                                filter: (f) => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'),
-                                style: hocoStyle,
-                                onEachFeature: (f, l) => {
-                                    if (f.properties && f.properties.risk !== undefined) {
-                                        l.bindPopup(`<strong>Risk Level:</strong> ${f.properties.risk}%`);
-                                    }
+            // Find the specific day within this specific run
+            const doc = querySnapshot.docs.find(d => {
+                const data = d.data();
+                // Check if ID contains "Day0", "Day1", etc OR use forecast_day
+                return data.id.includes(`Day${day}`) || data.forecast_day === parseInt(day);
+            });
+
+            if (doc) {
+                const geojsonUrl = doc.data().geojsonUrl;
+                fetch(geojsonUrl)
+                    .then(res => res.json())
+                    .then(geojsonData => {
+                        hocoLayerGroup.clearLayers();
+                        L.geoJSON(geojsonData, {
+                            filter: (f) => f.geometry && (f.geometry.type.includes('Polygon')),
+                            style: hocoStyle,
+                            onEachFeature: (f, l) => {
+                                if (f.properties && f.properties.risk) {
+                                    l.bindPopup(`<strong>Risk Level:</strong> ${f.properties.risk}%`);
                                 }
-                            }).addTo(hocoLayerGroup);
-                        })
-                        .catch(err => console.error("GeoJSON Fetch Error:", err));
-                }
+                            }
+                        }).addTo(hocoLayerGroup);
+                    });
             } else {
-                console.warn("No data for this Day/Time combo.");
+                console.warn(`No document found for Day ${day} in this run.`);
                 hocoLayerGroup.clearLayers();
             }
         })
