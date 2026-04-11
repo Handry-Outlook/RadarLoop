@@ -5240,65 +5240,56 @@
         /**
  * Loads the specific Day and populates the metadata legend
  */async function loadHocoByTimestampAndDay(baseSeconds, day) {
-            const startRange = new firebase.firestore.Timestamp(parseInt(baseSeconds), 0);
-            const endRange = new firebase.firestore.Timestamp(parseInt(baseSeconds) + 60, 0);
+    const startRange = new firebase.firestore.Timestamp(parseInt(baseSeconds), 0);
+    const endRange = new firebase.firestore.Timestamp(parseInt(baseSeconds) + 60, 0);
 
-            try {
-                const querySnapshot = await db.collection("hoco_requests")
-                    .where("type", "==", "automated")
-                    .where("createdAt", ">=", startRange)
-                    .where("createdAt", "<", endRange)
-                    .get();
+    try {
+        const querySnapshot = await db.collection("hoco_requests")
+            .where("type", "==", "automated")
+            .where("createdAt", ">=", startRange)
+            .where("createdAt", "<", endRange)
+            .get();
 
-                const doc = querySnapshot.docs.find(d => d.data().id.includes(`Day${day}`));
+        const doc = querySnapshot.docs.find(d => d.data().id.includes(`Day${day}`));
 
-                if (doc && doc.data().geojsonUrl) {
-                    const data = doc.data();
+        if (doc && doc.data().geojsonUrl) {
+            const data = doc.data();
 
-                    // --- REFRESH TOKEN LOGIC ---
-                    if (typeof firebase.storage !== 'function') {
-                        console.error("Firebase Storage not loaded yet");
-                        return;
-                    }
+            if (typeof firebase.storage !== 'function') {
+                console.error("Firebase Storage not loaded yet");
+                return;
+            }
 
-                    const storageRef = firebase.storage().refFromURL(data.geojsonUrl);
-                    const freshUrl = await storageRef.getDownloadURL();
+            const storageRef = firebase.storage().refFromURL(data.geojsonUrl);
+            const freshUrl = await storageRef.getDownloadURL();
 
-                    // Update Metadata UI
-                    const creationDate = data.createdAt.toDate().toLocaleString('en-GB', {
-                        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
-                    });
+            // Update Metadata UI
+            const creationDate = data.createdAt.toDate().toLocaleString('en-GB', {
+                day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+            });
 
-                    document.getElementById('hoco-create-date').textContent = creationDate;
-                    document.getElementById('hoco-start-time').textContent = data.startTime || "N/A";
-                    document.getElementById('hoco-end-time').textContent = data.endTime || "N/A";
-                    document.getElementById('hoco-metadata-legend').style.display = 'block';
+            document.getElementById('hoco-create-date').textContent = creationDate;
+            document.getElementById('hoco-start-time').textContent = data.startTime || "N/A";
+            document.getElementById('hoco-end-time').textContent = data.endTime || "N/A";
+            document.getElementById('hoco-metadata-legend').style.display = 'block';
 
-                    // Fetch using the FRESH URL
-                    const res = await fetch(freshUrl, { mode: 'cors' });
-                    const geojsonData = await res.json();
+            const res = await fetch(freshUrl, { mode: 'cors' });
+            const geojsonData = await res.json();
 
-                    // --- Z-INDEX PANE SETUP ---
-                    // Create the pane if it doesn't exist
-                    if (!map.getPane('hocoPane')) {
-                        map.createPane('hocoPane');
-                        // Adjust this number to change the stack order:
-                        // 400 is default for tiles, 600 is default for markers/popups
-                        map.getPane('hocoPane').style.zIndex = 145;
-                        // Ensure the pane doesn't capture mouse events if you want to click through it
-                        map.getPane('hocoPane').style.pointerEvents = 'none';
-                    }
+            // Clear previous layers
+            hocoLayerGroup.clearLayers();
 
-                    hocoLayerGroup.clearLayers();
-                    L.geoJSON(geojsonData, {
-                        pane: 'hocoPane', // <--- This assigns the layer to the custom Z-Index pane
-                        filter: (f) => f.geometry.type.includes('Polygon'),
-                        style: hocoStyle,
-                        onEachFeature: (f, l) => {
-                            // Re-enable pointer events for individual features so popups work
-                            l.options.interactive = true;
-
-                            l.bindPopup(`
+            // We use the built-in 'shadowPane' (Z-index 200). 
+            // This is the lowest possible visibility layer above the map tiles.
+            // Since your Radar is likely in the 'overlayPane' (400) or 'tilePane' (higher),
+            // this ensures HOCO is the "bottom" layer.
+            L.geoJSON(geojsonData, {
+                pane: 'shadowPane', 
+                filter: (f) => f.geometry.type.includes('Polygon'),
+                style: hocoStyle,
+                onEachFeature: (f, l) => {
+                    l.options.interactive = true; 
+                    l.bindPopup(`
                         <div style="font-family: 'Inter', sans-serif; min-width: 160px;">
                             <strong style="color: #66c2a4;">HOCO Forecast</strong><br>
                             <hr style="margin: 5px 0; border: 0; border-top: 1px solid #eee;">
@@ -5307,16 +5298,16 @@
                             <strong>Valid:</strong> ${data.startTime} - ${data.endTime}
                         </div>
                     `);
-                        }
-                    }).addTo(hocoLayerGroup);
                 }
-            } catch (error) {
-                console.error("HOCO Load Error:", error);
-                if (error.code === 'storage/object-not-found') {
-                    alert("This forecast file no longer exists in storage.");
-                }
-            }
+            }).addTo(hocoLayerGroup);
         }
+    } catch (error) {
+        console.error("HOCO Load Error:", error);
+        if (error.code === 'storage/object-not-found') {
+            alert("This forecast file no longer exists in storage.");
+        }
+    }
+}
         /**
          * Step 3: Handle UI and trigger search
          */
