@@ -3559,17 +3559,6 @@
             layers: [baseLayers['mapbox-dark']],
             zoomControl: false
         }).setView([53.5, -4.5], 5);
-        
-        map.createPane('satellitePane');
-        map.getPane('satellitePane').style.zIndex = 210; // Below radar
-        
-        map.createPane('hocoPane');
-        map.getPane('hocoPane').style.zIndex = 220; // Above radar
-        map.getPane('hocoPane').style.pointerEvents = 'none'; // Allow clicks to pass through HOCO polygons
-
-        map.createPane('radarPane');
-        map.getPane('radarPane').style.zIndex = 230; // Above satellite and HOCO, but below warnings
-        
         // --- 1. SETUP HIGH Z-INDEX PANE (Run this after initializing 'map') ---
         // This ensures labels stay on top of radar (z=150) and warnings (z=550)
         map.createPane('labelsPane');
@@ -5106,6 +5095,7 @@
         let currentFilterTimestamp = null;
 
         const SATELLITE_Z_INDEX = 140;
+        const HOCO_Z_INDEX = 145;              // NEW
         const RADAR_Z_INDEX = 150;
         const WIND_Z_INDEX = 155;
         const ISOBAR_Z_INDEX = 160;
@@ -5251,74 +5241,72 @@
         /**
  * Loads the specific Day and populates the metadata legend
  */async function loadHocoByTimestampAndDay(baseSeconds, day) {
-    const startRange = new firebase.firestore.Timestamp(parseInt(baseSeconds), 0);
-    const endRange = new firebase.firestore.Timestamp(parseInt(baseSeconds) + 60, 0);
+            const startRange = new firebase.firestore.Timestamp(parseInt(baseSeconds), 0);
+            const endRange = new firebase.firestore.Timestamp(parseInt(baseSeconds) + 60, 0);
 
-    try {
-        const querySnapshot = await db.collection("hoco_requests")
-            .where("type", "==", "automated")
-            .where("createdAt", ">=", startRange)
-            .where("createdAt", "<", endRange)
-            .get();
+            try {
+                const querySnapshot = await db.collection("hoco_requests")
+                    .where("type", "==", "automated")
+                    .where("createdAt", ">=", startRange)
+                    .where("createdAt", "<", endRange)
+                    .get();
 
-        const doc = querySnapshot.docs.find(d => d.data().id.includes(`Day${day}`));
+                const doc = querySnapshot.docs.find(d => d.data().id.includes(`Day${day}`));
 
-        if (doc && doc.data().geojsonUrl) {
-            const data = doc.data();
+                if (doc && doc.data().geojsonUrl) {
+                    const data = doc.data();
 
-            if (typeof firebase.storage !== 'function') {
-                console.error("Firebase Storage not loaded yet");
-                return;
-            }
+                    if (typeof firebase.storage !== 'function') {
+                        console.error("Firebase Storage not loaded yet");
+                        return;
+                    }
 
-            const storageRef = firebase.storage().refFromURL(data.geojsonUrl);
-            const freshUrl = await storageRef.getDownloadURL();
+                    const storageRef = firebase.storage().refFromURL(data.geojsonUrl);
+                    const freshUrl = await storageRef.getDownloadURL();
 
-            // Update Metadata UI
-            const creationDate = data.createdAt.toDate().toLocaleString('en-GB', {
-                day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
-            });
+                    // Update Metadata UI
+                    const creationDate = data.createdAt.toDate().toLocaleString('en-GB', {
+                        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                    });
 
-            document.getElementById('hoco-create-date').textContent = creationDate;
-            document.getElementById('hoco-start-time').textContent = data.startTime || "N/A";
-            document.getElementById('hoco-end-time').textContent = data.endTime || "N/A";
-            document.getElementById('hoco-metadata-legend').style.display = 'block';
+                    document.getElementById('hoco-create-date').textContent = creationDate;
+                    document.getElementById('hoco-start-time').textContent = data.startTime || "N/A";
+                    document.getElementById('hoco-end-time').textContent = data.endTime || "N/A";
+                    document.getElementById('hoco-metadata-legend').style.display = 'block';
 
-            const res = await fetch(freshUrl, { mode: 'cors' });
-            const geojsonData = await res.json();
+                    const res = await fetch(freshUrl, { mode: 'cors' });
+                    const geojsonData = await res.json();
 
-            // Clear previous layers
-            hocoLayerGroup.clearLayers();
+                    // Clear previous layers
+                    hocoLayerGroup.clearLayers();
 
-            // We use the built-in 'shadowPane' (Z-index 200). 
-            // This is the lowest possible visibility layer above the map tiles.
-            // Since your Radar is likely in the 'overlayPane' (400) or 'tilePane' (higher),
-            // this ensures HOCO is the "bottom" layer.
-            L.geoJSON(geojsonData, {
-                pane: 'shadowPane', 
-                filter: (f) => f.geometry.type.includes('Polygon'),
-                style: hocoStyle,
-                onEachFeature: (f, l) => {
-                    l.options.interactive = true; 
-                    l.bindPopup(`
-                        <div style="font-family: 'Inter', sans-serif; min-width: 160px;">
-                            <strong style="color: #66c2a4;">HOCO Forecast</strong><br>
-                            <hr style="margin: 5px 0; border: 0; border-top: 1px solid #eee;">
-                            <strong>Risk:</strong> ${f.properties.risk}%<br>
-                            <strong>Created:</strong> ${creationDate}<br>
-                            <strong>Valid:</strong> ${data.startTime} - ${data.endTime}
-                        </div>
-                    `);
+                    L.geoJSON(geojsonData, {
+                        zIndex: HOCO_Z_INDEX, // <--- ADD YOUR NEW Z-INDEX HERE
+                        pane: 'shadowPane',   // Keep this if you want it to remain in the shadow pane
+                        filter: (f) => f.geometry.type.includes('Polygon'),
+                        style: hocoStyle,
+                        onEachFeature: (f, l) => {
+                            l.options.interactive = true;
+                            l.bindPopup(`
+            <div style="font-family: 'Inter', sans-serif; min-width: 160px;">
+                <strong style="color: #66c2a4;">HOCO Forecast</strong><br>
+                <hr style="margin: 5px 0; border: 0; border-top: 1px solid #eee;">
+                <strong>Risk:</strong> ${f.properties.risk}%<br>
+                <strong>Created:</strong> ${creationDate}<br>
+                <strong>Valid:</strong> ${data.startTime} - ${data.endTime}
+            </div>
+        `);
+                        }
+                    }).addTo(hocoLayerGroup);
                 }
-            }).addTo(hocoLayerGroup);
+
+            } catch (error) {
+                console.error("HOCO Load Error:", error);
+                if (error.code === 'storage/object-not-found') {
+                    alert("This forecast file no longer exists in storage.");
+                }
+            }
         }
-    } catch (error) {
-        console.error("HOCO Load Error:", error);
-        if (error.code === 'storage/object-not-found') {
-            alert("This forecast file no longer exists in storage.");
-        }
-    }
-}
         /**
          * Step 3: Handle UI and trigger search
          */
@@ -5789,7 +5777,7 @@
          */
         async function plotMainLayer(finalUrl, layerType, timestamp, layerKey) {
             let layerOptions, zIndex, currentLayerRef, lastTimestampRef, lastTypeRef, isAnimatingRef;
-            let targetPane = 'overlayPane'; // Default fallback
+
             // 1. Determine correct opacity slider ID based on the layerKey
             // This fixes the bug where opacity resets during animation
             const opacitySliderId = `${layerKey}Opacity`;
@@ -5800,7 +5788,6 @@
                 case 'satellite':
                     layerOptions = satelliteOptions[layerType];
                     zIndex = SATELLITE_Z_INDEX;
-                    targetPane = 'satellitePane';
                     currentLayerRef = satelliteLayer;
                     lastTimestampRef = 'lastSatelliteTimestamp';
                     lastTypeRef = 'lastSatelliteType';
@@ -5809,7 +5796,6 @@
                 case 'radar':
                     layerOptions = radarOptions[layerType];
                     zIndex = RADAR_Z_INDEX;
-                    targetPane = 'radarPane';
                     currentLayerRef = radarLayer;
                     lastTimestampRef = 'lastRadarTimestamp';
                     lastTypeRef = 'lastRadarType';
@@ -5818,7 +5804,6 @@
                 case 'isobar':
                     layerOptions = isobarOptions[layerType];
                     zIndex = ISOBAR_Z_INDEX;
-                    targetPane = 'isobarPane';
                     currentLayerRef = isobarLayer;
                     lastTimestampRef = 'lastIsobarTimestamp';
                     lastTypeRef = 'lastIsobarType';
@@ -5827,7 +5812,6 @@
                 case 'wind':
                     layerOptions = windOptions[layerType];
                     zIndex = WIND_Z_INDEX;
-                    targetPane = 'windPane';
                     currentLayerRef = windLayer;
                     lastTimestampRef = 'lastWindTimestamp';
                     lastTypeRef = 'lastWindType';
@@ -5836,7 +5820,6 @@
                 case 'lightning':
                     layerOptions = lightningOptions[layerType];
                     zIndex = LIGHTNING_Z_INDEX;
-                    targetPane = 'lightningPane';
                     currentLayerRef = lightningLayer;
                     lastTimestampRef = 'lastLightningTimestamp';
                     lastTypeRef = 'lastLightningType';
@@ -5845,7 +5828,6 @@
                 case 'tropicalStorms':
                     layerOptions = tropicalStormsOptions[layerType];
                     zIndex = TROPICAL_STORMS_Z_INDEX;
-                    targetPane = 'tropicalStormsPane';
                     currentLayerRef = tropicalStormsLayer;
                     lastTimestampRef = 'lastTropicalStormsTimestamp';
                     lastTypeRef = 'lastTropicalStormsType';
@@ -5854,7 +5836,6 @@
                 case 'rotation':
                     layerOptions = rotationOptions[layerType];
                     zIndex = ROTATION_Z_INDEX;
-                    targetPane = 'rotationPane';
                     currentLayerRef = rotationLayer;
                     lastTimestampRef = 'lastRotationTimestamp';
                     lastTypeRef = 'lastRotationType';
@@ -5863,7 +5844,6 @@
                 case 'surfaceFront':
                     layerOptions = surfaceFrontOptions[layerType];
                     zIndex = SURFACE_FRONT_Z_INDEX;
-                    targetPane = 'surfaceFrontPane';
                     currentLayerRef = surfaceFrontLayer;
                     lastTimestampRef = 'lastSurfaceFrontTimestamp';
                     lastTypeRef = 'lastSurfaceFrontType';
@@ -5872,7 +5852,6 @@
                 case 'observation':
                     layerOptions = observationOptions[layerType];
                     zIndex = OBSERVATION_Z_INDEX;
-                    targetPane = 'observationPane';
                     currentLayerRef = observationLayer;
                     lastTimestampRef = 'lastObservationTimestamp';
                     lastTypeRef = 'lastObservationType';
@@ -5881,7 +5860,6 @@
                 case 'nowcast':
                     layerOptions = nowcastOptions[layerType];
                     zIndex = NOWCAST_Z_INDEX;
-                    targetPane = 'nowcastPane';
                     currentLayerRef = NowcastLayer;
                     lastTimestampRef = 'lastNowcastTimestamp';
                     lastTypeRef = 'lastNowcastType';
@@ -5890,7 +5868,6 @@
                 case 'warning':
                     layerOptions = warningOptions[layerType];
                     zIndex = WARNING_Z_INDEX;
-                    targetPane = 'warningPane';
                     currentLayerRef = warningLayer;
                     lastTimestampRef = 'lastWarningTimestamp';
                     lastTypeRef = 'lastWarningType';
@@ -6025,8 +6002,7 @@
                         opacity: 0.01,
                         zIndex: zIndex,
                         attribution: layerOptions.attribution,
-                        className: 'seamless-layer',
-                        pane: targetPane
+                        className: 'seamless-layer'
                     }); newLayer.bindPopup(function (l) {
                         const p = l.feature.properties;
 
@@ -6150,20 +6126,18 @@
                             vectorTileLayerStyles: vectorStyles,
                             className: 'seamless-layer',
                             zIndex: zIndex,
-                            tms: isEuropeForecast,// Apply TMS if it's the Europe forecast
-                            pane: targetPane
+                            tms: isEuropeForecast // Apply TMS if it's the Europe forecast
                         });
                     } catch (error) {
                         newLayer = L.tileLayer(finalUrl, {
                             opacity: currentOpacity,
                             zIndex: zIndex,
                             className: 'seamless-layer',
-                            tms: (layerType === 'radar-nowcast-forecast'), // Fallback tile layer also gets TMS
-                            pane: targetPane
+                            tms: (layerType === 'radar-nowcast-forecast') // Fallback tile layer also gets TMS
                         });
                     }
                 } else {
-                    newLayer = L.tileLayer(finalUrl, { opacity: currentOpacity, zIndex: zIndex, tms: true, tileSize: 256, className: 'seamless-layer', pane: targetPane });
+                    newLayer = L.tileLayer(finalUrl, { opacity: currentOpacity, zIndex: zIndex, tms: true, tileSize: 256, className: 'seamless-layer' });
                 }
 
                 if (!newLayer) return;
@@ -10712,181 +10686,185 @@
                 numberOverlay.setZIndex(numbersZ);
                 map.addLayer(numberOverlay);
             }
+            if (hocoLayerGroup) {
+                hocoLayerGroup.eachLayer(layer => {
+                    if (layer.setZIndex) layer.setZIndex(HOCO_Z_INDEX));
+            });
+        }
+        // In 3D mode, ensure correct layer order by re-adding layers
+        if (is3DMode) {
+            // Remove existing 3D layers
+            if (map3D.getLayer('png-layer')) map3D.removeLayer('png-layer');
+            if (map3D.getSource('png-source')) map3D.removeSource('png-source');
+            if (map3D.getLayer('kml-layer')) map3D.removeLayer('kml-layer');
+            if (map3D.getLayer('kml-layer-outline')) map3D.removeLayer('kml-layer-outline');
+            if (map3D.getSource('kml-source')) map3D.removeSource('kml-source');
+            nowcastLayer3D.forEach(layer => {
+                if (map3D.getLayer(layer.id)) map3D.removeLayer(layer.id);
+                if (map3D.getSource(layer.source)) map3D.removeSource(layer.source);
+            });
+            strikeLayer3D.forEach(marker => marker.remove());
+            strikeLayer3D = [];
 
-            // In 3D mode, ensure correct layer order by re-adding layers
-            if (is3DMode) {
-                // Remove existing 3D layers
-                if (map3D.getLayer('png-layer')) map3D.removeLayer('png-layer');
-                if (map3D.getSource('png-source')) map3D.removeSource('png-source');
-                if (map3D.getLayer('kml-layer')) map3D.removeLayer('kml-layer');
-                if (map3D.getLayer('kml-layer-outline')) map3D.removeLayer('kml-layer-outline');
-                if (map3D.getSource('kml-source')) map3D.removeSource('kml-source');
-                nowcastLayer3D.forEach(layer => {
-                    if (map3D.getLayer(layer.id)) map3D.removeLayer(layer.id);
-                    if (map3D.getSource(layer.source)) map3D.removeSource(layer.source);
+            // Re-add PNG layer
+            if (document.getElementById('png-layer-toggle').checked && pngImage && pngBounds) {
+                map3D.addSource('png-source', {
+                    type: 'image',
+                    url: pngImage,
+                    coordinates: [
+                        [pngBounds[0][1], pngBounds[1][0]],
+                        [pngBounds[1][1], pngBounds[1][0]],
+                        [pngBounds[1][1], pngBounds[0][0]],
+                        [pngBounds[0][1], pngBounds[0][0]]
+                    ]
                 });
-                strikeLayer3D.forEach(marker => marker.remove());
-                strikeLayer3D = [];
-
-                // Re-add PNG layer
-                if (document.getElementById('png-layer-toggle').checked && pngImage && pngBounds) {
-                    map3D.addSource('png-source', {
-                        type: 'image',
-                        url: pngImage,
-                        coordinates: [
-                            [pngBounds[0][1], pngBounds[1][0]],
-                            [pngBounds[1][1], pngBounds[1][0]],
-                            [pngBounds[1][1], pngBounds[0][0]],
-                            [pngBounds[0][1], pngBounds[0][0]]
-                        ]
-                    });
-                    map3D.addLayer({
-                        id: 'png-layer',
-                        type: 'raster',
-                        source: 'png-source',
-                        paint: {
-                            'raster-opacity': parseFloat(document.getElementById('png-opacity-slider').value)
-                        }
-                    });
-                }
-
-                // Re-add KML layer
-                if (document.getElementById('kml-layer-toggle').checked && kmlGeoJSON) {
-                    map3D.addSource('kml-source', { type: 'geojson', data: kmlGeoJSON });
-                    map3D.addLayer({
-                        id: 'kml-layer',
-                        type: 'fill',
-                        source: 'kml-source',
-                        paint: {
-                            'fill-color': [
-                                'match',
-                                ['get', 'name'],
-                                'Low risk', risk_colors['Low risk'],
-                                'Slight risk', risk_colors['Slight risk'],
-                                'Enhanced risk', risk_colors['Enhanced risk'],
-                                'Moderate risk', risk_colors['Moderate risk'],
-                                'High risk', risk_colors['High risk'],
-                                'transparent'
-                            ],
-                            'fill-opacity': [
-                                'match',
-                                ['get', 'name'],
-                                'Low risk', 0.3,
-                                'Slight risk', 0.3,
-                                'Enhanced risk', 0.3,
-                                'Moderate risk', 0.3,
-                                'High risk', 0.3,
-                                0
-                            ]
-                        }
-                    });
-                    map3D.addLayer({
-                        id: 'kml-layer-outline',
-                        type: 'line',
-                        source: 'kml-source',
-                        paint: {
-                            'line-color': [
-                                'match',
-                                ['get', 'name'],
-                                'Low risk', risk_colors['Low risk'],
-                                'Slight risk', risk_colors['Slight risk'],
-                                'Enhanced risk', risk_colors['Enhanced risk'],
-                                'Moderate risk', risk_colors['Moderate risk'],
-                                'High risk', risk_colors['High risk'],
-                                risk_colors['Severe risk']
-                            ],
-                            'line-width': 2,
-                            'line-opacity': 1
-                        }
-                    });
-                }
-
-                // Re-add nowcast layers
-                if (document.getElementById('nowcast-toggle').checked) {
-                    currentNowcasts.forEach((cluster, index) => {
-                        if (cluster.confidenceScore >= minNowcastConfidence) {
-                            const confidenceColor = cluster.confidenceScore > 0.9 ? 'purple' :
-                                cluster.confidenceScore > 0.8 ? 'red' :
-                                    cluster.confidenceScore > 0.7 ? 'orange' : 'green';
-                            const radiusKm = cluster.confidenceScore * 5 + 5;
-                            const coneRadiusKm = cluster.confidenceScore * 30 + 30;
-                            const radiusDeg = radiusKm / 111;
-
-                            map3D.addSource(`nowcast-circle-${index}`, {
-                                type: 'geojson',
-                                data: {
-                                    type: 'Feature',
-                                    geometry: {
-                                        type: 'Point',
-                                        coordinates: [cluster.baseLon, cluster.baseLat]
-                                    },
-                                    properties: { radius: radiusDeg }
-                                }
-                            });
-                            map3D.addLayer({
-                                id: `nowcast-circle-${index}`,
-                                type: 'circle',
-                                source: `nowcast-circle-${index}`,
-                                paint: {
-                                    'circle-radius': [
-                                        'interpolate',
-                                        ['linear'],
-                                        ['zoom'],
-                                        5, (radiusKm * 1000) / 1000,
-                                        10, (radiusKm * 1000) / 250
-                                    ],
-                                    'circle-color': confidenceColor,
-                                    'circle-opacity': 0.5,
-                                    'circle-stroke-color': confidenceColor,
-                                    'circle-stroke-width': 2,
-                                    'circle-stroke-opacity': 0.8
-                                }
-                            });
-                            nowcastLayer3D.push({ id: `nowcast-circle-${index}`, source: `nowcast-circle-${index}` });
-
-                            const at = turf.sector(
-                                [cluster.baseLon, cluster.baseLat],
-                                coneRadiusKm,
-                                cluster.directionDeg - 15,
-                                cluster.directionDeg + 15,
-                                { units: 'kilometers' }
-                            );
-                            map3D.addSource(`nowcast-cone-${index}`, {
-                                type: 'geojson',
-                                data: cone
-                            });
-                            map3D.addLayer({
-                                id: `nowcast-cone-${index}`,
-                                type: 'fill',
-                                source: `nowcast-cone-${index}`,
-                                paint: {
-                                    'fill-color': confidenceColor,
-                                    'fill-opacity': 0.5
-                                }
-                            });
-                            nowcastLayer3D.push({ id: `nowcast-cone-${index}`, source: `nowcast-cone-${index}` });
-                        }
-                    });
-                }
-
-                // Re-add lightning layer
-                if (document.getElementById('lightning-layer-toggle').checked) {
-                    currentFiltered.forEach(s => {
-                        const ageFraction = (animationEnd - s.time) / (parseFloat(document.getElementById('lightning-lifespan').value) * 3600 * 1000);
-                        const el = document.createElement('div');
-                        el.className = 'marker';
-                        el.style.backgroundColor = document.getElementById('color-mode').checked ? getColorFromAge(ageFraction) : 'black';
-                        el.style.width = '10px';
-                        el.style.height = '10px';
-                        el.style.borderRadius = '50%';
-                        const marker = new mapboxgl.Marker(el)
-                            .setLngLat([s.coordinates[0], s.coordinates[1]])
-                            .setPopup(new mapboxgl.Popup().setText(s.time.toISOString()))
-                            .addTo(map3D);
-                        strikeLayer3D.push(marker);
-                    });
-                }
+                map3D.addLayer({
+                    id: 'png-layer',
+                    type: 'raster',
+                    source: 'png-source',
+                    paint: {
+                        'raster-opacity': parseFloat(document.getElementById('png-opacity-slider').value)
+                    }
+                });
             }
+
+            // Re-add KML layer
+            if (document.getElementById('kml-layer-toggle').checked && kmlGeoJSON) {
+                map3D.addSource('kml-source', { type: 'geojson', data: kmlGeoJSON });
+                map3D.addLayer({
+                    id: 'kml-layer',
+                    type: 'fill',
+                    source: 'kml-source',
+                    paint: {
+                        'fill-color': [
+                            'match',
+                            ['get', 'name'],
+                            'Low risk', risk_colors['Low risk'],
+                            'Slight risk', risk_colors['Slight risk'],
+                            'Enhanced risk', risk_colors['Enhanced risk'],
+                            'Moderate risk', risk_colors['Moderate risk'],
+                            'High risk', risk_colors['High risk'],
+                            'transparent'
+                        ],
+                        'fill-opacity': [
+                            'match',
+                            ['get', 'name'],
+                            'Low risk', 0.3,
+                            'Slight risk', 0.3,
+                            'Enhanced risk', 0.3,
+                            'Moderate risk', 0.3,
+                            'High risk', 0.3,
+                            0
+                        ]
+                    }
+                });
+                map3D.addLayer({
+                    id: 'kml-layer-outline',
+                    type: 'line',
+                    source: 'kml-source',
+                    paint: {
+                        'line-color': [
+                            'match',
+                            ['get', 'name'],
+                            'Low risk', risk_colors['Low risk'],
+                            'Slight risk', risk_colors['Slight risk'],
+                            'Enhanced risk', risk_colors['Enhanced risk'],
+                            'Moderate risk', risk_colors['Moderate risk'],
+                            'High risk', risk_colors['High risk'],
+                            risk_colors['Severe risk']
+                        ],
+                        'line-width': 2,
+                        'line-opacity': 1
+                    }
+                });
+            }
+
+            // Re-add nowcast layers
+            if (document.getElementById('nowcast-toggle').checked) {
+                currentNowcasts.forEach((cluster, index) => {
+                    if (cluster.confidenceScore >= minNowcastConfidence) {
+                        const confidenceColor = cluster.confidenceScore > 0.9 ? 'purple' :
+                            cluster.confidenceScore > 0.8 ? 'red' :
+                                cluster.confidenceScore > 0.7 ? 'orange' : 'green';
+                        const radiusKm = cluster.confidenceScore * 5 + 5;
+                        const coneRadiusKm = cluster.confidenceScore * 30 + 30;
+                        const radiusDeg = radiusKm / 111;
+
+                        map3D.addSource(`nowcast-circle-${index}`, {
+                            type: 'geojson',
+                            data: {
+                                type: 'Feature',
+                                geometry: {
+                                    type: 'Point',
+                                    coordinates: [cluster.baseLon, cluster.baseLat]
+                                },
+                                properties: { radius: radiusDeg }
+                            }
+                        });
+                        map3D.addLayer({
+                            id: `nowcast-circle-${index}`,
+                            type: 'circle',
+                            source: `nowcast-circle-${index}`,
+                            paint: {
+                                'circle-radius': [
+                                    'interpolate',
+                                    ['linear'],
+                                    ['zoom'],
+                                    5, (radiusKm * 1000) / 1000,
+                                    10, (radiusKm * 1000) / 250
+                                ],
+                                'circle-color': confidenceColor,
+                                'circle-opacity': 0.5,
+                                'circle-stroke-color': confidenceColor,
+                                'circle-stroke-width': 2,
+                                'circle-stroke-opacity': 0.8
+                            }
+                        });
+                        nowcastLayer3D.push({ id: `nowcast-circle-${index}`, source: `nowcast-circle-${index}` });
+
+                        const at = turf.sector(
+                            [cluster.baseLon, cluster.baseLat],
+                            coneRadiusKm,
+                            cluster.directionDeg - 15,
+                            cluster.directionDeg + 15,
+                            { units: 'kilometers' }
+                        );
+                        map3D.addSource(`nowcast-cone-${index}`, {
+                            type: 'geojson',
+                            data: cone
+                        });
+                        map3D.addLayer({
+                            id: `nowcast-cone-${index}`,
+                            type: 'fill',
+                            source: `nowcast-cone-${index}`,
+                            paint: {
+                                'fill-color': confidenceColor,
+                                'fill-opacity': 0.5
+                            }
+                        });
+                        nowcastLayer3D.push({ id: `nowcast-cone-${index}`, source: `nowcast-cone-${index}` });
+                    }
+                });
+            }
+
+            // Re-add lightning layer
+            if (document.getElementById('lightning-layer-toggle').checked) {
+                currentFiltered.forEach(s => {
+                    const ageFraction = (animationEnd - s.time) / (parseFloat(document.getElementById('lightning-lifespan').value) * 3600 * 1000);
+                    const el = document.createElement('div');
+                    el.className = 'marker';
+                    el.style.backgroundColor = document.getElementById('color-mode').checked ? getColorFromAge(ageFraction) : 'black';
+                    el.style.width = '10px';
+                    el.style.height = '10px';
+                    el.style.borderRadius = '50%';
+                    const marker = new mapboxgl.Marker(el)
+                        .setLngLat([s.coordinates[0], s.coordinates[1]])
+                        .setPopup(new mapboxgl.Popup().setText(s.time.toISOString()))
+                        .addTo(map3D);
+                    strikeLayer3D.push(marker);
+                });
+            }
+        }
         }
 
         function updateOverlay(filtered) {
