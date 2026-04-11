@@ -5672,11 +5672,7 @@
                 return null;
             }
 
-            // --- STANDARD TILE LAYER LOGIC ---
-            else if (layerConfig.type === 'tile-layer') {
-                const date = new Date(timestamp);
-                return layerConfig.url.replace(/\${iso}/g, formatISO(date)).replace(/\${iso2}/g, formatISO2(date));
-            }
+            
 
             // --- STANDARD CACHED/VALIDATED VECTOR & IMAGE LOGIC ---
             const cacheKey = `${layerTypeKey}_${timestamp}`;
@@ -6861,27 +6857,18 @@
                 let finalUrl = null;
                 let finalTimestamp = roundedTimestampMs;
                 // Optimized Fetch Logic (fetches up to 3 tiles back)
-                const urls = await Promise.all(Array.from({ length: 6 }, (_, i) =>
+                // Optimized Fetch Logic: Check up to 12 frames back to handle delayed satellite/radar data
+                const NUM_FRAMES_TO_CHECK = 12;
+                const urls = await Promise.all(Array.from({ length: NUM_FRAMES_TO_CHECK }, (_, i) =>
                     fetchTileUrl(roundedTimestampMs - i * interval, layerConfig).catch(() => null)
                 ));
-                finalUrl = urls.find(url => url);
-                const [currentUrl, previousUrl1, previousUrl2, previousUrl3, previousUrl4] = urls;
-                // Find the most recent valid URL and update the effective timestamp
-                if (currentUrl) {
-                    finalUrl = currentUrl;
-                    finalTimestamp = roundedTimestampMs;
-                } else if (previousUrl1) {
-                    finalUrl = previousUrl1;
-                    finalTimestamp = roundedTimestampMs - interval;
-                } else if (previousUrl2) {
-                    finalUrl = previousUrl2;
-                    finalTimestamp = roundedTimestampMs - 2 * interval;
-                } else if (previousUrl3) {
-                    finalUrl = previousUrl3;
-                    finalTimestamp = roundedTimestampMs - 3 * interval;
-                } else if (previousUrl4) {
-                    finalUrl = previousUrl4;
-                    finalTimestamp = roundedTimestampMs - 4 * interval;
+                
+                // Find the index of the first valid URL
+                const validIndex = urls.findIndex(url => url !== null);
+                
+                if (validIndex !== -1) {
+                    finalUrl = urls[validIndex];
+                    finalTimestamp = roundedTimestampMs - (validIndex * interval);
                 } else if (lastValidTileUrls[layerType]) {
                     // Fallback to the last successfully plotted URL (no timestamp update)
                     finalUrl = lastValidTileUrls[layerType];
