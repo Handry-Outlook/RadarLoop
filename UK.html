@@ -2382,11 +2382,12 @@
                 </div>
 
                 <select id="map-style" onchange="switchBaseMap(this.value)">
+                    <option value="mapbox-traffic-day">Mapbox Traffic Day</option>
                     <option value="mapbox-dark">Mapbox Dark</option>
                     <option value="mapbox-light">Mapbox Light</option>
                     <option value="opentopo">OpenTopoMap</option>
                     <option value="mapbox-traffic-night">Mapbox Traffic Night</option>
-                    <option value="mapbox-traffic-day">Mapbox Traffic Day</option>
+                    
                     <option value="mapbox-streets-satellite">Mapbox Streets-Satellite</option>
                     <option value="mapbox-navigation">Mapbox Navigation</option>
                     <option value="mapbox-navigation-night">Mapbox Navigation Night</option>
@@ -3557,7 +3558,7 @@
 
         // 1. Initialize the Leaflet Map
         map = L.map('map', {
-            layers: [baseLayers['mapbox-dark']],
+            layers: [baseLayers['mapbox-traffic-day']],
             zoomControl: false
         }).setView([53.5, -4.5], 5);
         // --- 1. SETUP HIGH Z-INDEX PANE (Run this after initializing 'map') ---
@@ -3568,7 +3569,8 @@
 
         // --- 2. DEFINE THE REFERENCE LAYER ---
         // We use Esri's "World Boundaries and Places" which is transparent and high-contrast
-        const referenceLayer = L.tileLayer(`https://api.mapbox.com/styles/v1/handry20191026/cmkxzwlsx000t01sfe7m81tqm/tiles/{z}/{x}/{y}?access_token=` + mapboxAccessToken, {
+        
+        const referenceLayer = L.tileLayer(`https://api.mapbox.com/styles/v1/handry20191026/cmkxzwlsx000t01sfe7m81tqm/draft/tiles/{z}/{x}/{y}?access_token=` + mapboxAccessToken, {
             attribution: '© Mapbox',
             pane: 'labelsPane', // Keeps your custom lines/labels on top of radar
             opacity: 1.0,
@@ -8719,8 +8721,8 @@
 
             if (isDark) {
                 // Switch to a good dark base map
-                mapStyleSelect.value = 'mapbox-dark'; // or 'mapbox-dark' or 'maptiler-dark'
-                switchBaseMap('mapbox-dark');
+                mapStyleSelect.value = 'mapbox-traffic-day'; // or 'mapbox-dark' or 'maptiler-dark'
+                switchBaseMap('mapbox-traffic-day');
 
                 // Update button text
                 event.target.textContent = '☀️ Light Mode';
