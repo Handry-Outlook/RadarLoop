@@ -5280,9 +5280,16 @@
                     // Clear previous layers
                     hocoLayerGroup.clearLayers();
 
+                    // Create a dedicated pane for HOCO inside overlayPane so it interleaves 
+                    // perfectly with Satellite (140) and Radar (150)
+                    if (!map.getPane('hocoPane')) {
+                        map.createPane('hocoPane', map.getPane('overlayPane'));
+                        map.getPane('hocoPane').style.zIndex = HOCO_Z_INDEX; 
+                    }
+
                     L.geoJSON(geojsonData, {
-                        zIndex: HOCO_Z_INDEX, // <--- ADD YOUR NEW Z-INDEX HERE
-                        pane: 'shadowPane',   // Keep this if you want it to remain in the shadow pane
+                        pane: 'hocoPane', // <-- Replaced 'shadowPane' with our custom pane
+                        zIndex: HOCO_Z_INDEX,
                         filter: (f) => f.geometry.type.includes('Polygon'),
                         style: hocoStyle,
                         onEachFeature: (f, l) => {
@@ -5999,8 +6006,9 @@
                     });
                 } else if (layerOptions.type === 'image') {
                     newLayer = L.imageOverlay(finalUrl, layerOptions.bounds, {
-                        opacity: 0.01,
+                        opacity: currentOpacity, 
                         zIndex: zIndex,
+                        pane: 'overlayPane', // <-- ADDED
                         attribution: layerOptions.attribution,
                         className: 'seamless-layer'
                     }); newLayer.bindPopup(function (l) {
@@ -6099,14 +6107,7 @@
                         className: 'met-office-popup',
                         closeButton: false
                     });
-                } else if (layerOptions.type === 'image') {
-                    // Important: Set opacity immediately on creation
-                    newLayer = L.imageOverlay(finalUrl, layerOptions.bounds, {
-                        opacity: currentOpacity, // Use the correct user setting
-                        zIndex: zIndex,
-                        attribution: layerOptions.attribution,
-                        className: 'seamless-layer'
-                    });
+               
                 } else if (layerOptions.type === 'vector-tile') {
                     try {
                         const defaultStyle = { fill: true, opacity: currentOpacity, fillOpacity: currentOpacity, weight: 0, color: 'inherit' };
@@ -6126,18 +6127,20 @@
                             vectorTileLayerStyles: vectorStyles,
                             className: 'seamless-layer',
                             zIndex: zIndex,
+                            pane: 'overlayPane',
                             tms: isEuropeForecast // Apply TMS if it's the Europe forecast
                         });
                     } catch (error) {
                         newLayer = L.tileLayer(finalUrl, {
                             opacity: currentOpacity,
                             zIndex: zIndex,
+                            pane: 'overlayPane',
                             className: 'seamless-layer',
                             tms: (layerType === 'radar-nowcast-forecast') // Fallback tile layer also gets TMS
                         });
                     }
                 } else {
-                    newLayer = L.tileLayer(finalUrl, { opacity: currentOpacity, zIndex: zIndex, tms: true, tileSize: 256, className: 'seamless-layer' });
+                    newLayer = L.tileLayer(finalUrl, { opacity: currentOpacity, zIndex: zIndex, pane: 'overlayPane', tms: true, tileSize: 256, className: 'seamless-layer' });
                 }
 
                 if (!newLayer) return;
