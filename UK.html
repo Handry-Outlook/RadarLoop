@@ -3233,8 +3233,8 @@
             <h4>🔗 Useful Links</h4>
             <a href="https://handry-outlook.github.io/Convective-Outlook/lightning_strikes_chart.html"
                 target="_blank"><button>Strikes Chart</button></a>
-            <a href="https://handry-outlook.github.io/HOCO-V2.0/index.html"
-                target="_blank"><button>ADV-HOCO Thunderstorm forecast</button></a>
+            <a href="https://handry-outlook.github.io/HOCO-V2.0/index.html" target="_blank"><button>ADV-HOCO
+                    Thunderstorm forecast</button></a>
         </div>
     </div>
     <div id="map"></div>
@@ -3276,77 +3276,91 @@
         <button onclick="close3DDrawModal()">Cancel</button>
     </div>
     <div id="tutorial-modal" class="modal" style="display: none; max-height: 85vh; overflow-y: auto; padding: 20px;">
-    <h3>📚 Tutorial: RadarLoop & HOCO</h3>
+        <h3>📚 Tutorial: RadarLoop & HOCO</h3>
 
-    <hr>
+        <hr>
 
-    <div id="basic-tutorial">
-        <h4>🗺️ Map Interaction & Time History</h4>
-        <p>Use the Start Time and End Time inputs to filter lightning strikes by date and time, then click Apply Filter.</p>
-        <p>The history slider below the map controls the data timestamp. The right side is the current time (Now), and the left side goes back up to the Max History hours. Data displayed corresponds to the slider's current position.</p>
-        <p>Click Play to animate the history of strikes. Adjust playback speed using the slider or the Minutes per Second input. Click Stop to pause.</p>
+        <div id="basic-tutorial">
+            <h4>🗺️ Map Interaction & Time History</h4>
+            <p>Use the Start Time and End Time inputs to filter lightning strikes by date and time, then click Apply
+                Filter.</p>
+            <p>The history slider below the map controls the data timestamp. The right side is the current time (Now),
+                and the left side goes back up to the Max History hours. Data displayed corresponds to the slider's
+                current position.</p>
+            <p>Click Play to animate the history of strikes. Adjust playback speed using the slider or the Minutes per
+                Second input. Click Stop to pause.</p>
+        </div>
+
+        <hr>
+
+        <div id="layer-tutorial">
+            <h4>🌐 Layer Management & Visualization</h4>
+            <p>Use the checkboxes to toggle visualization layers:</p>
+            <ul>
+                <li>UK Lightning Layer: Displays individual strike markers in the UK.</li>
+                <li>Lightning Heatmap: Shows a 2D density map. Adjust appearance using Heatmap Blur.</li>
+                <li>Lightning Counter: Displays the total count of strikes within clusters.</li>
+                <li>Sound: Enable to play thunder audio for new strikes in your current view.</li>
+            </ul>
+
+            <h5>Weather Overlays:</h5>
+            <ul>
+                <li>Map Style: Change base map (Satellite, Dark, Light, etc.).</li>
+                <li>Radar & Weather: Displays precipitation intensity and reflectivity (UK High-Res and Global).</li>
+                <li>Satellite: Shows cloud imagery (Infrared, Visible, Water Vapor).</li>
+                <li>Isobar (Pressure): Overlays lines of equal mean sea level pressure.</li>
+                <li>Surface Fronts: Overlays Cold, Warm, Stationary, and Occluded front boundaries.</li>
+                <li>Global Warnings: Displays active weather bulletins and warning zones.</li>
+            </ul>
+        </div>
+
+        <hr>
+
+        <div id="hoco-tutorial">
+            <h4>⚡ HOCO: Automated Convective Outlook</h4>
+            <p>The HOCO (Handry Outlook Convective Outlook) provides automated, high-resolution risk areas for
+                thunderstorms across the UK and Ireland.</p>
+            <ul>
+                <li>Select Run: Use the dropdown menu to choose specific forecast model runs based on creation time.
+                </li>
+                <li>Day Selection: Toggle between Day 0, Day 1, and Day 2 to see short-term and medium-term outlooks.
+                </li>
+                <li>Opacity Slider: Use the HOCO Opacity slider to adjust polygon transparency for better visibility
+                    against radar data.</li>
+                <li>Metadata Legend: A floating legend appears when HOCO is active, showing the specific Creation Time
+                    and Valid Period for the forecast.</li>
+                <li>HOCO V2.0: Use the link in the legend to view the full detailed forecast page.</li>
+            </ul>
+        </div>
+
+        <hr>
+
+        <div id="nowcast-tutorial">
+            <h4>🎯 Nowcasting & Prediction</h4>
+            <p>Enable Nowcast to display predicted lightning movement based on recent clusters. Purple indicates very
+                high confidence; Red indicates high confidence.</p>
+            <p>Nowcast cones update dynamically as you move the time slider or change filters.</p>
+        </div>
+
+        <hr>
+
+        <div id="expert-tutorial">
+            <h4>🛠️ Expert Mode & Custom Layers</h4>
+            <p>Enable Expert Mode for advanced tools:</p>
+            <ul>
+                <li>Custom KML/PNG: Upload KML risk zones or PNG model outputs.</li>
+                <li>KML Styling: Ensure polygon names match levels like Slight risk or High risk for automatic coloring.
+                </li>
+                <li>PNG Bounds: Filenames should include region names (e.g., England) for auto-positioning.</li>
+                <li>Export: Click Export Strikes As PNG to save the current map view. You can drag an area on the map to
+                    define the export bounds.</li>
+            </ul>
+        </div>
+
+        <button onclick="closeTutorial()"
+            style="width: 100%; padding: 12px; background: #3a4785; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 15px; font-weight: bold;">Close
+            Tutorial</button>
     </div>
-
-    <hr>
-
-    <div id="layer-tutorial">
-        <h4>🌐 Layer Management & Visualization</h4>
-        <p>Use the checkboxes to toggle visualization layers:</p>
-        <ul>
-            <li>UK Lightning Layer: Displays individual strike markers in the UK.</li>
-            <li>Lightning Heatmap: Shows a 2D density map. Adjust appearance using Heatmap Blur.</li>
-            <li>Lightning Counter: Displays the total count of strikes within clusters.</li>
-            <li>Sound: Enable to play thunder audio for new strikes in your current view.</li>
-        </ul>
-
-        <h5>Weather Overlays:</h5>
-        <ul>
-            <li>Map Style: Change base map (Satellite, Dark, Light, etc.).</li>
-            <li>Radar & Weather: Displays precipitation intensity and reflectivity (UK High-Res and Global).</li>
-            <li>Satellite: Shows cloud imagery (Infrared, Visible, Water Vapor).</li>
-            <li>Isobar (Pressure): Overlays lines of equal mean sea level pressure.</li>
-            <li>Surface Fronts: Overlays Cold, Warm, Stationary, and Occluded front boundaries.</li>
-            <li>Global Warnings: Displays active weather bulletins and warning zones.</li>
-        </ul>
-    </div>
-
-    <hr>
-
-    <div id="hoco-tutorial">
-        <h4>⚡ HOCO: Automated Convective Outlook</h4>
-        <p>The HOCO (Handry Outlook Convective Outlook) provides automated, high-resolution risk areas for thunderstorms across the UK and Ireland.</p>
-        <ul>
-            <li>Select Run: Use the dropdown menu to choose specific forecast model runs based on creation time.</li>
-            <li>Day Selection: Toggle between Day 0, Day 1, and Day 2 to see short-term and medium-term outlooks.</li>
-            <li>Opacity Slider: Use the HOCO Opacity slider to adjust polygon transparency for better visibility against radar data.</li>
-            <li>Metadata Legend: A floating legend appears when HOCO is active, showing the specific Creation Time and Valid Period for the forecast.</li>
-            <li>HOCO V2.0: Use the link in the legend to view the full detailed forecast page.</li>
-        </ul>
-    </div>
-
-    <hr>
-
-    <div id="nowcast-tutorial">
-        <h4>🎯 Nowcasting & Prediction</h4>
-        <p>Enable Nowcast to display predicted lightning movement based on recent clusters. Purple indicates very high confidence; Red indicates high confidence.</p>
-        <p>Nowcast cones update dynamically as you move the time slider or change filters.</p>
-    </div>
-
-    <hr>
-
-    <div id="expert-tutorial">
-        <h4>🛠️ Expert Mode & Custom Layers</h4>
-        <p>Enable Expert Mode for advanced tools:</p>
-        <ul>
-            <li>Custom KML/PNG: Upload KML risk zones or PNG model outputs.</li>
-            <li>KML Styling: Ensure polygon names match levels like Slight risk or High risk for automatic coloring.</li>
-            <li>PNG Bounds: Filenames should include region names (e.g., England) for auto-positioning.</li>
-            <li>Export: Click Export Strikes As PNG to save the current map view. You can drag an area on the map to define the export bounds.</li>
-        </ul>
-    </div>
-
-    <button onclick="closeTutorial()" style="width: 100%; padding: 12px; background: #3a4785; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 15px; font-weight: bold;">Close Tutorial</button>
-</div>
     <div id="modal" class="modal" style="display: none;">
         <p>Do you want to adjust the time filter based on the file's timestamp?</p>
         <button onclick="confirmAutoTimeFilter(true)">Yes</button>
@@ -5225,8 +5239,7 @@
          */
         /**
  * Loads the specific Day and populates the metadata legend
- */
-        async function loadHocoByTimestampAndDay(baseSeconds, day) {
+ */async function loadHocoByTimestampAndDay(baseSeconds, day) {
             const startRange = new firebase.firestore.Timestamp(parseInt(baseSeconds), 0);
             const endRange = new firebase.firestore.Timestamp(parseInt(baseSeconds) + 60, 0);
 
@@ -5243,13 +5256,11 @@
                     const data = doc.data();
 
                     // --- REFRESH TOKEN LOGIC ---
-                    // Ensure storage is ready before calling
                     if (typeof firebase.storage !== 'function') {
                         console.error("Firebase Storage not loaded yet");
                         return;
                     }
 
-                    // Using the global storage reference or the direct firebase call
                     const storageRef = firebase.storage().refFromURL(data.geojsonUrl);
                     const freshUrl = await storageRef.getDownloadURL();
 
@@ -5267,11 +5278,26 @@
                     const res = await fetch(freshUrl, { mode: 'cors' });
                     const geojsonData = await res.json();
 
+                    // --- Z-INDEX PANE SETUP ---
+                    // Create the pane if it doesn't exist
+                    if (!map.getPane('hocoPane')) {
+                        map.createPane('hocoPane');
+                        // Adjust this number to change the stack order:
+                        // 400 is default for tiles, 600 is default for markers/popups
+                        map.getPane('hocoPane').style.zIndex = 100;
+                        // Ensure the pane doesn't capture mouse events if you want to click through it
+                        map.getPane('hocoPane').style.pointerEvents = 'none';
+                    }
+
                     hocoLayerGroup.clearLayers();
                     L.geoJSON(geojsonData, {
+                        pane: 'hocoPane', // <--- This assigns the layer to the custom Z-Index pane
                         filter: (f) => f.geometry.type.includes('Polygon'),
                         style: hocoStyle,
                         onEachFeature: (f, l) => {
+                            // Re-enable pointer events for individual features so popups work
+                            l.options.interactive = true;
+
                             l.bindPopup(`
                         <div style="font-family: 'Inter', sans-serif; min-width: 160px;">
                             <strong style="color: #66c2a4;">HOCO Forecast</strong><br>
