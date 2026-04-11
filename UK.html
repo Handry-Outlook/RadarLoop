@@ -3559,6 +3559,17 @@
             layers: [baseLayers['mapbox-dark']],
             zoomControl: false
         }).setView([53.5, -4.5], 5);
+        
+        map.createPane('satellitePane');
+        map.getPane('satellitePane').style.zIndex = 210; // Below radar
+        
+        map.createPane('hocoPane');
+        map.getPane('hocoPane').style.zIndex = 220; // Above radar
+        map.getPane('hocoPane').style.pointerEvents = 'none'; // Allow clicks to pass through HOCO polygons
+
+        map.createPane('radarPane');
+        map.getPane('radarPane').style.zIndex = 230; // Above satellite and HOCO, but below warnings
+        
         // --- 1. SETUP HIGH Z-INDEX PANE (Run this after initializing 'map') ---
         // This ensures labels stay on top of radar (z=150) and warnings (z=550)
         map.createPane('labelsPane');
@@ -5778,7 +5789,7 @@
          */
         async function plotMainLayer(finalUrl, layerType, timestamp, layerKey) {
             let layerOptions, zIndex, currentLayerRef, lastTimestampRef, lastTypeRef, isAnimatingRef;
-
+            let targetPane = 'overlayPane'; // Default fallback
             // 1. Determine correct opacity slider ID based on the layerKey
             // This fixes the bug where opacity resets during animation
             const opacitySliderId = `${layerKey}Opacity`;
@@ -5789,6 +5800,7 @@
                 case 'satellite':
                     layerOptions = satelliteOptions[layerType];
                     zIndex = SATELLITE_Z_INDEX;
+                    targetPane = 'satellitePane';
                     currentLayerRef = satelliteLayer;
                     lastTimestampRef = 'lastSatelliteTimestamp';
                     lastTypeRef = 'lastSatelliteType';
@@ -5797,6 +5809,7 @@
                 case 'radar':
                     layerOptions = radarOptions[layerType];
                     zIndex = RADAR_Z_INDEX;
+                    targetPane = 'radarPane';
                     currentLayerRef = radarLayer;
                     lastTimestampRef = 'lastRadarTimestamp';
                     lastTypeRef = 'lastRadarType';
@@ -5805,6 +5818,7 @@
                 case 'isobar':
                     layerOptions = isobarOptions[layerType];
                     zIndex = ISOBAR_Z_INDEX;
+                    targetPane = 'isobarPane';
                     currentLayerRef = isobarLayer;
                     lastTimestampRef = 'lastIsobarTimestamp';
                     lastTypeRef = 'lastIsobarType';
@@ -5813,6 +5827,7 @@
                 case 'wind':
                     layerOptions = windOptions[layerType];
                     zIndex = WIND_Z_INDEX;
+                    targetPane = 'windPane';
                     currentLayerRef = windLayer;
                     lastTimestampRef = 'lastWindTimestamp';
                     lastTypeRef = 'lastWindType';
@@ -5821,6 +5836,7 @@
                 case 'lightning':
                     layerOptions = lightningOptions[layerType];
                     zIndex = LIGHTNING_Z_INDEX;
+                    targetPane = 'lightningPane';
                     currentLayerRef = lightningLayer;
                     lastTimestampRef = 'lastLightningTimestamp';
                     lastTypeRef = 'lastLightningType';
@@ -5829,6 +5845,7 @@
                 case 'tropicalStorms':
                     layerOptions = tropicalStormsOptions[layerType];
                     zIndex = TROPICAL_STORMS_Z_INDEX;
+                    targetPane = 'tropicalStormsPane';
                     currentLayerRef = tropicalStormsLayer;
                     lastTimestampRef = 'lastTropicalStormsTimestamp';
                     lastTypeRef = 'lastTropicalStormsType';
@@ -5837,6 +5854,7 @@
                 case 'rotation':
                     layerOptions = rotationOptions[layerType];
                     zIndex = ROTATION_Z_INDEX;
+                    targetPane = 'rotationPane';
                     currentLayerRef = rotationLayer;
                     lastTimestampRef = 'lastRotationTimestamp';
                     lastTypeRef = 'lastRotationType';
@@ -5845,6 +5863,7 @@
                 case 'surfaceFront':
                     layerOptions = surfaceFrontOptions[layerType];
                     zIndex = SURFACE_FRONT_Z_INDEX;
+                    targetPane = 'surfaceFrontPane';
                     currentLayerRef = surfaceFrontLayer;
                     lastTimestampRef = 'lastSurfaceFrontTimestamp';
                     lastTypeRef = 'lastSurfaceFrontType';
@@ -5853,6 +5872,7 @@
                 case 'observation':
                     layerOptions = observationOptions[layerType];
                     zIndex = OBSERVATION_Z_INDEX;
+                    targetPane = 'observationPane';
                     currentLayerRef = observationLayer;
                     lastTimestampRef = 'lastObservationTimestamp';
                     lastTypeRef = 'lastObservationType';
@@ -5861,6 +5881,7 @@
                 case 'nowcast':
                     layerOptions = nowcastOptions[layerType];
                     zIndex = NOWCAST_Z_INDEX;
+                    targetPane = 'nowcastPane';
                     currentLayerRef = NowcastLayer;
                     lastTimestampRef = 'lastNowcastTimestamp';
                     lastTypeRef = 'lastNowcastType';
@@ -5869,6 +5890,7 @@
                 case 'warning':
                     layerOptions = warningOptions[layerType];
                     zIndex = WARNING_Z_INDEX;
+                    targetPane = 'warningPane';
                     currentLayerRef = warningLayer;
                     lastTimestampRef = 'lastWarningTimestamp';
                     lastTypeRef = 'lastWarningType';
@@ -6003,7 +6025,8 @@
                         opacity: 0.01,
                         zIndex: zIndex,
                         attribution: layerOptions.attribution,
-                        className: 'seamless-layer'
+                        className: 'seamless-layer',
+                        pane: targetPane
                     }); newLayer.bindPopup(function (l) {
                         const p = l.feature.properties;
 
@@ -6127,18 +6150,20 @@
                             vectorTileLayerStyles: vectorStyles,
                             className: 'seamless-layer',
                             zIndex: zIndex,
-                            tms: isEuropeForecast // Apply TMS if it's the Europe forecast
+                            tms: isEuropeForecast,// Apply TMS if it's the Europe forecast
+                            pane: targetPane
                         });
                     } catch (error) {
                         newLayer = L.tileLayer(finalUrl, {
                             opacity: currentOpacity,
                             zIndex: zIndex,
                             className: 'seamless-layer',
-                            tms: (layerType === 'radar-nowcast-forecast') // Fallback tile layer also gets TMS
+                            tms: (layerType === 'radar-nowcast-forecast'), // Fallback tile layer also gets TMS
+                            pane: targetPane
                         });
                     }
                 } else {
-                    newLayer = L.tileLayer(finalUrl, { opacity: currentOpacity, zIndex: zIndex, tms: true, tileSize: 256, className: 'seamless-layer' });
+                    newLayer = L.tileLayer(finalUrl, { opacity: currentOpacity, zIndex: zIndex, tms: true, tileSize: 256, className: 'seamless-layer', pane: targetPane });
                 }
 
                 if (!newLayer) return;
