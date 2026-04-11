@@ -2439,7 +2439,7 @@
                     </option>
                     <option value="uk-precip-intensity">UK High Resolution Rainfall Intensity (Smoothed)</option>
                     <option value="uk-precip-type">UK High Resolution Precipitation Type</option>
-                    
+
                     <option value="uk-precip-intensity-pixelated">UK High Resolution Rainfall Intensity (Pixelated)
                     </option>
                     <option value="uk-precip-intensity-accessible">UK High Resolution Rainfall Intensity (Accessible)
@@ -5285,7 +5285,7 @@
                     // perfectly with Satellite (140) and Radar (150)
                     if (!map.getPane('hocoPane')) {
                         map.createPane('hocoPane', map.getPane('overlayPane'));
-                        map.getPane('hocoPane').style.zIndex = HOCO_Z_INDEX; 
+                        map.getPane('hocoPane').style.zIndex = HOCO_Z_INDEX;
                     }
 
                     L.geoJSON(geojsonData, {
@@ -5673,7 +5673,7 @@
                 return null;
             }
 
-            
+
 
             // --- STANDARD CACHED/VALIDATED VECTOR & IMAGE LOGIC ---
             const cacheKey = `${layerTypeKey}_${timestamp}`;
@@ -6002,12 +6002,20 @@
                         closeButton: false             // Removes the default 'x' that often looks messy with custom headers
                     });
                 } else if (layerOptions.type === 'image') {
+
+                    // 1. Conditionally add your pixelated CSS class based on the layerType
+                    let imageClass = 'seamless-layer';
+                    if (layerType === 'uk-precip-intensity-pixelated' || layerType === 'uk-precip-intensity-accessible') {
+                        imageClass += ' leaflet-layer-pixelated';
+                    }
+
+                    // 2. Pass the dynamic class into Leaflet
                     newLayer = L.imageOverlay(finalUrl, layerOptions.bounds, {
-                        opacity: currentOpacity, 
+                        opacity: currentOpacity,
                         zIndex: zIndex,
-                        pane: 'overlayPane', // <-- ADDED
+                        pane: 'overlayPane',
                         attribution: layerOptions.attribution,
-                        className: 'seamless-layer'
+                        className: imageClass
                     }); newLayer.bindPopup(function (l) {
                         const p = l.feature.properties;
 
@@ -6104,7 +6112,7 @@
                         className: 'met-office-popup',
                         closeButton: false
                     });
-               
+
                 } else if (layerOptions.type === 'vector-tile') {
                     try {
                         const defaultStyle = { fill: true, opacity: currentOpacity, fillOpacity: currentOpacity, weight: 0, color: 'inherit' };
@@ -6863,10 +6871,10 @@
                 const urls = await Promise.all(Array.from({ length: NUM_FRAMES_TO_CHECK }, (_, i) =>
                     fetchTileUrl(roundedTimestampMs - i * interval, layerConfig).catch(() => null)
                 ));
-                
+
                 // Find the index of the first valid URL
                 const validIndex = urls.findIndex(url => url !== null);
-                
+
                 if (validIndex !== -1) {
                     finalUrl = urls[validIndex];
                     finalTimestamp = roundedTimestampMs - (validIndex * interval);
@@ -10680,182 +10688,182 @@
             if (hocoLayerGroup) {
                 hocoLayerGroup.eachLayer(layer => {
                     if (layer.setZIndex) layer.setZIndex(HOCO_Z_INDEX);
-            });
-        }
-        // In 3D mode, ensure correct layer order by re-adding layers
-        if (is3DMode) {
-            // Remove existing 3D layers
-            if (map3D.getLayer('png-layer')) map3D.removeLayer('png-layer');
-            if (map3D.getSource('png-source')) map3D.removeSource('png-source');
-            if (map3D.getLayer('kml-layer')) map3D.removeLayer('kml-layer');
-            if (map3D.getLayer('kml-layer-outline')) map3D.removeLayer('kml-layer-outline');
-            if (map3D.getSource('kml-source')) map3D.removeSource('kml-source');
-            nowcastLayer3D.forEach(layer => {
-                if (map3D.getLayer(layer.id)) map3D.removeLayer(layer.id);
-                if (map3D.getSource(layer.source)) map3D.removeSource(layer.source);
-            });
-            strikeLayer3D.forEach(marker => marker.remove());
-            strikeLayer3D = [];
-
-            // Re-add PNG layer
-            if (document.getElementById('png-layer-toggle').checked && pngImage && pngBounds) {
-                map3D.addSource('png-source', {
-                    type: 'image',
-                    url: pngImage,
-                    coordinates: [
-                        [pngBounds[0][1], pngBounds[1][0]],
-                        [pngBounds[1][1], pngBounds[1][0]],
-                        [pngBounds[1][1], pngBounds[0][0]],
-                        [pngBounds[0][1], pngBounds[0][0]]
-                    ]
-                });
-                map3D.addLayer({
-                    id: 'png-layer',
-                    type: 'raster',
-                    source: 'png-source',
-                    paint: {
-                        'raster-opacity': parseFloat(document.getElementById('png-opacity-slider').value)
-                    }
                 });
             }
+            // In 3D mode, ensure correct layer order by re-adding layers
+            if (is3DMode) {
+                // Remove existing 3D layers
+                if (map3D.getLayer('png-layer')) map3D.removeLayer('png-layer');
+                if (map3D.getSource('png-source')) map3D.removeSource('png-source');
+                if (map3D.getLayer('kml-layer')) map3D.removeLayer('kml-layer');
+                if (map3D.getLayer('kml-layer-outline')) map3D.removeLayer('kml-layer-outline');
+                if (map3D.getSource('kml-source')) map3D.removeSource('kml-source');
+                nowcastLayer3D.forEach(layer => {
+                    if (map3D.getLayer(layer.id)) map3D.removeLayer(layer.id);
+                    if (map3D.getSource(layer.source)) map3D.removeSource(layer.source);
+                });
+                strikeLayer3D.forEach(marker => marker.remove());
+                strikeLayer3D = [];
 
-            // Re-add KML layer
-            if (document.getElementById('kml-layer-toggle').checked && kmlGeoJSON) {
-                map3D.addSource('kml-source', { type: 'geojson', data: kmlGeoJSON });
-                map3D.addLayer({
-                    id: 'kml-layer',
-                    type: 'fill',
-                    source: 'kml-source',
-                    paint: {
-                        'fill-color': [
-                            'match',
-                            ['get', 'name'],
-                            'Low risk', risk_colors['Low risk'],
-                            'Slight risk', risk_colors['Slight risk'],
-                            'Enhanced risk', risk_colors['Enhanced risk'],
-                            'Moderate risk', risk_colors['Moderate risk'],
-                            'High risk', risk_colors['High risk'],
-                            'transparent'
-                        ],
-                        'fill-opacity': [
-                            'match',
-                            ['get', 'name'],
-                            'Low risk', 0.3,
-                            'Slight risk', 0.3,
-                            'Enhanced risk', 0.3,
-                            'Moderate risk', 0.3,
-                            'High risk', 0.3,
-                            0
+                // Re-add PNG layer
+                if (document.getElementById('png-layer-toggle').checked && pngImage && pngBounds) {
+                    map3D.addSource('png-source', {
+                        type: 'image',
+                        url: pngImage,
+                        coordinates: [
+                            [pngBounds[0][1], pngBounds[1][0]],
+                            [pngBounds[1][1], pngBounds[1][0]],
+                            [pngBounds[1][1], pngBounds[0][0]],
+                            [pngBounds[0][1], pngBounds[0][0]]
                         ]
-                    }
-                });
-                map3D.addLayer({
-                    id: 'kml-layer-outline',
-                    type: 'line',
-                    source: 'kml-source',
-                    paint: {
-                        'line-color': [
-                            'match',
-                            ['get', 'name'],
-                            'Low risk', risk_colors['Low risk'],
-                            'Slight risk', risk_colors['Slight risk'],
-                            'Enhanced risk', risk_colors['Enhanced risk'],
-                            'Moderate risk', risk_colors['Moderate risk'],
-                            'High risk', risk_colors['High risk'],
-                            risk_colors['Severe risk']
-                        ],
-                        'line-width': 2,
-                        'line-opacity': 1
-                    }
-                });
+                    });
+                    map3D.addLayer({
+                        id: 'png-layer',
+                        type: 'raster',
+                        source: 'png-source',
+                        paint: {
+                            'raster-opacity': parseFloat(document.getElementById('png-opacity-slider').value)
+                        }
+                    });
+                }
+
+                // Re-add KML layer
+                if (document.getElementById('kml-layer-toggle').checked && kmlGeoJSON) {
+                    map3D.addSource('kml-source', { type: 'geojson', data: kmlGeoJSON });
+                    map3D.addLayer({
+                        id: 'kml-layer',
+                        type: 'fill',
+                        source: 'kml-source',
+                        paint: {
+                            'fill-color': [
+                                'match',
+                                ['get', 'name'],
+                                'Low risk', risk_colors['Low risk'],
+                                'Slight risk', risk_colors['Slight risk'],
+                                'Enhanced risk', risk_colors['Enhanced risk'],
+                                'Moderate risk', risk_colors['Moderate risk'],
+                                'High risk', risk_colors['High risk'],
+                                'transparent'
+                            ],
+                            'fill-opacity': [
+                                'match',
+                                ['get', 'name'],
+                                'Low risk', 0.3,
+                                'Slight risk', 0.3,
+                                'Enhanced risk', 0.3,
+                                'Moderate risk', 0.3,
+                                'High risk', 0.3,
+                                0
+                            ]
+                        }
+                    });
+                    map3D.addLayer({
+                        id: 'kml-layer-outline',
+                        type: 'line',
+                        source: 'kml-source',
+                        paint: {
+                            'line-color': [
+                                'match',
+                                ['get', 'name'],
+                                'Low risk', risk_colors['Low risk'],
+                                'Slight risk', risk_colors['Slight risk'],
+                                'Enhanced risk', risk_colors['Enhanced risk'],
+                                'Moderate risk', risk_colors['Moderate risk'],
+                                'High risk', risk_colors['High risk'],
+                                risk_colors['Severe risk']
+                            ],
+                            'line-width': 2,
+                            'line-opacity': 1
+                        }
+                    });
+                }
+
+                // Re-add nowcast layers
+                if (document.getElementById('nowcast-toggle').checked) {
+                    currentNowcasts.forEach((cluster, index) => {
+                        if (cluster.confidenceScore >= minNowcastConfidence) {
+                            const confidenceColor = cluster.confidenceScore > 0.9 ? 'purple' :
+                                cluster.confidenceScore > 0.8 ? 'red' :
+                                    cluster.confidenceScore > 0.7 ? 'orange' : 'green';
+                            const radiusKm = cluster.confidenceScore * 5 + 5;
+                            const coneRadiusKm = cluster.confidenceScore * 30 + 30;
+                            const radiusDeg = radiusKm / 111;
+
+                            map3D.addSource(`nowcast-circle-${index}`, {
+                                type: 'geojson',
+                                data: {
+                                    type: 'Feature',
+                                    geometry: {
+                                        type: 'Point',
+                                        coordinates: [cluster.baseLon, cluster.baseLat]
+                                    },
+                                    properties: { radius: radiusDeg }
+                                }
+                            });
+                            map3D.addLayer({
+                                id: `nowcast-circle-${index}`,
+                                type: 'circle',
+                                source: `nowcast-circle-${index}`,
+                                paint: {
+                                    'circle-radius': [
+                                        'interpolate',
+                                        ['linear'],
+                                        ['zoom'],
+                                        5, (radiusKm * 1000) / 1000,
+                                        10, (radiusKm * 1000) / 250
+                                    ],
+                                    'circle-color': confidenceColor,
+                                    'circle-opacity': 0.5,
+                                    'circle-stroke-color': confidenceColor,
+                                    'circle-stroke-width': 2,
+                                    'circle-stroke-opacity': 0.8
+                                }
+                            });
+                            nowcastLayer3D.push({ id: `nowcast-circle-${index}`, source: `nowcast-circle-${index}` });
+
+                            const at = turf.sector(
+                                [cluster.baseLon, cluster.baseLat],
+                                coneRadiusKm,
+                                cluster.directionDeg - 15,
+                                cluster.directionDeg + 15,
+                                { units: 'kilometers' }
+                            );
+                            map3D.addSource(`nowcast-cone-${index}`, {
+                                type: 'geojson',
+                                data: cone
+                            });
+                            map3D.addLayer({
+                                id: `nowcast-cone-${index}`,
+                                type: 'fill',
+                                source: `nowcast-cone-${index}`,
+                                paint: {
+                                    'fill-color': confidenceColor,
+                                    'fill-opacity': 0.5
+                                }
+                            });
+                            nowcastLayer3D.push({ id: `nowcast-cone-${index}`, source: `nowcast-cone-${index}` });
+                        }
+                    });
+                }
+
+                // Re-add lightning layer
+                if (document.getElementById('lightning-layer-toggle').checked) {
+                    currentFiltered.forEach(s => {
+                        const ageFraction = (animationEnd - s.time) / (parseFloat(document.getElementById('lightning-lifespan').value) * 3600 * 1000);
+                        const el = document.createElement('div');
+                        el.className = 'marker';
+                        el.style.backgroundColor = document.getElementById('color-mode').checked ? getColorFromAge(ageFraction) : 'black';
+                        el.style.width = '10px';
+                        el.style.height = '10px';
+                        el.style.borderRadius = '50%';
+                        const marker = new mapboxgl.Marker(el)
+                            .setLngLat([s.coordinates[0], s.coordinates[1]])
+                            .setPopup(new mapboxgl.Popup().setText(s.time.toISOString()))
+                            .addTo(map3D);
+                        strikeLayer3D.push(marker);
+                    });
+                }
             }
-
-            // Re-add nowcast layers
-            if (document.getElementById('nowcast-toggle').checked) {
-                currentNowcasts.forEach((cluster, index) => {
-                    if (cluster.confidenceScore >= minNowcastConfidence) {
-                        const confidenceColor = cluster.confidenceScore > 0.9 ? 'purple' :
-                            cluster.confidenceScore > 0.8 ? 'red' :
-                                cluster.confidenceScore > 0.7 ? 'orange' : 'green';
-                        const radiusKm = cluster.confidenceScore * 5 + 5;
-                        const coneRadiusKm = cluster.confidenceScore * 30 + 30;
-                        const radiusDeg = radiusKm / 111;
-
-                        map3D.addSource(`nowcast-circle-${index}`, {
-                            type: 'geojson',
-                            data: {
-                                type: 'Feature',
-                                geometry: {
-                                    type: 'Point',
-                                    coordinates: [cluster.baseLon, cluster.baseLat]
-                                },
-                                properties: { radius: radiusDeg }
-                            }
-                        });
-                        map3D.addLayer({
-                            id: `nowcast-circle-${index}`,
-                            type: 'circle',
-                            source: `nowcast-circle-${index}`,
-                            paint: {
-                                'circle-radius': [
-                                    'interpolate',
-                                    ['linear'],
-                                    ['zoom'],
-                                    5, (radiusKm * 1000) / 1000,
-                                    10, (radiusKm * 1000) / 250
-                                ],
-                                'circle-color': confidenceColor,
-                                'circle-opacity': 0.5,
-                                'circle-stroke-color': confidenceColor,
-                                'circle-stroke-width': 2,
-                                'circle-stroke-opacity': 0.8
-                            }
-                        });
-                        nowcastLayer3D.push({ id: `nowcast-circle-${index}`, source: `nowcast-circle-${index}` });
-
-                        const at = turf.sector(
-                            [cluster.baseLon, cluster.baseLat],
-                            coneRadiusKm,
-                            cluster.directionDeg - 15,
-                            cluster.directionDeg + 15,
-                            { units: 'kilometers' }
-                        );
-                        map3D.addSource(`nowcast-cone-${index}`, {
-                            type: 'geojson',
-                            data: cone
-                        });
-                        map3D.addLayer({
-                            id: `nowcast-cone-${index}`,
-                            type: 'fill',
-                            source: `nowcast-cone-${index}`,
-                            paint: {
-                                'fill-color': confidenceColor,
-                                'fill-opacity': 0.5
-                            }
-                        });
-                        nowcastLayer3D.push({ id: `nowcast-cone-${index}`, source: `nowcast-cone-${index}` });
-                    }
-                });
-            }
-
-            // Re-add lightning layer
-            if (document.getElementById('lightning-layer-toggle').checked) {
-                currentFiltered.forEach(s => {
-                    const ageFraction = (animationEnd - s.time) / (parseFloat(document.getElementById('lightning-lifespan').value) * 3600 * 1000);
-                    const el = document.createElement('div');
-                    el.className = 'marker';
-                    el.style.backgroundColor = document.getElementById('color-mode').checked ? getColorFromAge(ageFraction) : 'black';
-                    el.style.width = '10px';
-                    el.style.height = '10px';
-                    el.style.borderRadius = '50%';
-                    const marker = new mapboxgl.Marker(el)
-                        .setLngLat([s.coordinates[0], s.coordinates[1]])
-                        .setPopup(new mapboxgl.Popup().setText(s.time.toISOString()))
-                        .addTo(map3D);
-                    strikeLayer3D.push(marker);
-                });
-            }
-        }
         }
 
         function updateOverlay(filtered) {
