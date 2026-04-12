@@ -2983,9 +2983,9 @@
                     </div>
                 </div>
                 <div class="opacity-control">
-                    <input type="range" id="hoco-opacity" min="0" max="1" step="0.05" value="0.25"
+                    <input type="range" id="hoco-opacity" min="0" max="1" step="0.05" value="0.5"
                         oninput="updateHocoOpacity(this.value); this.parentElement.querySelector('.opacity-value').innerText = Math.round(this.value * 100) + '%'">
-                    <span class="opacity-value">25%</span>
+                    <span class="opacity-value">50%</span>
                 </div>
             </div>
         </div>
@@ -3396,7 +3396,7 @@
                 </div>
 
                 <div style="margin-top: 10px;">
-                    <strong style="color: #bbb;">Color Scale (Risk %)</strong>
+                    <strong style="color: #bbb;">Risk of lightning (%)</strong>
                 </div>
 
                 <div class="hoco-color-scale"></div>
@@ -5160,7 +5160,7 @@
         function hocoStyle(feature) {
             const risk = feature.properties.risk;
             // Fallback to 0.25 if the slider hasn't been touched yet
-            const targetOpacity = window.currentHocoOpacity !== undefined ? window.currentHocoOpacity : 0.25;
+            const targetOpacity = window.currentHocoOpacity !== undefined ? window.currentHocoOpacity : 0.5;
 
             return {
                 fillColor: getHocoColor(risk),
@@ -5299,7 +5299,7 @@
                             l.options.interactive = true;
                             l.bindPopup(`
             <div style="font-family: 'Inter', sans-serif; min-width: 160px;">
-                <strong style="color: #66c2a4;">HOCO Forecast</strong><br>
+                <strong style="color: #66c2a4;">HOCO Thunderstorms Forecast</strong><br>
                 <hr style="margin: 5px 0; border: 0; border-top: 1px solid #eee;">
                 <strong>Risk:</strong> ${f.properties.risk}%<br>
                 <strong>Created:</strong> ${creationDate}<br>
