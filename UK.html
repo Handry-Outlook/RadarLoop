@@ -4709,7 +4709,8 @@
             observation: { select: 'observationLayerSelect', handler: 'observationLayerTypeHandler' },
             warning: { select: 'warningLayerSelect', handler: 'warningLayerTypeHandler' },
             nowcast: { select: 'nowcastLayerSelect', handler: 'nowcastLayerTypeHandler' },
-            storm-hail-threat: { select: 'nowcastLayerSelect', handler: 'nowcastLayerTypeHandler' }
+            // Wrapped in quotes to allow hyphens
+            'storm-hail-threat': { select: 'nowcastLayerSelect', handler: 'nowcastLayerTypeHandler' },
         };
         function updateControlDimming(checkbox, controlClass) {
             const control = checkbox.closest('.layer-control');
@@ -5535,18 +5536,18 @@
                 document.getElementById('opacity-value-nowcast').innerText = `Nowcast Opacity: ${nowcastOpacity.toFixed(1)}`;
 
                 if (stormHailThreatLayer) {
-        stormHailThreatLayer.setStyle({ 
-            fillOpacity: nowcastOpacity * 0.5, // Storms are lighter
-            opacity: nowcastOpacity           // Outlines are fuller
-        });
-        
-        // Ensure hail (if specific) stays more visible
-        stormHailThreatLayer.eachLayer(layer => {
-            if (layer.feature && layer.feature.properties.type === 'hail') {
-                layer.setStyle({ fillOpacity: nowcastOpacity });
-            }
-        });
-    }
+                    stormHailThreatLayer.setStyle({
+                        fillOpacity: nowcastOpacity * 0.5, // Storms are lighter
+                        opacity: nowcastOpacity           // Outlines are fuller
+                    });
+
+                    // Ensure hail (if specific) stays more visible
+                    stormHailThreatLayer.eachLayer(layer => {
+                        if (layer.feature && layer.feature.properties.type === 'hail') {
+                            layer.setStyle({ fillOpacity: nowcastOpacity });
+                        }
+                    });
+                }
                 // Special handling for satellite: it's usually a tile-layer or image, rarely vector
                 if (key === 'satellite') {
                     const satelliteType = document.getElementById('satelliteLayerSelect')?.value;
@@ -5605,7 +5606,7 @@
             if (!historySlider) return Date.now();
             const rawValue = historySlider.value;
             const sliderValue = parseFloat(rawValue);
-            
+
             // Calculate timestamp relative to the start of the history window
             const maxHistoryHours = parseInt(document.getElementById('max-history-hours').value) || 6;
             const maxHistoryMs = maxHistoryHours * 60 * 60 * 1000;
@@ -7813,7 +7814,7 @@
                 document.getElementById('history-time').innerText = `${start.toLocaleString()} - ${end.toLocaleString()}`;
             } else {
                 const maxMinutes = (parseInt(document.getElementById('max-history-hours').value) || 6) * 60;
-                
+
                 // Check if Radar Nowcast is selected to extend timeline
                 const radarType = document.getElementById('radarLayer')?.value;
                 const isForecast = radarType === 'radar-nowcast-europe';
@@ -7843,7 +7844,7 @@
 
                 //document.getElementById('start-time').value = start.toISOString().slice(0, 16);
                 //document.getElementById('end-time').value = end.toISOString().slice(0, 16);
-                
+
                 // Calculate minutes relative to now for the label
                 const minutesFromNow = Math.round((now.getTime() - end.getTime()) / 60000);
                 document.getElementById('history-label').innerText = formatTimeAgo(minutesFromNow);
@@ -8219,7 +8220,7 @@
                 if (colorMode) {
                     legendDiv.innerHTML += `
         <div><div class="color-box" style="background: #ff0000"></div>Newest</div>
-        <div><div class="color-box" style="background: #ffd700"></div>Newest</div>
+        <div><div class="color-box" style="background: #ffd700"></div></div>
         <div><div class="color-box" style="background: #ff69b4"></div></div>
         <div><div class="color-box" style="background: #ff00ff"></div></div>
         <div><div class="color-box" style="background: #800080"></div></div>
