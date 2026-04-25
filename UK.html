@@ -2420,50 +2420,7 @@
                     </div>
                 </div>
             </div>
-            <div class="section">
-                <h4>🌍 3D Globe Mode</h4>
-
-                <div class="switch-control 3d-mode-control">
-                    <div class="label-group">
-                        <span class="label-text">Enable 3D Map</span>
-                        <span class="tooltip">Switch to Mapbox 3D Globe</span>
-                    </div>
-                    <div class="toggle-switch">
-                        <input type="checkbox" id="3d-mode-toggle"
-                            onchange="toggle3DMode(); updateSwitchGlow(this, '3d-mode-control')">
-                        <label for="3d-mode-toggle" class="switch"></label>
-                    </div>
-                </div>
-
-                <div class="switch-control" style="display: none;">
-                    <div class="label-group">
-                        <span class="label-text">3D Heatmap</span>
-                        <span class="tooltip">Extrude heatmap in 3D</span>
-                    </div>
-                    <div class="toggle-switch">
-                        <input type="checkbox" id="heatmap-3d-toggle" onchange="update3DView()">
-                        <label for="heatmap-3d-toggle" class="switch"></label>
-                    </div>
-                </div>
-
-                <label class="pretty-slider" style="display: none;">
-                    Heatmap Frequency
-                    <input type="range" id="heatmap-frequency-slider" min="10" max="100" value="50"
-                        onchange="update3DView()">
-                </label>
-
-                <label class="pretty-slider" style="display: none;">
-                    Heatmap Height
-                    <input type="range" id="heatmap-height-slider" min="1000" max="50000" value="10000"
-                        onchange="update3DView()">
-                </label>
-
-                <label class="pretty-slider" style="display: none;">
-                    Terrain Exaggeration
-                    <input type="range" id="terrain-exaggeration-slider" min="1" max="20" value="12"
-                        onchange="updateTerrainExaggeration()">
-                </label>
-            </div>
+            
             <div class="section"></div>
             <h4>⛈️ Weather Layers</h4>
 
