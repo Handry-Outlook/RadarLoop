@@ -2420,7 +2420,7 @@
                     </div>
                 </div>
             </div>
-            
+
             <div class="section"></div>
             <h4>⛈️ Weather Layers</h4>
 
@@ -2441,7 +2441,7 @@
                     </option>
                     <option value="uk-precip-intensity">UK High Resolution Rainfall Intensity (Smoothed)</option>
                     <option value="uk-precip-type">UK High Resolution Precipitation Type</option>
-                    
+
                     <option value="uk-precip-intensity-pixelated">UK High Resolution Rainfall Intensity (Pixelated)
                     </option>
                     <option value="uk-precip-intensity-accessible">UK High Resolution Rainfall Intensity (Accessible)
@@ -2512,6 +2512,7 @@
                     </div>
                 </div>
                 <select id="satelliteLayerSelect" onchange="satelliteLayerTypeHandler();">
+                    <option value="eumetsat-geocolor">EUMETSAT MTG GeoColour (Full Disc)</option>
                     <option value="europe-vis">Europe visible (MeteoSat)</option>
                     <option value="global-ir">Global infrared (GOES)</option>
                     <option value="satellite-geocolor">Geocolor Global Satellite</option>
@@ -2537,7 +2538,7 @@
 
                 </select>
                 <div class="opacity-control">
-                    <input type="range" id="satelliteOpacity" min="0" max="1" step="0.05" value="0.5"
+                    <input type="range" id="satelliteOpacity" min="0" max="1" step="0.05" value="1"
                         oninput="updateLayerOpacities()">
 
                 </div>
@@ -4162,6 +4163,22 @@
                 bounds: null,
                 attribution: 'X weather' //range 7 days
             },
+            'windy-optical-flow': {
+                url: 'https://sat.windy.com/satellite/composite/${windyIso}/{z}/{x}/{y}/opticalflow.jpg?maxt=${windyMaxt}',
+                interval: 10 * 60 * 1000,
+                type: 'tile-layer',
+                attribution: 'Windy.com / EUMETSAT / NOAA / JMA'
+            },
+            'eumetsat-geocolor': {
+                // EUMETSAT MTG Full Disc RGB GeoColour — WMS served as XYZ tiles via a
+                // custom getTileUrl that converts {z}/{x}/{y} → EPSG:4326 BBOX.
+                //https://view.eumetsat.int/geoserver/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=mtg_fd%3Argb_geocolour&STYLES=&tiled=true&TIME=2026-05-01T16%3A10%3A00.000Z&WIDTH=512&HEIGHT=512&CRS=EPSG%3A4326&BBOX=39.375%2C-11.25%2C45%2C-5.625
+                //https://view.eumetsat.int/geoserver/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=mtg_fd%3Argb_geocolour&STYLES=&tiled=true&TIME=${isoMs}&WIDTH=512&HEIGHT=512&CRS=EPSG%3A4326&BBOX=56.250%2C-11.250%2C61.875%2C0
+                url: 'https://view.eumetsat.int/geoserver/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=mtg_fd%3Argb_geocolour&STYLES=&tiled=true&TIME=${isoMs}&WIDTH=512&HEIGHT=512&CRS=EPSG%3A4326&BBOX={bbox}',
+                interval: 15 * 60 * 1000,
+                type: 'wms-xyz',
+                attribution: '© EUMETSAT'
+            },
             'satellite-water-vapor': {
                 url: 'https://maps.aerisapi.com/wgE96YE3scTQLKjnqiMsv_1XwHqbCjiTqtzWi8txyN4JtM0ezVNuEfaDXQdkjq/satellite-water-vapor/{z}/{x}/{y}/${iso2}_${iso2}.webp',
                 interval: 5 * 60 * 1000,
@@ -5630,7 +5647,22 @@
             // 1. Define Formatters FIRST so all blocks can access them
             const formatISO = (d) => d.toISOString().replace(/\.\d{3}Z$/, 'Z');
             const formatISO2 = (d) => d.toISOString().replace(/[-:T.]/g, '').slice(0, 14);
-
+            const formatISOms = (d) => d.toISOString();
+            // REPLACE the existing formatWindyIso line:
+            const formatWindyIso = (d) => {
+                // Round down to nearest 10 minutes for frame_time
+                const rounded = new Date(d);
+                rounded.setMinutes(Math.floor(rounded.getMinutes() / 10) * 10, 0, 0);
+                return rounded.toISOString().replace('T', '-').replace(/:/g, '').slice(0, 15) + '00';
+            };
+            // ADD this new formatter right after:
+            const formatWindyMaxt = (d) => {
+                // maxt is frame_time + ~4 minutes, formatted as YYYYMMDDHHmmss (no separators)
+                const rounded = new Date(d);
+                rounded.setMinutes(Math.floor(rounded.getMinutes() / 10) * 10, 0, 0);
+                const maxt = new Date(rounded.getTime() + 4 * 60 * 1000); // +4 min for update_time approx
+                return maxt.toISOString().replace(/[-:T]/g, '').slice(0, 14);
+            };
             // --- NOWCAST / FORECAST LOGIC ---
             if (layerConfig.isNowcast) {
                 // A. CONSTANT VALID TIME: The target time the user selected on the slider
@@ -5657,7 +5689,8 @@
                         .replace(/\${iso2}/g, iso2_now)       // Fallback for generic ${iso2} targeting issue time
                         .replace(/\${iso_now}/g, iso_now)
                         .replace(/\${iso_future}/g, iso_future)
-                        .replace(/\${iso2_future}/g, iso2_future);
+                        .replace(/\${iso2_future}/g, iso2_future)
+                        .replace(/\${isoMs}/g, formatISOms(checkTime));
 
                     try {
                         // Check if this specific model run (iso_now) is available on the server.
@@ -5724,8 +5757,11 @@
             if (layerConfig.type === 'image') {
                 for (let attempt = 0; attempt < maxAttempts && currentTimeCheck >= minTime; attempt++) {
                     const url = layerConfig.url
+                        .replace(/\${isoMs}/g, formatISOms(currentTimeCheck))   // ← must be BEFORE ${iso}
                         .replace(/\${iso}/g, formatISO(currentTimeCheck))
-                        .replace(/\${iso2}/g, formatISO2(currentTimeCheck));
+                        .replace(/\${iso2}/g, formatISO2(currentTimeCheck))
+                        .replace(/\${windyIso}/g, formatWindyIso(currentTimeCheck))
+                        .replace(/\${windyMaxt}/g, formatWindyMaxt(currentTimeCheck));
                     const img = new Image();
                     img.src = url;
                     const isValid = await new Promise((resolve) => {
@@ -5746,13 +5782,16 @@
                     if (checkTime < minTime && !layerConfig.allowFuture) return null;
                     const iso = formatISO(checkTime);
                     const iso2 = formatISO2(checkTime);
+                    const windyIso = formatWindyIso(checkTime);
                     let tileUrl = layerConfig.url
+                        .replace(/\${isoMs}/g, formatISOms(checkTime))   // ← ADD THIS FIRST
                         .replace(/\${iso}/g, iso)
-                        .replace(/\${iso2}/g, iso2);
-
+                        .replace(/\${iso2}/g, iso2)
+                        .replace(/\${windyIso}/g, windyIso)
+                        .replace(/\${windyMaxt}/g, formatWindyMaxt(checkTime));
                     const checkUrl = tileUrl.replace(
-                        /(\{z\}\/\{x\}\/\{y\}|z=\{z\}&x=\{x\}&y=\{y\})/,
-                        match => match.startsWith('{') ? '6/31/23' : 'z=6&x=31&y=23'
+                        /(\{z\}\/\{x\}\/\{y\}|z=\{z\}&x=\{x\}&y=\{y\}|\{bbox\})/,   // ← ADD {bbox}
+                        match => match.startsWith('{z}') ? '5/16/11' : match === '{bbox}' ? '39.375,-11.25,45,-5.625' : 'z=6&x=31&y=23'
                     );
 
                     for (let retry = 0; retry < 2; retry++) {
@@ -6124,7 +6163,41 @@
                         className: 'met-office-popup',
                         closeButton: false
                     });
+                } else if (layerOptions.type === 'wms-xyz') {
+                    // Converts {z}/{x}/{y} to EPSG:4326 BBOX for WMS GetMap requests.
+                    // The TIME parameter is already baked into finalUrl via ${iso} substitution.
+                    //https://view.eumetsat.int/geoserver/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=mtg_fd%3Argb_geocolour&STYLES=&tiled=true&TIME=2026-05-01T16%3A10%3A00.000Z&WIDTH=512&HEIGHT=512&CRS=EPSG%3A4326&BBOX=61.875%2C-5.625%2C67.5%2C0
+                    //https://view.eumetsat.int/geoserver/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=mtg_fd%3Argb_geocolour&STYLES=&TIME=2026-05-01T17:00:00Z&WIDTH=256&HEIGHT=256&CRS=EPSG%3A4326&BBOX=56.250,-33.750,61.875,-22.500
+                    const EumetsatWMSLayer = L.TileLayer.extend({
+    getTileUrl(coords) {
+        const { x, y, z } = coords;
+        const totalTiles = Math.pow(2, z);
 
+        // Calculate exact longitude bounds (minLon, maxLon)
+        const lon1 = (x / totalTiles) * 360 - 180;
+        const lon2 = ((x + 1) / totalTiles) * 360 - 180;
+
+        // Calculate exact latitude bounds (maxLat, minLat)
+        // Note: 'y' increases from North (0) to South in Web Mercator
+        const lat1 = Math.atan(Math.sinh(Math.PI * (1 - 2 * y / totalTiles))) * 180 / Math.PI; 
+        const lat2 = Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 1) / totalTiles))) * 180 / Math.PI; 
+
+        const fmt = v => (v === 0 || Object.is(v, -0)) ? '0' : parseFloat(v.toFixed(7));
+
+        // Format for WMS 1.3.0 (EPSG:4326 usually expects minLat, minLon, maxLat, maxLon)
+        const bbox = `${fmt(lat2)}%2C${fmt(lon1)}%2C${fmt(lat1)}%2C${fmt(lon2)}`;
+        
+        return finalUrl.replace('{bbox}', bbox);
+    }
+});
+                    newLayer = new EumetsatWMSLayer('', {
+                        opacity: currentOpacity,
+                        zIndex: zIndex,
+                        pane: 'overlayPane',
+                        attribution: layerOptions.attribution,
+                        tileSize: 256,
+                        className: 'seamless-layer'
+                    });
                 } else if (layerOptions.type === 'vector-tile') {
                     try {
                         const defaultStyle = { fill: true, opacity: currentOpacity, fillOpacity: currentOpacity, weight: 0, color: 'inherit' };
@@ -6148,13 +6221,7 @@
                             tms: isEuropeForecast // Apply TMS if it's the Europe forecast
                         });
                     } catch (error) {
-                        newLayer = L.tileLayer(finalUrl, {
-                            opacity: currentOpacity,
-                            zIndex: zIndex,
-                            pane: 'overlayPane',
-                            className: 'seamless-layer',
-                            tms: (layerType === 'radar-nowcast-forecast') // Fallback tile layer also gets TMS
-                        });
+                        newLayer = L.tileLayer(finalUrl, { opacity: currentOpacity, zIndex: zIndex, pane: 'overlayPane', tms: layerOptions.tms === true, tileSize: 256, className: 'seamless-layer' });
                     }
                 } else {
                     newLayer = L.tileLayer(finalUrl, { opacity: currentOpacity, zIndex: zIndex, pane: 'overlayPane', tms: true, tileSize: 256, className: 'seamless-layer' });
@@ -7573,7 +7640,7 @@
             updateLegendContainer(); // Ensure correct container
         }
 
-        
+
         function initializeRectangleExport() {
             // Add Export Rectangle Strikes button
             const exportButton = document.createElement('button');
@@ -8200,7 +8267,7 @@
 
         }
 
-        
+
 
         // Toggle drawing mode
         function toggleDrawing() {
@@ -8846,7 +8913,7 @@
             if (is3DMode) {
                 map3D.jumpTo({ center: [-4.5, 53.5], zoom: 5 });
                 map3D.resize();
-                
+
                 // Bundle the drawing functions into a setup variable
                 const setup3DEnvironment = () => {
                     update3DView();
@@ -9630,7 +9697,7 @@
         }
 
         function getColorFromAge(ageFraction) {
-            if (ageFraction <0.05) return '#ff0000';
+            if (ageFraction < 0.05) return '#ff0000';
             if (ageFraction < 0.2) return '#ffd700'; // Newest
             if (ageFraction < 0.4) return '#ff69b4';
             if (ageFraction < 0.6) return '#ff00ff';
