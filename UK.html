@@ -5187,7 +5187,7 @@
         function hocoStyle(feature) {
             const risk = feature.properties.risk;
             // Fallback to 0.25 if the slider hasn't been touched yet
-            const targetOpacity = window.currentHocoOpacity !== undefined ? window.currentHocoOpacity : 0.5;
+            const targetOpacity = window.currentHocoOpacity !== undefined ? window.currentHocoOpacity : 0.1;
 
             return {
                 fillColor: getHocoColor(risk),
