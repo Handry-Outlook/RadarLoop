@@ -9610,6 +9610,8 @@
         async function fetchData() {
             const githubUrl1 = 'https://raw.githubusercontent.com/HandryOutlook/lightning_data_new/refs/heads/main/lightning_data.json';
             const githubUrl2 = 'https://raw.githubusercontent.com/HandryOutlook/lightning_data_new/refs/heads/main/lightning_data_2025_autumn.json';
+            const githubUrl3 = 'https://raw.githubusercontent.com/HandryOutlook/lightning_data_new_2026/refs/heads/main/lightning_data_2026_summer_part1.json';
+            const githubUrl4 = 'https://raw.githubusercontent.com/HandryOutlook/lightning_data_new_2026/refs/heads/main/lightning_data_2025_summer.json';
             const metOfficeBaseUrl = 'https://data.consumer-digital.api.metoffice.gov.uk/v1/lightning';
 
             try {
@@ -9638,6 +9640,8 @@
                 const fetchPromises = [
                     fetch(githubUrl1).then(res => res.json()).catch(() => null),
                     fetch(githubUrl2).then(res => res.json()).catch(() => null),
+                    fetch(githubUrl3).then(res => res.json()).catch(() => null),
+                    fetch(githubUrl4).then(res => res.json()).catch(() => null),
                     ...chunkUrls.map(url => fetch(url).then(res => res.json()).catch(() => null))
                 ];
 
