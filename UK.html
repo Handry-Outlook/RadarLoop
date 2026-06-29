@@ -2444,8 +2444,6 @@
 
                     <option value="uk-precip-intensity-pixelated">UK High Resolution Rainfall Intensity (Pixelated)
                     </option>
-                    <option value="uk-precip-intensity-accessible">UK High Resolution Rainfall Intensity (Accessible)
-                    </option>
 
                     <option value="europe-precip-type">Europe High Resolution Precipitation Type 1</option>
                     <option value="europe-precip-type-high-foreca">Europe High Resolution Precipitation Type 2
@@ -3760,19 +3758,19 @@
                 (nowcastPerformanceMode === 'auto' && detectLowEndDevice());
 
             if (LOW_END_NOWCAST_MODE) {
-                NOWCAST_MAX_INPUT_POINTS = 450;
-                NOWCAST_MAX_CLUSTERS = 6;
-                NOWCAST_RANSAC_MAX = 45;
-                NOWCAST_FORECAST_STEPS = [30, 60];
-                ANIMATION_MAP_INTERVAL_MS = 600;       // ~1.7 fps heavy map work
-                ANIMATION_WEATHER_INTERVAL_MS = 2500;  // radar/weather layer checks are expensive
+                NOWCAST_MAX_INPUT_POINTS = 260;
+                NOWCAST_MAX_CLUSTERS = 4;
+                NOWCAST_RANSAC_MAX = 24;
+                NOWCAST_FORECAST_STEPS = [60];
+                ANIMATION_MAP_INTERVAL_MS = 850;       // fewer heavy redraws on low-end devices
+                ANIMATION_WEATHER_INTERVAL_MS = 3500;  // radar/weather layer checks are expensive
                 ANIMATION_REFRESH_NOWCAST = false;
             } else {
                 // Quality-optimised mode: still fast. It avoids per-frame nowcast and weather churn.
-                NOWCAST_MAX_INPUT_POINTS = 900;
-                NOWCAST_MAX_CLUSTERS = 10;
-                NOWCAST_RANSAC_MAX = 90;
-                NOWCAST_FORECAST_STEPS = [15, 30, 60];
+                NOWCAST_MAX_INPUT_POINTS = 700;
+                NOWCAST_MAX_CLUSTERS = 8;
+                NOWCAST_RANSAC_MAX = 60;
+                NOWCAST_FORECAST_STEPS = [30, 60];
                 ANIMATION_MAP_INTERVAL_MS = 300;       // ~3 fps heavy map work
                 ANIMATION_WEATHER_INTERVAL_MS = 1200;
                 ANIMATION_REFRESH_NOWCAST = false;     // key speed-up: no local nowcast recompute during playback
@@ -3971,16 +3969,6 @@
             },
             'uk-precip-intensity-pixelated': {
                 url: 'https://maps.consumer-digital.api.metoffice.gov.uk/wms_ob/single/high-res/rainfall_radar/${iso}.png',
-                interval: 5 * 60 * 1000,
-                type: 'image',
-                bounds: [
-                    [44.02, -25],
-                    [64, 16]
-                ],
-                attribution: 'Met Office'
-            },
-            'uk-precip-intensity-accessible': {
-                url: 'https://maps.consumer-digital.api.metoffice.gov.uk/wms_ob/single/high-res/rainfall_radar_accessible/${iso}.png',
                 interval: 5 * 60 * 1000,
                 type: 'image',
                 bounds: [
@@ -5747,7 +5735,7 @@
                 }
             }
         }
-        async function fetchTileUrl(timestamp, layerConfig) {
+        async function fetchTileUrlCore(timestamp, layerConfig) {
             let layerTypeKey;
             if (Object.values(radarOptions).includes(layerConfig)) {
                 layerTypeKey = Object.keys(radarOptions).find(key => radarOptions[key] === layerConfig);
@@ -5952,6 +5940,71 @@
                 return cacheAndReturn(null);
             }
         }
+
+        const weatherTileInFlight = new Map();
+        const WEATHER_TILE_INFLIGHT_LIMIT = 48;
+
+        function resolveLayerConfigKey(layerConfig) {
+            const optionGroups = [radarOptions, satelliteOptions, isobarOptions, windOptions, lightningOptions,
+                tropicalStormsOptions, rotationOptions, surfaceFrontOptions, observationOptions, nowcastOptions, warningOptions];
+            for (const group of optionGroups) {
+                const found = Object.keys(group).find(key => group[key] === layerConfig);
+                if (found) return found;
+            }
+            return layerConfig && (layerConfig.url || layerConfig.type || 'unknown');
+        }
+
+        function pruneWeatherTileCaches() {
+            const prune = (mapLike, limit) => {
+                if (!mapLike || mapLike.size <= limit) return;
+                const removeCount = mapLike.size - limit;
+                let i = 0;
+                for (const key of mapLike.keys()) {
+                    mapLike.delete(key);
+                    if (++i >= removeCount) break;
+                }
+            };
+            prune(weatherTileUrlCache, 320);
+            prune(weatherTileNegativeCache, 240);
+            prune(weatherTileInFlight, WEATHER_TILE_INFLIGHT_LIMIT);
+        }
+
+        async function fetchTileUrl(timestamp, layerConfig) {
+            if (!layerConfig) return null;
+            const layerKey = resolveLayerConfigKey(layerConfig);
+            const roundedTimestamp = Number(timestamp) || 0;
+            const requestKey = `${layerKey}|${roundedTimestamp}|${layerConfig.type || ''}|${layerConfig.url || ''}`;
+            const nowMs = Date.now();
+
+            const cached = weatherTileUrlCache.get(requestKey);
+            if (cached && (nowMs - cached.cachedAt) < WEATHER_TILE_CACHE_TTL_MS) {
+                return cached.url;
+            }
+            const neg = weatherTileNegativeCache.get(requestKey);
+            if (neg && (nowMs - neg.cachedAt) < WEATHER_TILE_NEGATIVE_CACHE_TTL_MS) {
+                return null;
+            }
+            if (weatherTileInFlight.has(requestKey)) {
+                return weatherTileInFlight.get(requestKey);
+            }
+
+            pruneWeatherTileCaches();
+            const job = fetchTileUrlCore(roundedTimestamp, layerConfig)
+                .then(url => {
+                    if (url) weatherTileUrlCache.set(requestKey, { url, cachedAt: Date.now() });
+                    else weatherTileNegativeCache.set(requestKey, { cachedAt: Date.now() });
+                    return url;
+                })
+                .catch(err => {
+                    console.warn('Tile URL lookup failed:', layerKey, err);
+                    weatherTileNegativeCache.set(requestKey, { cachedAt: Date.now() });
+                    return null;
+                })
+                .finally(() => weatherTileInFlight.delete(requestKey));
+            weatherTileInFlight.set(requestKey, job);
+            return job;
+        }
+
         // ==========================================
         // 4. MAIN UPDATE FUNCTIONS (UNIFIED)
         // ==========================================
@@ -5973,8 +6026,12 @@
             const efficientTileOptions = {
                 updateWhenIdle: true,
                 updateWhenZooming: false,
-                keepBuffer: LOW_END_NOWCAST_MODE ? 1 : 2,
-                maxNativeZoom: 12
+                keepBuffer: LOW_END_NOWCAST_MODE ? 0 : 1,
+                maxNativeZoom: 12,
+                reuseTiles: true,
+                unloadInvisibleTiles: true,
+                detectRetina: false,
+                className: 'seamless-layer'
             };
 
             switch (layerKey) {
@@ -6194,7 +6251,7 @@
 
                     // 1. Conditionally add your pixelated CSS class based on the layerType
                     let imageClass = 'seamless-layer';
-                    if (layerType === 'uk-precip-intensity-pixelated' || layerType === 'uk-precip-intensity-accessible') {
+                    if (layerType === 'uk-precip-intensity-pixelated') {
                         imageClass += ' leaflet-layer-pixelated';
                     }
 
@@ -9590,65 +9647,71 @@
 
 
         function renderStrikeMarkers(filtered, end, lifespanHours, currentBounds) {
-            const colorMode = document.getElementById('color-mode').checked;
-            const lightningLayerOn = document.getElementById('lightning-layer-toggle').checked;
+            const colorModeEl = document.getElementById('color-mode');
+            const lightningToggle = document.getElementById('lightning-layer-toggle');
+            const colorMode = !!(colorModeEl && colorModeEl.checked);
+            const lightningLayerOn = !!(lightningToggle && lightningToggle.checked);
             const newStrikeKeys = new Set();
+            const toRemove = [];
+            const maxVisibleFlashes = LOW_END_NOWCAST_MODE ? 4 : MAX_FLASHES_PER_CYCLE;
+            const maxMarkerCount = LOW_END_NOWCAST_MODE ? 2500 : 9000;
+            const step = filtered.length > maxMarkerCount ? Math.ceil(filtered.length / maxMarkerCount) : 1;
+            const lifespanMs = Math.max(1, lifespanHours * 3600 * 1000);
             flashesThisCycle = 0;
-
             strikeCircles = [];
 
-            filtered.forEach(s => {
-                const strikeKey = `${s.time.toISOString()}_${s.coordinates[0]}_${s.coordinates[1]}`;
+            for (let i = 0; i < filtered.length; i += step) {
+                const s = filtered[i];
+                if (!s || !s.time || !s.coordinates) continue;
+                const lon = +s.coordinates[0];
+                const lat = +s.coordinates[1];
+                if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+
+                const strikeKey = s._markerKey || (s._markerKey = `${+s.time}_${lon.toFixed(4)}_${lat.toFixed(4)}`);
                 newStrikeKeys.add(strikeKey);
 
-                const ageFraction = (end - s.time) / (lifespanHours * 3600 * 1000);
-                const color = colorMode ? getColorFromAge(ageFraction) : 'black';
+                const ageFraction = (end - s.time) / lifespanMs;
+                const color = colorMode ? getColorFromAge(ageFraction) : '#111111';
+                let marker = strikeMarkerMap.get(strikeKey);
+                const isNewStrike = !marker;
 
-                let circle = strikeMarkerMap.get(strikeKey);
-                const isNewStrike = !circle;
-
-                if (isNewStrike) {
-                    circle = L.crossMarker([s.coordinates[1], s.coordinates[0]], {
-                        radius: 6,
-                        color: color,
-                        weight: 2,
+                if (!marker) {
+                    marker = L.crossMarker([lat, lon], {
+                        radius: LOW_END_NOWCAST_MODE ? 5 : 6,
+                        color,
+                        weight: LOW_END_NOWCAST_MODE ? 1.5 : 2,
                         opacity: 0.9,
-                        fill: false
+                        fill: false,
+                        interactive: !LOW_END_NOWCAST_MODE
                     });
-                    // Lazily bind the popup content only when actually opened, instead of
-                    // building/storing a string for every marker up front.
-                    circle.bindPopup(() => s.time.toISOString());
-                    strikeLayer.addLayer(circle);
-                    strikeMarkerMap.set(strikeKey, circle);
-                } else if (circle._lastColor !== color) {
-                    circle.setStyle({ color });
+                    if (!LOW_END_NOWCAST_MODE) marker.bindPopup(() => s.time.toISOString());
+                    strikeLayer.addLayer(marker);
+                    strikeMarkerMap.set(strikeKey, marker);
+                } else if (marker._lastColor !== color) {
+                    marker.setStyle({ color });
                 }
-                circle._lastColor = color;
+                marker._lastColor = color;
+                strikeCircles.push({ circle: marker, strike: s });
 
-                strikeCircles.push({ circle, strike: s });
-
-                if (isNewStrike && lightningLayerOn) {
-                    const inBounds = is3DMode ?
-                        currentBounds.contains([s.coordinates[0], s.coordinates[1]]) :
-                        currentBounds.contains([s.coordinates[1], s.coordinates[0]]);
+                if (isNewStrike && lightningLayerOn && flashesThisCycle < maxVisibleFlashes) {
+                    const inBounds = is3DMode
+                        ? currentBounds.contains([lon, lat])
+                        : currentBounds.contains([lat, lon]);
                     if (inBounds) {
-                        playThunderSound();
-                        if (!is3DMode && flashesThisCycle < MAX_FLASHES_PER_CYCLE) {
-                            addLightningFlash2D(s.coordinates[1], s.coordinates[0]);
-                            flashesThisCycle++;
-                        }
+                        if (!LOW_END_NOWCAST_MODE) playThunderSound();
+                        if (!is3DMode) addLightningFlash2D(lat, lon);
+                        flashesThisCycle++;
                     }
                 }
-            });
+            }
 
-            // Remove markers for strikes that are no longer in the filtered set
-            strikeMarkerMap.forEach((circle, key) => {
-                if (!newStrikeKeys.has(key)) {
-                    strikeLayer.removeLayer(circle);
-                    strikeMarkerMap.delete(key);
-                }
+            strikeMarkerMap.forEach((marker, key) => {
+                if (!newStrikeKeys.has(key)) toRemove.push([key, marker]);
             });
-
+            for (let i = 0; i < toRemove.length; i++) {
+                strikeLayer.removeLayer(toRemove[i][1]);
+                strikeMarkerMap.delete(toRemove[i][0]);
+            }
             return newStrikeKeys;
         }
 
@@ -12724,16 +12787,18 @@
 
         map.on('moveend', () => {
             if (!is3DMode && document.getElementById('lightning-layer-toggle').checked) {
+                if (LOW_END_NOWCAST_MODE) return; // avoid full strike scans while panning on low-end devices
                 const currentBounds = map.getBounds();
-                currentFiltered.forEach(s => {
-                    const strikeKey = `${s.time.toISOString()}_${s.coordinates[0]}_${s.coordinates[1]}`;
-                    const isNewStrike = !lastRenderedStrikes.has(strikeKey);
-                    const inBounds = currentBounds.contains([s.coordinates[1], s.coordinates[0]]);
-                    if (isNewStrike && inBounds) {
+                let flashes = 0;
+                for (let i = Math.max(0, currentFiltered.length - 1500); i < currentFiltered.length; i++) {
+                    const s = currentFiltered[i];
+                    const strikeKey = s._markerKey || `${+s.time}_${(+s.coordinates[0]).toFixed(4)}_${(+s.coordinates[1]).toFixed(4)}`;
+                    if (!lastRenderedStrikes.has(strikeKey) && currentBounds.contains([s.coordinates[1], s.coordinates[0]])) {
                         playThunderSound();
                         addLightningFlash2D(s.coordinates[1], s.coordinates[0]);
+                        if (++flashes >= MAX_FLASHES_PER_CYCLE) break;
                     }
-                });
+                }
             }
         });
 
