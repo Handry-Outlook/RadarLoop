@@ -3024,6 +3024,22 @@
                     onchange="is3DMode ? update3DView() : toggleNowcast()">
                 <span class="tooltip">Minimum confidence for nowcast cones</span>
             </label>
+            <div class="layer-control neutral-control nowcast-performance-control">
+                <div class="top-row">
+                    <div class="label-group">
+                        <span class="label-text">Performance Mode</span>
+                        <span class="tooltip">Auto detects device speed; manual override available</span>
+                    </div>
+                </div>
+                <select id="nowcast-performance-mode" onchange="setNowcastPerformanceMode(this.value, true)">
+                    <option value="auto" selected>Auto optimise</option>
+                    <option value="high">Quality optimised</option>
+                    <option value="low">Low-end fast</option>
+                </select>
+                <div id="nowcast-performance-status" style="font-size: 10px; color: #888; margin-top: 6px; line-height: 1.35;">
+                    Detecting device performance…
+                </div>
+            </div>
         </div>
         <div class="section">
             <h4>⏳ Time Filter</h4>
@@ -3590,6 +3606,20 @@
         map.getPane('warningPane').style.zIndex = 550; // Ensure it sits above tiles but below markers
         map.getPane('warningPane').style.pointerEvents = 'none'; // Allow clicks to pass through empty areas
 
+        // Local nowcast is rendered with Canvas instead of SVG to reduce DOM/path overhead.
+        // Fill stays below the radar pane; outline stays above weather/label layers.
+        if (!map.getPane('nowcastFillPane')) {
+            map.createPane('nowcastFillPane');
+            map.getPane('nowcastFillPane').style.zIndex = 145; // below radar (150), above satellite (140)
+            map.getPane('nowcastFillPane').style.pointerEvents = 'none';
+        }
+        if (!map.getPane('nowcastOutlinePane')) {
+            map.createPane('nowcastOutlinePane');
+            map.getPane('nowcastOutlinePane').style.zIndex = 650; // above warnings/labels
+        }
+        const nowcastFillRenderer = L.canvas({ pane: 'nowcastFillPane', padding: 0.35 });
+        const nowcastOutlineRenderer = L.canvas({ pane: 'nowcastOutlinePane', padding: 0.35 });
+
         // 2. Credentials (Ensure these are defined)
         const X_ID = 'wgE96YE3scTQLKjnqiMsv';
         const X_SECRET = '1XwHqbCjiTqtzWi8txyN4JtM0ezVNuEfaDXQdkjq';
@@ -3679,6 +3709,107 @@
         let pngBounds = null;
         let isPlaying = false;
         let strikeCircles = [];
+        let strikeMarkerMap = new Map(); // strikeKey -> L.circleMarker, for incremental add/remove instead of full rebuild
+        let flashesThisCycle = 0;
+        const MAX_FLASHES_PER_CYCLE = 12; // cap simultaneous flash effects during busy storms
+        let nowcastThrottle = null;
+        let heatmapOverlayThrottle = null;
+        let lastNowcastCalcKey = null;
+        let lastNowcastCalcResult = [];
+        let lastWeatherLayerUpdateTime = 0;
+        let lastZIndexUpdateTime = 0;
+        const WEATHER_TILE_CACHE_TTL_MS = 10 * 60 * 1000;
+        const WEATHER_TILE_NEGATIVE_CACHE_TTL_MS = 90 * 1000;
+        const weatherTileUrlCache = new Map();
+        const weatherTileNegativeCache = new Map();
+
+        // Performance system. Even 'quality' is now quality-optimised, not unlimited.
+        let nowcastPerformanceMode = 'auto';
+        try { nowcastPerformanceMode = localStorage.getItem('nowcast-performance-mode') || 'auto'; } catch (e) { }
+        let LOW_END_NOWCAST_MODE = true;
+        let NOWCAST_MAX_INPUT_POINTS = 500;
+        let NOWCAST_MAX_CLUSTERS = 8;
+        let NOWCAST_RANSAC_MAX = 60;
+        let NOWCAST_FORECAST_STEPS = [30, 60];
+        let ANIMATION_MAP_INTERVAL_MS = 500;
+        let ANIMATION_WEATHER_INTERVAL_MS = 1500;
+        let ANIMATION_REFRESH_NOWCAST = false;
+
+        function detectLowEndDevice() {
+            const cores = navigator.hardwareConcurrency || 4;
+            const memory = navigator.deviceMemory || 4;
+            const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+            const effectiveType = connection && connection.effectiveType ? connection.effectiveType : '';
+            const saveData = !!(connection && connection.saveData);
+            const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            const coarsePointer = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+            const mobileUA = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+            const lowSignals = [
+                cores <= 4,
+                memory <= 4,
+                saveData,
+                effectiveType === 'slow-2g' || effectiveType === '2g' || effectiveType === '3g',
+                reducedMotion,
+                mobileUA && coarsePointer
+            ].filter(Boolean).length;
+            return lowSignals >= 2 || cores <= 2 || memory <= 2;
+        }
+
+        function applyNowcastPerformanceMode() {
+            LOW_END_NOWCAST_MODE = nowcastPerformanceMode === 'low' ||
+                (nowcastPerformanceMode === 'auto' && detectLowEndDevice());
+
+            if (LOW_END_NOWCAST_MODE) {
+                NOWCAST_MAX_INPUT_POINTS = 450;
+                NOWCAST_MAX_CLUSTERS = 6;
+                NOWCAST_RANSAC_MAX = 45;
+                NOWCAST_FORECAST_STEPS = [30, 60];
+                ANIMATION_MAP_INTERVAL_MS = 600;       // ~1.7 fps heavy map work
+                ANIMATION_WEATHER_INTERVAL_MS = 2500;  // radar/weather layer checks are expensive
+                ANIMATION_REFRESH_NOWCAST = false;
+            } else {
+                // Quality-optimised mode: still fast. It avoids per-frame nowcast and weather churn.
+                NOWCAST_MAX_INPUT_POINTS = 900;
+                NOWCAST_MAX_CLUSTERS = 10;
+                NOWCAST_RANSAC_MAX = 90;
+                NOWCAST_FORECAST_STEPS = [15, 30, 60];
+                ANIMATION_MAP_INTERVAL_MS = 300;       // ~3 fps heavy map work
+                ANIMATION_WEATHER_INTERVAL_MS = 1200;
+                ANIMATION_REFRESH_NOWCAST = false;     // key speed-up: no local nowcast recompute during playback
+            }
+
+            lastNowcastCalcKey = null; // force recalculation when performance/quality changes
+            const select = document.getElementById('nowcast-performance-mode');
+            if (select) select.value = nowcastPerformanceMode;
+            const status = document.getElementById('nowcast-performance-status');
+            if (status) {
+                const resolved = LOW_END_NOWCAST_MODE ? 'Low-end fast' : 'Quality optimised';
+                const modeLabel = nowcastPerformanceMode === 'auto' ? 'Auto detected' : 'Manual override';
+                status.textContent = `${modeLabel}: ${resolved}`;
+            }
+        }
+
+        function setNowcastPerformanceMode(mode, userRequested = false) {
+            nowcastPerformanceMode = mode || 'auto';
+            try { localStorage.setItem('nowcast-performance-mode', nowcastPerformanceMode); } catch (e) { }
+            applyNowcastPerformanceMode();
+            if (userRequested) {
+                clearTimeout(nowcastThrottle);
+                nowcastThrottle = setTimeout(() => updateNowcast(currentFiltered), 80);
+            }
+        }
+
+        function initNowcastPerformanceMode() {
+            applyNowcastPerformanceMode();
+            const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+            if (connection && connection.addEventListener) {
+                connection.addEventListener('change', () => {
+                    if (nowcastPerformanceMode === 'auto') applyNowcastPerformanceMode();
+                });
+            }
+            console.log('Performance mode:', nowcastPerformanceMode, 'low-end:', LOW_END_NOWCAST_MODE);
+        }
+
         let pendingFile = null;
         let pendingFileType = null;
         let isFullScreen = false;
@@ -3716,6 +3847,7 @@
 
         let isFilterApplied = false;
         var polygonNowcastLayer = L.layerGroup();
+        setTimeout(initNowcastPerformanceMode, 0);
 
         const currentTime = new Date();
         // Assuming 'map' is globally defined by Leaflet setup
@@ -5838,6 +5970,12 @@
             const opacitySliderId = `${layerKey}Opacity`;
             const sliderElement = document.getElementById(opacitySliderId);
             const currentOpacity = sliderElement ? parseFloat(sliderElement.value) : 0.8;
+            const efficientTileOptions = {
+                updateWhenIdle: true,
+                updateWhenZooming: false,
+                keepBuffer: LOW_END_NOWCAST_MODE ? 1 : 2,
+                maxNativeZoom: 12
+            };
 
             switch (layerKey) {
                 case 'satellite':
@@ -6213,6 +6351,7 @@
                         const isEuropeForecast = (layerType === 'radar-nowcast-forecast');
 
                         newLayer = L.vectorGrid.protobuf(finalUrl, {
+                            ...efficientTileOptions,
                             opacity: currentOpacity,
                             vectorTileLayerStyles: vectorStyles,
                             className: 'seamless-layer',
@@ -6221,10 +6360,10 @@
                             tms: isEuropeForecast // Apply TMS if it's the Europe forecast
                         });
                     } catch (error) {
-                        newLayer = L.tileLayer(finalUrl, { opacity: currentOpacity, zIndex: zIndex, pane: 'overlayPane', tms: layerOptions.tms === true, tileSize: 256, className: 'seamless-layer' });
+                        newLayer = L.tileLayer(finalUrl, { ...efficientTileOptions, opacity: currentOpacity, zIndex: zIndex, pane: 'overlayPane', tms: layerOptions.tms === true, tileSize: 256, className: 'seamless-layer' });
                     }
                 } else {
-                    newLayer = L.tileLayer(finalUrl, { opacity: currentOpacity, zIndex: zIndex, pane: 'overlayPane', tms: true, tileSize: 256, className: 'seamless-layer' });
+                    newLayer = L.tileLayer(finalUrl, { ...efficientTileOptions, opacity: currentOpacity, zIndex: zIndex, pane: 'overlayPane', tms: true, tileSize: 256, className: 'seamless-layer' });
                 }
 
                 if (!newLayer) return;
@@ -6390,32 +6529,35 @@
             if (timeSlider && timeSlider.value === timeSlider.max) {
                 targetTimestamp = Date.now() - PROCESSING_DELAY_MS;
             }
-            const getLayerType = (id) => {
-                const el = document.getElementById(id);
-                return el && !el.disabled ? el.value : null;
-            };
-            const radarType = getLayerType('radarLayer');
-            const satelliteType = getLayerType('satelliteLayerSelect');
-            const isobarType = getLayerType('isobarLayerSelect');
-            const windType = getLayerType('windLayerSelect');
-            const lightningType = getLayerType('lightningLayerSelect');
-            const tropicalStormsType = getLayerType('tropicalStormsLayerSelect');
-            const rotationType = getLayerType('rotationLayerSelect');
-            const surfaceFrontType = getLayerType('surfaceFrontLayerSelect');
-            const observationType = getLayerType('observationLayerSelect');
-            const nowcastType = getLayerType('nowcastLayerSelect');
-            const warningType = getLayerType('warningLayerSelect');
-            if (radarType) await plotLayerIfNecessary(radarType, radarOptions, targetTimestamp, 'radar');
-            if (satelliteType) await plotLayerIfNecessary(satelliteType, satelliteOptions, targetTimestamp, 'satellite');
-            if (isobarType) await plotLayerIfNecessary(isobarType, isobarOptions, targetTimestamp, 'isobar');
-            if (windType) await plotLayerIfNecessary(windType, windOptions, targetTimestamp, 'wind');
-            if (lightningType) await plotLayerIfNecessary(lightningType, lightningOptions, targetTimestamp, 'lightning');
-            if (tropicalStormsType) await plotLayerIfNecessary(tropicalStormsType, tropicalStormsOptions, targetTimestamp, 'tropicalStorms');
-            if (rotationType) await plotLayerIfNecessary(rotationType, rotationOptions, targetTimestamp, 'rotation');
-            if (surfaceFrontType) await plotLayerIfNecessary(surfaceFrontType, surfaceFrontOptions, targetTimestamp, 'surfaceFront');
-            if (observationType) await plotLayerIfNecessary(observationType, observationOptions, targetTimestamp, 'observation');
-            if (nowcastType) await plotLayerIfNecessary(nowcastType, nowcastOptions, targetTimestamp, 'nowcast');
-            if (warningType) await plotLayerIfNecessary(warningType, warningOptions, targetTimestamp, 'warning');
+
+            const layerDefs = [
+                { key: 'radar', select: 'radarLayer', toggle: 'radarToggle', options: radarOptions },
+                { key: 'satellite', select: 'satelliteLayerSelect', toggle: 'satelliteToggle', options: satelliteOptions },
+                { key: 'isobar', select: 'isobarLayerSelect', toggle: 'isobarToggle', options: isobarOptions },
+                { key: 'wind', select: 'windLayerSelect', toggle: 'windToggle', options: windOptions },
+                { key: 'lightning', select: 'lightningLayerSelect', toggle: 'lightningToggle', options: lightningOptions },
+                { key: 'tropicalStorms', select: 'tropicalStormsLayerSelect', toggle: 'tropicalStormsToggle', options: tropicalStormsOptions },
+                { key: 'rotation', select: 'rotationLayerSelect', toggle: 'rotationToggle', options: rotationOptions },
+                { key: 'surfaceFront', select: 'surfaceFrontLayerSelect', toggle: 'surfaceFrontToggle', options: surfaceFrontOptions },
+                { key: 'observation', select: 'observationLayerSelect', toggle: 'observationToggle', options: observationOptions },
+                { key: 'nowcast', select: 'nowcastLayerSelect', toggle: 'nowcastToggle', options: nowcastOptions },
+                { key: 'warning', select: 'warningLayerSelect', toggle: 'warningToggle', options: warningOptions }
+            ];
+
+            const jobs = layerDefs
+                .filter(def => {
+                    const select = document.getElementById(def.select);
+                    const toggle = document.getElementById(def.toggle);
+                    return select && !select.disabled && (!toggle || toggle.checked) && select.value && select.value !== 'none' && select.value !== 'placeholder';
+                })
+                .map(def => () => plotLayerIfNecessary(document.getElementById(def.select).value, def.options, targetTimestamp, def.key));
+
+            // Weather tile layers should load concurrently, but not all at once on weaker networks.
+            const concurrency = isPlaying ? 2 : (LOW_END_NOWCAST_MODE ? 2 : 3);
+            for (let i = 0; i < jobs.length; i += concurrency) {
+                await Promise.allSettled(jobs.slice(i, i + concurrency).map(job => job()));
+            }
+
             isPlotting = false;
             updateLegend();
         }
@@ -6944,24 +7086,53 @@
             try {
                 let finalUrl = null;
                 let finalTimestamp = roundedTimestampMs;
-                // Optimized Fetch Logic (fetches up to 3 tiles back)
-                // Optimized Fetch Logic: Check up to 12 frames back to handle delayed satellite/radar data
-                const NUM_FRAMES_TO_CHECK = 12;
-                const urls = await Promise.all(Array.from({ length: NUM_FRAMES_TO_CHECK }, (_, i) =>
-                    fetchTileUrl(roundedTimestampMs - i * interval, layerConfig).catch(() => null)
-                ));
 
-                // Find the index of the first valid URL
-                const validIndex = urls.findIndex(url => url !== null);
+                // Efficient tile probing:
+                // - use positive and short negative caches
+                // - check fewer frames back during animation
+                // - probe sequentially and stop at first valid timestamp instead of firing many requests
+                const framesToCheck = isPlaying ? 2 : (LOW_END_NOWCAST_MODE ? 4 : 6);
+                const cacheNow = Date.now();
 
-                if (validIndex !== -1) {
-                    finalUrl = urls[validIndex];
-                    finalTimestamp = roundedTimestampMs - (validIndex * interval);
-                } else if (lastValidTileUrls[layerType]) {
-                    // Fallback to the last successfully plotted URL (no timestamp update)
+                for (let i = 0; i < framesToCheck; i++) {
+                    const candidateTs = roundedTimestampMs - i * interval;
+                    const cacheKey = `${layerKey}|${layerType}|${candidateTs}`;
+                    const cached = weatherTileUrlCache.get(cacheKey);
+                    if (cached && (cacheNow - cached.checkedAt) < WEATHER_TILE_CACHE_TTL_MS) {
+                        finalUrl = cached.url;
+                        finalTimestamp = candidateTs;
+                        break;
+                    }
+                    const negative = weatherTileNegativeCache.get(cacheKey);
+                    if (negative && (cacheNow - negative) < WEATHER_TILE_NEGATIVE_CACHE_TTL_MS) {
+                        continue;
+                    }
+
+                    const url = await fetchTileUrl(candidateTs, layerConfig).catch(() => null);
+                    if (url) {
+                        weatherTileUrlCache.set(cacheKey, { url, checkedAt: cacheNow });
+                        finalUrl = url;
+                        finalTimestamp = candidateTs;
+                        break;
+                    } else {
+                        weatherTileNegativeCache.set(cacheKey, cacheNow);
+                    }
+                }
+
+                if (!finalUrl && lastValidTileUrls[layerType]) {
+                    // Fallback to the last successfully plotted URL without forcing a timestamp update.
                     finalUrl = lastValidTileUrls[layerType];
                     finalTimestamp = null;
                 }
+
+                // Keep cache bounded so long sessions don't grow memory indefinitely.
+                if (weatherTileUrlCache.size > 500) {
+                    for (const key of weatherTileUrlCache.keys()) { weatherTileUrlCache.delete(key); if (weatherTileUrlCache.size <= 350) break; }
+                }
+                if (weatherTileNegativeCache.size > 500) {
+                    for (const key of weatherTileNegativeCache.keys()) { weatherTileNegativeCache.delete(key); if (weatherTileNegativeCache.size <= 350) break; }
+                }
+
                 if (finalUrl) {
                     await plotMainLayer(finalUrl, layerType, finalTimestamp, layerKey);
                 } else {
@@ -9370,6 +9541,117 @@
             return '⏱️ ' + result.trim() + (minutesBack > 0 ? ' ago | ' : ' from now | ');
         }
 
+        /**
+         * A lightweight L.CircleMarker subclass that renders as a "+" glyph instead of a
+         * filled circle. Used for strike markers so dense clusters don't paint a solid
+         * blob that occludes the radar layer underneath — only the thin cross strokes
+         * cover the radar, leaving most of the pixel visible.
+         *
+         * Stays within Leaflet's normal SVG/Canvas Path rendering pipeline (same _point/
+         * _radius the renderer already computes for CircleMarker), so it's a drop-in
+         * replacement: setStyle(), bindPopup(), addLayer()/removeLayer() all still work,
+         * and it's exactly as cheap to redraw as a regular circleMarker.
+         */
+        L.CrossMarker = L.CircleMarker.extend({
+            _updatePath: function () {
+                const renderer = this._renderer;
+                const p = this._point;
+                const r = Math.max(Math.round(this._radius), 2);
+
+                if (!p) return;
+
+                if (renderer._ctx) {
+                    // Canvas renderer: draw two strokes directly, skip SVG path string
+                    const ctx = renderer._ctx;
+                    if (!renderer._drawing || this._empty()) return;
+                    ctx.beginPath();
+                    ctx.moveTo(p.x - r, p.y);
+                    ctx.lineTo(p.x + r, p.y);
+                    ctx.moveTo(p.x, p.y - r);
+                    ctx.lineTo(p.x, p.y + r);
+                    ctx.lineWidth = this.options.weight + 1; // crosses read thin; bump for visibility
+                    ctx.strokeStyle = this.options.color;
+                    ctx.globalAlpha = this.options.opacity;
+                    ctx.stroke();
+                    return;
+                }
+
+                // SVG renderer: build a "+" as a single path (two strokes, no fill)
+                const d = this._empty() ? 'M0 0' :
+                    'M' + (p.x - r) + ',' + p.y + 'L' + (p.x + r) + ',' + p.y +
+                    'M' + p.x + ',' + (p.y - r) + 'L' + p.x + ',' + (p.y + r);
+                renderer._setPath(this, d);
+            }
+        });
+
+        L.crossMarker = function (latlng, options) {
+            return new L.CrossMarker(latlng, options);
+        };
+
+
+        function renderStrikeMarkers(filtered, end, lifespanHours, currentBounds) {
+            const colorMode = document.getElementById('color-mode').checked;
+            const lightningLayerOn = document.getElementById('lightning-layer-toggle').checked;
+            const newStrikeKeys = new Set();
+            flashesThisCycle = 0;
+
+            strikeCircles = [];
+
+            filtered.forEach(s => {
+                const strikeKey = `${s.time.toISOString()}_${s.coordinates[0]}_${s.coordinates[1]}`;
+                newStrikeKeys.add(strikeKey);
+
+                const ageFraction = (end - s.time) / (lifespanHours * 3600 * 1000);
+                const color = colorMode ? getColorFromAge(ageFraction) : 'black';
+
+                let circle = strikeMarkerMap.get(strikeKey);
+                const isNewStrike = !circle;
+
+                if (isNewStrike) {
+                    circle = L.crossMarker([s.coordinates[1], s.coordinates[0]], {
+                        radius: 6,
+                        color: color,
+                        weight: 2,
+                        opacity: 0.9,
+                        fill: false
+                    });
+                    // Lazily bind the popup content only when actually opened, instead of
+                    // building/storing a string for every marker up front.
+                    circle.bindPopup(() => s.time.toISOString());
+                    strikeLayer.addLayer(circle);
+                    strikeMarkerMap.set(strikeKey, circle);
+                } else if (circle._lastColor !== color) {
+                    circle.setStyle({ color });
+                }
+                circle._lastColor = color;
+
+                strikeCircles.push({ circle, strike: s });
+
+                if (isNewStrike && lightningLayerOn) {
+                    const inBounds = is3DMode ?
+                        currentBounds.contains([s.coordinates[0], s.coordinates[1]]) :
+                        currentBounds.contains([s.coordinates[1], s.coordinates[0]]);
+                    if (inBounds) {
+                        playThunderSound();
+                        if (!is3DMode && flashesThisCycle < MAX_FLASHES_PER_CYCLE) {
+                            addLightningFlash2D(s.coordinates[1], s.coordinates[0]);
+                            flashesThisCycle++;
+                        }
+                    }
+                }
+            });
+
+            // Remove markers for strikes that are no longer in the filtered set
+            strikeMarkerMap.forEach((circle, key) => {
+                if (!newStrikeKeys.has(key)) {
+                    strikeLayer.removeLayer(circle);
+                    strikeMarkerMap.delete(key);
+                }
+            });
+
+            return newStrikeKeys;
+        }
+
         function updateHistory() {
             isAdjustingHistory = true;
             const slider = document.getElementById('history-slider');
@@ -9465,10 +9747,7 @@
             animationStart = start;
             animationEnd = end;
 
-            strikeLayer.clearLayers();
-            strikeCircles = [];
             const currentBounds = is3DMode ? map3D.getBounds() : map.getBounds();
-            const newStrikes = new Set();
 
             currentFiltered = strikeData.filter(s => {
                 if (showAllStrikes) {
@@ -9477,41 +9756,39 @@
                 return s.time >= start && s.time <= end;
             });
 
-            currentFiltered.forEach(s => {
-                const strikeKey = `${s.time.toISOString()}_${s.coordinates[0]}_${s.coordinates[1]}`;
-                newStrikes.add(strikeKey);
-                const isNewStrike = !lastRenderedStrikes.has(strikeKey);
-                const inBounds = is3DMode ?
-                    currentBounds.contains([s.coordinates[0], s.coordinates[1]]) :
-                    currentBounds.contains([s.coordinates[1], s.coordinates[0]]);
-                const ageFraction = (end - s.time) / (lifespanHours * 3600 * 1000);
-                const color = document.getElementById('color-mode').checked ? getColorFromAge(ageFraction) : 'black';
-                const circle = L.circleMarker([s.coordinates[1], s.coordinates[0]], {
-                    radius: 5,
-                    color: color,
-                    fillColor: color,
-                    fillOpacity: 0.8
-                }).bindPopup(s.time.toISOString());
-                strikeLayer.addLayer(circle);
-                strikeCircles.push({ circle, strike: s });
-                if (isNewStrike && inBounds && document.getElementById('lightning-layer-toggle').checked) {
-                    playThunderSound();
-                    if (!is3DMode) addLightningFlash2D(s.coordinates[1], s.coordinates[0]);
-                }
-            });
+            lastRenderedStrikes = renderStrikeMarkers(currentFiltered, end, lifespanHours, currentBounds);
 
-            lastRenderedStrikes = newStrikes;
+            // Heatmap/counter redraws can be heavy. During animation, debounce them harder.
+            clearTimeout(heatmapOverlayThrottle);
+            const heatmapDelay = isPlaying ? 450 : 0;
+            heatmapOverlayThrottle = setTimeout(() => {
+                updateHeatmap(currentFiltered);
+                updateOverlay(currentFiltered);
+            }, heatmapDelay);
 
-            updateHeatmap(currentFiltered);
-            updateOverlay(currentFiltered);
-            updateNowcast(currentFiltered);
-            updateZIndex();
+            // Local nowcast calculation is the main CPU hotspot. Keep the last nowcast during playback
+            // and refresh it once playback stops. This applies to both detected high and low-end devices.
+            clearTimeout(nowcastThrottle);
+            if (!isPlaying || ANIMATION_REFRESH_NOWCAST) {
+                nowcastThrottle = setTimeout(() => updateNowcast(currentFiltered), isPlaying ? 1200 : 180);
+            }
+
+            // Re-layering every frame is expensive; only do it occasionally in animation.
+            if (!isPlaying || Date.now() - lastZIndexUpdateTime > 1500) {
+                updateZIndex();
+                lastZIndexUpdateTime = Date.now();
+            }
             updateLegend();
-            updateMapLayers(end.getTime());
 
-            if (is3DMode) update3DView();
+            // Weather/radar tile layer checks are also expensive. Throttle them separately.
+            if (!isPlaying || Date.now() - lastWeatherLayerUpdateTime > ANIMATION_WEATHER_INTERVAL_MS) {
+                lastWeatherLayerUpdateTime = Date.now();
+                updateMapLayers(end.getTime());
+            }
 
-            setTimeout(() => { isAdjustingHistory = false; }, 1000);
+            if (is3DMode && (!isPlaying || Date.now() - lastWeatherLayerUpdateTime > ANIMATION_WEATHER_INTERVAL_MS)) update3DView();
+
+            setTimeout(() => { isAdjustingHistory = false; }, isPlaying ? 150 : 1000);
         }
 
         function removeTimeFilter() {
@@ -9611,7 +9888,7 @@
             const githubUrl1 = 'https://raw.githubusercontent.com/HandryOutlook/lightning_data_new/refs/heads/main/lightning_data.json';
             const githubUrl2 = 'https://raw.githubusercontent.com/HandryOutlook/lightning_data_new/refs/heads/main/lightning_data_2025_autumn.json';
             const githubUrl3 = 'https://raw.githubusercontent.com/HandryOutlook/lightning_data_new_2026/refs/heads/main/lightning_data_2026_summer_part1.json';
-            const githubUrl4 = 'https://raw.githubusercontent.com/HandryOutlook/lightning_data_new_2026/refs/heads/main/lightning_data_2025_summer.json';
+            const githubUrl4 = 'https://raw.githubusercontent.com/HandryOutlook/lightning_data_new_2026/refs/heads/main/lightning_data_2026_summer.json';
             const metOfficeBaseUrl = 'https://data.consumer-digital.api.metoffice.gov.uk/v1/lightning';
 
             try {
@@ -10368,10 +10645,7 @@
             slider.value = totalMinutes;
             slider.min = 0;
 
-            strikeLayer.clearLayers();
-            strikeCircles = [];
             const currentBounds = is3DMode ? map3D.getBounds() : map.getBounds();
-            const newStrikes = new Set();
 
             currentFiltered = strikeData.filter(s => {
                 if (showAllStrikes) {
@@ -10383,35 +10657,13 @@
             // Sort strikes by time (oldest first) to ensure newer strikes are plotted on top
             currentFiltered.sort((a, b) => a.time.getTime() - b.time.getTime());
 
-            currentFiltered.forEach(s => {
-                const strikeKey = `${s.time.toISOString()}_${s.coordinates[0]}_${s.coordinates[1]}`;
-                newStrikes.add(strikeKey);
-                const isNewStrike = !lastRenderedStrikes.has(strikeKey);
-                const inBounds = is3DMode ?
-                    currentBounds.contains([s.coordinates[0], s.coordinates[1]]) :
-                    currentBounds.contains([s.coordinates[1], s.coordinates[0]]);
-                const lifespanHours = parseFloat(document.getElementById('lightning-lifespan').value);
-                const ageFraction = (end - s.time) / (lifespanHours * 3600 * 1000);
-                const color = document.getElementById('color-mode').checked ? getColorFromAge(ageFraction) : 'black';
-                const circle = L.circleMarker([s.coordinates[1], s.coordinates[0]], {
-                    radius: 5,
-                    color: color,
-                    fillColor: color,
-                    fillOpacity: 0.8
-                }).bindPopup(s.time.toISOString());
-                strikeLayer.addLayer(circle);
-                strikeCircles.push({ circle, strike: s });
-                if (isNewStrike && inBounds && document.getElementById('lightning-layer-toggle').checked) {
-                    playThunderSound();
-                    if (!is3DMode) addLightningFlash2D(s.coordinates[1], s.coordinates[0]);
-                }
-            });
-
-            lastRenderedStrikes = newStrikes;
+            const lifespanHours = parseFloat(document.getElementById('lightning-lifespan').value);
+            lastRenderedStrikes = renderStrikeMarkers(currentFiltered, end, lifespanHours, currentBounds);
 
             updateHeatmap(currentFiltered);
             updateOverlay(currentFiltered);
-            updateNowcast(currentFiltered);
+            clearTimeout(nowcastThrottle);
+            nowcastThrottle = setTimeout(() => updateNowcast(currentFiltered), 150);
             document.getElementById('time-range').innerText = `Filter applied: ${start.toLocaleString()} - ${end.toLocaleString()}`;
             document.getElementById('history-label').innerText = formatTimeAgo(0);
             document.getElementById('history-time').innerText = `${start.toLocaleString()} - ${end.toLocaleString()}`;
@@ -10496,7 +10748,7 @@
                 } else {
                     color = 'black';
                 }
-                circle.setStyle({ color, fillColor: color });
+                circle.setStyle({ color });
             });
             if (is3DMode) update3DView();
             updateLegend();
@@ -10996,14 +11248,13 @@
             const maxValue = parseFloat(slider.max);
             const speed = parseFloat(document.getElementById('speed-slider').value); // Minutes per second
             let lastFrameTime = performance.now();
+            let lastMapUpdateTime = 0;
 
             function animate(currentTime) {
                 if (!isPlaying) return;
 
-                const deltaTime = (currentTime - lastFrameTime) / 1000; // Time since last frame in seconds
+                const deltaTime = (currentTime - lastFrameTime) / 1000;
                 lastFrameTime = currentTime;
-
-                // Increment slider value: speed (min/sec) * deltaTime (sec) = minutes to advance
                 currentValue += speed * deltaTime;
 
                 if (currentValue >= maxValue) {
@@ -11015,7 +11266,12 @@
                 }
 
                 slider.value = currentValue;
-                updateHistory();
+
+                // Slider remains smooth, but expensive map/nowcast/weather work is capped.
+                if (currentTime - lastMapUpdateTime >= ANIMATION_MAP_INTERVAL_MS) {
+                    lastMapUpdateTime = currentTime;
+                    updateHistory();
+                }
 
                 animationInterval = requestAnimationFrame(animate);
             }
@@ -11029,6 +11285,9 @@
                 animationInterval = null;
             }
             isPlaying = false;
+            clearTimeout(nowcastThrottle);
+            nowcastThrottle = setTimeout(() => updateNowcast(currentFiltered), 120);
+            updateMapLayers(animationEnd ? animationEnd.getTime() : Date.now());
         }
 
         function toggleFullScreen() {
@@ -11202,8 +11461,26 @@
 
             if (document.getElementById('nowcast-toggle').checked && !is3DMode) {
 
-                // Recalculate based on current data
-                currentNowcasts = calculateLightningNowcast(currentFiltered);
+                // Recalculate based on current data with bounded-complexity cache.
+                const nowcastCalcKey = [
+                    currentFiltered ? currentFiltered.length : 0,
+                    currentFiltered && currentFiltered.length ? currentFiltered[0].time.getTime() : 0,
+                    currentFiltered && currentFiltered.length ? currentFiltered[currentFiltered.length - 1].time.getTime() : 0,
+                    animationEnd ? Math.floor(animationEnd.getTime() / 60000) : 0,
+                    minNowcastConfidence,
+                    NOWCAST_MAX_INPUT_POINTS,
+                    NOWCAST_MAX_CLUSTERS,
+                    NOWCAST_RANSAC_MAX,
+                    NOWCAST_FORECAST_STEPS.join('-')
+                ].join('|');
+
+                if (nowcastCalcKey === lastNowcastCalcKey) {
+                    currentNowcasts = lastNowcastCalcResult;
+                } else {
+                    currentNowcasts = calculateLightningNowcast(currentFiltered);
+                    lastNowcastCalcKey = nowcastCalcKey;
+                    lastNowcastCalcResult = currentNowcasts;
+                }
 
                 currentNowcasts.forEach((cluster) => {
                     const confidence = cluster.confidenceScore;
@@ -11227,8 +11504,8 @@
                         if (potentialImpact.includes('LEVEL 5 - EXTREME') || potentialImpact.includes('LEVEL 4 - HIGH')) {
                             // Apply special styling for high-risk alerts
                             customStrokeColor = '#8A2BE2'; // BlueViolet/Purple
-                            customStrokeWeight = 8;        // Thick outline for the hull
-                            forecastStrokeWeight = 4;      // Thicker outline for the forecast polygons
+                            customStrokeWeight = 9;        // Thick outline for the hull
+                            forecastStrokeWeight = 5;      // Thicker outline for the forecast polygons
                         }
                         // ------------------------------------------
 
@@ -11246,12 +11523,23 @@
                                     const finalFillOpacity = baseOpacity * timeDecayFactor * 0.3;
 
                                     L.polygon(latLngs, {
+                                        pane: 'nowcastFillPane',
+                                        renderer: nowcastFillRenderer,
+                                        stroke: false,
+                                        fillColor: confidenceColor,
+                                        fillOpacity: finalFillOpacity,
+                                        interactive: false
+                                    }).addTo(polygonNowcastLayer);
+
+                                    L.polygon(latLngs, {
+                                        pane: 'nowcastOutlinePane',
+                                        renderer: nowcastOutlineRenderer,
                                         // Use conditional weight/color for forecast stroke
                                         color: customStrokeColor !== 'black' ? customStrokeColor : confidenceColor,
                                         weight: forecastStrokeWeight,
                                         opacity: finalStrokeOpacity,
                                         fillColor: confidenceColor,
-                                        fillOpacity: finalFillOpacity,
+                                        fillOpacity: 0,
                                         dashArray: '5, 5'
                                     }).bindPopup(`
                                 <div style="font-size: 14px;">
@@ -11270,9 +11558,22 @@
                             if (cluster.hullGeometry) {
 
                                 L.geoJSON(cluster.hullGeometry, {
+                                    pane: 'nowcastFillPane',
+                                    renderer: nowcastFillRenderer,
+                                    interactive: false,
                                     style: {
                                         fillColor: confidenceColor,
                                         fillOpacity: Math.min(baseOpacity, 0.7),
+                                        stroke: false
+                                    }
+                                }).addTo(polygonNowcastLayer);
+
+                                L.geoJSON(cluster.hullGeometry, {
+                                    pane: 'nowcastOutlinePane',
+                                    renderer: nowcastOutlineRenderer,
+                                    style: {
+                                        fillColor: confidenceColor,
+                                        fillOpacity: 0,
                                         // Apply conditional stroke color and weight
                                         color: customStrokeColor,
                                         weight: customStrokeWeight,
@@ -11528,10 +11829,13 @@
             const referenceTime = typeof animationEnd !== 'undefined' && animationEnd ? new Date(animationEnd) : new Date();
 
             const initialMaxTimeRange = 7 * 3600 * 1000;
-            const recentLightning = lightningData.filter(s => (referenceTime.getTime() - s.time.getTime()) <= initialMaxTimeRange);
+            let recentLightning = lightningData.filter(s => (referenceTime.getTime() - s.time.getTime()) <= initialMaxTimeRange);
             const recentLightningLength = recentLightning.length;
 
             recentLightning.sort((a, b) => a.time.getTime() - b.time.getTime());
+            if (recentLightning.length > NOWCAST_MAX_INPUT_POINTS) {
+                recentLightning = recentLightning.slice(-NOWCAST_MAX_INPUT_POINTS);
+            }
 
             // --- BASE PARAMETER DEFINITION (Dynamic) ---
 
@@ -11581,7 +11885,7 @@
 
             let maxTemporalSeparation = Math.max(10 * 60 * 1000, 30 * 60 * 1000 * (1.0 - densityRatio * 0.6));
 
-            let ransacIterations = Math.min(250, 100 + Math.floor(recentLightningLength / 2));
+            let ransacIterations = Math.min(NOWCAST_RANSAC_MAX, 25 + Math.floor(recentLightningLength / 18));
             let baseDecayConstant = 0.5 + (0.1 * densityRatio);
             let binSize = 5 * 60 * 1000;
             let jumpAnalysisWindow = 10 * 60 * 1000;
@@ -11589,7 +11893,10 @@
             // NEW CONSTANT: Enforce a speed cap, especially useful for highly stable, slow-moving cells
             const maxSpeedCapKmH = 80;
 
-            const finalLightning = recentLightning.filter(s => (referenceTime.getTime() - s.time.getTime()) <= maxTimeRange);
+            let finalLightning = recentLightning.filter(s => (referenceTime.getTime() - s.time.getTime()) <= maxTimeRange);
+            if (finalLightning.length > NOWCAST_MAX_INPUT_POINTS) {
+                finalLightning = finalLightning.slice(-NOWCAST_MAX_INPUT_POINTS);
+            }
 
             // --- 1. CLUSTERING ---
             const clusters = clusterLightningStrikes(finalLightning, { minClusterSize, maxDistance, maxTemporalSeparation });
@@ -11598,7 +11905,7 @@
             const rawClusterInfos = [];
             const minBinCountForHighConfidence = 5;
 
-            clusters.forEach((cluster) => {
+            clusters.sort((a, b) => b.length - a.length).slice(0, NOWCAST_MAX_CLUSTERS).forEach((cluster) => {
                 const strikeTimes = cluster.map(s => s.time.getTime());
                 const minTime = Math.min(...strikeTimes);
                 const maxTime = Math.max(...strikeTimes);
@@ -11775,7 +12082,7 @@
                 const nowcastPolygons = [];
                 if (hullGeometry && hullGeometry.geometry && hullGeometry.geometry.coordinates) {
                     const hullCoords = hullGeometry.geometry.coordinates[0];
-                    const projectionTimesMin = [15, 30, 45, 60];
+                    const projectionTimesMin = NOWCAST_FORECAST_STEPS;
 
                     for (const tMin of projectionTimesMin) {
                         const distanceKm = moderatedSpeedKmH * (tMin / 60);
@@ -11826,12 +12133,58 @@
          * ==================================================================================
          */
 
+        /**
+         * Builds a uniform lat/lon grid index over the strikes so that neighbor
+         * lookups only need to scan nearby cells instead of the entire dataset.
+         * cellSizeKm should be >= the largest search radius you'll query with,
+         * so that a 3x3 block of cells always covers the full search radius.
+         */
+        function buildSpatialGrid(lightningData, cellSizeKm) {
+            const grid = new Map();
+            const KM_PER_DEG_LAT = 111;
+
+            const cellKeyFor = (lat, lon) => {
+                const latDeg = cellSizeKm / KM_PER_DEG_LAT;
+                // Guard against lon-cell collapsing to 0-width near the poles
+                const lonDeg = cellSizeKm / (KM_PER_DEG_LAT * Math.max(0.1, Math.cos(lat * Math.PI / 180)));
+                const row = Math.floor(lat / latDeg);
+                const col = Math.floor(lon / lonDeg);
+                return { row, col, key: `${row}_${col}`, latDeg, lonDeg };
+            };
+
+            lightningData.forEach((s, idx) => {
+                const [lon, lat] = s.coordinates;
+                const { key } = cellKeyFor(lat, lon);
+                if (!grid.has(key)) grid.set(key, []);
+                grid.get(key).push(idx);
+            });
+
+            // Returns indices of all strikes in the 3x3 block of cells around (lat, lon)
+            function queryNearby(lat, lon) {
+                const { row, col, latDeg, lonDeg } = cellKeyFor(lat, lon);
+                const result = [];
+                for (let dr = -1; dr <= 1; dr++) {
+                    for (let dc = -1; dc <= 1; dc++) {
+                        const bucket = grid.get(`${row + dr}_${col + dc}`);
+                        if (bucket) result.push(...bucket);
+                    }
+                }
+                return result;
+            }
+
+            return { queryNearby };
+        }
+
         function clusterLightningStrikes(lightningData, params) {
             if (!lightningData || lightningData.length === 0) return [];
 
             const { minClusterSize, maxDistance, maxTemporalSeparation } = params;
             const localDensityWindowMs = 5 * 60 * 1000;
             const densityDistanceKm = 50;
+
+            // Cell size must cover the largest radius we query (density check or neighbor search)
+            const cellSizeKm = Math.max(densityDistanceKm, maxDistance);
+            const spatialIndex = buildSpatialGrid(lightningData, cellSizeKm);
 
             const clusters = [];
             const used = new Set();
@@ -11848,15 +12201,19 @@
                     const strike = lightningData[idx];
                     currentCluster.push(strike);
 
-                    const localDensityCount = lightningData.filter(s =>
-                        (strike.time.getTime() - s.time.getTime()) <= localDensityWindowMs &&
-                        calculateDistance(strike.coordinates, s.coordinates) <= densityDistanceKm
-                    ).length;
+                    // Only scan nearby strikes (3x3 grid cells) instead of the full dataset
+                    const nearbyIndices = spatialIndex.queryNearby(strike.coordinates[1], strike.coordinates[0]);
+
+                    const localDensityCount = nearbyIndices.filter(j => {
+                        const s = lightningData[j];
+                        return (strike.time.getTime() - s.time.getTime()) <= localDensityWindowMs &&
+                            calculateDistance(strike.coordinates, s.coordinates) <= densityDistanceKm;
+                    }).length;
 
                     const densityFactor = Math.max(0.5, 1.0 - (localDensityCount / 50) * 0.5);
                     const dynamicMaxDistance = maxDistance * densityFactor;
 
-                    for (let j = 0; j < lightningData.length; j++) {
+                    for (const j of nearbyIndices) {
                         if (used.has(j)) continue;
                         const neighbor = lightningData[j];
                         const dist = calculateDistance(strike.coordinates, neighbor.coordinates);
@@ -12123,7 +12480,25 @@
 
             // 4. CALCULATE NOWCAST WITH FILTERED DATA
             const minNowcastConfidence = parseFloat(document.getElementById('min-nowcast-confidence').value) || 0.5;
-            currentNowcasts = calculateLightningNowcast(filtered);
+            const nowcastCalcKey = [
+                filtered ? filtered.length : 0,
+                filtered && filtered.length ? filtered[0].time.getTime() : 0,
+                filtered && filtered.length ? filtered[filtered.length - 1].time.getTime() : 0,
+                animationEnd ? Math.floor(animationEnd.getTime() / 60000) : 0,
+                minNowcastConfidence,
+                NOWCAST_MAX_INPUT_POINTS,
+                NOWCAST_MAX_CLUSTERS,
+                NOWCAST_RANSAC_MAX,
+                NOWCAST_FORECAST_STEPS.join('-')
+            ].join('|');
+
+            if (nowcastCalcKey === lastNowcastCalcKey) {
+                currentNowcasts = lastNowcastCalcResult;
+            } else {
+                currentNowcasts = calculateLightningNowcast(filtered);
+                lastNowcastCalcKey = nowcastCalcKey;
+                lastNowcastCalcResult = currentNowcasts;
+            }
 
             // 5. DRAWING LOOP (Local Data)
             currentNowcasts.forEach((cluster, index) => {
@@ -12136,13 +12511,13 @@
                 const impactHtml = getImpactHtml(potentialImpact);
 
                 let customStrokeColor = 'red';
-                let customStrokeWeight = 2;
-                let forecastStrokeWeight = 1;
+                let customStrokeWeight = 3;
+                let forecastStrokeWeight = 2;
 
                 if (potentialImpact.includes('LEVEL 5') || potentialImpact.includes('LEVEL 4')) {
                     customStrokeColor = '#8A2BE2'; // Purple alert
-                    customStrokeWeight = 8;
-                    forecastStrokeWeight = 4;
+                    customStrokeWeight = 9;
+                    forecastStrokeWeight = 5;
                 }
 
                 if (!is3DMode) {
@@ -12152,13 +12527,25 @@
                         cluster.nowcastPolygons.forEach(forecast => {
                             const latLngs = forecast.polygon.map(p => [p[1], p[0]]);
                             const timeDecay = 1.0 - (forecast.timeMinutes / 80);
+                            const finalFillOpacity = baseOpacity * timeDecay * 0.3;
 
                             L.polygon(latLngs, {
+                                pane: 'nowcastFillPane',
+                                renderer: nowcastFillRenderer,
+                                stroke: false,
+                                fillColor: confidenceColor,
+                                fillOpacity: finalFillOpacity,
+                                interactive: false
+                            }).addTo(polygonNowcastLayer);
+
+                            L.polygon(latLngs, {
+                                pane: 'nowcastOutlinePane',
+                                renderer: nowcastOutlineRenderer,
                                 color: customStrokeColor !== 'black' ? customStrokeColor : confidenceColor,
                                 weight: forecastStrokeWeight,
                                 opacity: baseOpacity * timeDecay,
                                 fillColor: confidenceColor,
-                                fillOpacity: baseOpacity * timeDecay * 0.3,
+                                fillOpacity: 0,
                                 dashArray: '5, 5'
                             }).bindPopup(`
                                 <div class="weather-popup-container light-theme" style="min-width: 260px; border-top: 4px solid ${confidenceColor};">
@@ -12193,9 +12580,22 @@
 
                     if (cluster.hullGeometry) {
                         L.geoJSON(cluster.hullGeometry, {
+                            pane: 'nowcastFillPane',
+                            renderer: nowcastFillRenderer,
+                            interactive: false,
                             style: {
                                 fillColor: confidenceColor,
                                 fillOpacity: Math.min(baseOpacity, 0.7),
+                                stroke: false
+                            }
+                        }).addTo(polygonNowcastLayer);
+
+                        L.geoJSON(cluster.hullGeometry, {
+                            pane: 'nowcastOutlinePane',
+                            renderer: nowcastOutlineRenderer,
+                            style: {
+                                fillColor: confidenceColor,
+                                fillOpacity: 0,
                                 color: customStrokeColor,
                                 weight: customStrokeWeight,
                                 opacity: 0.9
