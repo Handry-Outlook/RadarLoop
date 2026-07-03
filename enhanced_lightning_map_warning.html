@@ -2080,6 +2080,72 @@
             color: #ddd;
         }
 
+        .uk-custom-radar-editor {
+            margin-top: 8px;
+            padding: 10px;
+            border: 1px solid rgba(33, 150, 243, 0.25);
+            border-radius: 10px;
+            background: rgba(33, 150, 243, 0.06);
+        }
+
+        body.dark-mode .uk-custom-radar-editor {
+            background: rgba(75, 155, 255, 0.08);
+            border-color: rgba(75, 155, 255, 0.3);
+        }
+
+        .uk-custom-radar-editor-title {
+            font-size: 0.82em;
+            font-weight: 700;
+            color: #1a2a44;
+            margin-bottom: 4px;
+        }
+
+        body.dark-mode .uk-custom-radar-editor-title {
+            color: #e0e0e0;
+        }
+
+        .uk-custom-radar-editor-help {
+            font-size: 0.72em;
+            line-height: 1.35;
+            color: #666;
+            margin-bottom: 8px;
+        }
+
+        body.dark-mode .uk-custom-radar-editor-help {
+            color: #bbb;
+        }
+
+        .uk-custom-radar-colour-inputs {
+            display: grid;
+            grid-template-columns: 1fr 42px;
+            gap: 5px 8px;
+            align-items: center;
+        }
+
+        .uk-custom-radar-colour-inputs label {
+            margin: 0;
+            font-size: 0.72em;
+            color: #1a2a44;
+        }
+
+        body.dark-mode .uk-custom-radar-colour-inputs label {
+            color: #e0e0e0;
+        }
+
+        .uk-custom-radar-colour-inputs input[type="color"] {
+            width: 42px;
+            height: 26px;
+            padding: 1px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .uk-custom-radar-reset {
+            margin-top: 8px;
+            max-width: 100% !important;
+            background: #3b82f6 !important;
+        }
+
         /* Dim opacity control when layer is off */
         .layer-control.off .opacity-control {
             opacity: 0.55;
@@ -2382,11 +2448,12 @@
                 </div>
 
                 <select id="map-style" onchange="switchBaseMap(this.value)">
+                    <option value="mapbox-traffic-day">Mapbox Traffic Day</option>
                     <option value="mapbox-dark">Mapbox Dark</option>
                     <option value="mapbox-light">Mapbox Light</option>
                     <option value="opentopo">OpenTopoMap</option>
                     <option value="mapbox-traffic-night">Mapbox Traffic Night</option>
-                    <option value="mapbox-traffic-day">Mapbox Traffic Day</option>
+
                     <option value="mapbox-streets-satellite">Mapbox Streets-Satellite</option>
                     <option value="mapbox-navigation">Mapbox Navigation</option>
                     <option value="mapbox-navigation-night">Mapbox Navigation Night</option>
@@ -2419,6 +2486,7 @@
                     </div>
                 </div>
             </div>
+
             <div class="section"></div>
             <h4>⛈️ Weather Layers</h4>
 
@@ -2427,21 +2495,23 @@
                 <div class="top-row">
                     <div class="label-group">
                         <span class="label-text">Radar Layer</span>
-                        <span class="tooltip">Select radar data layer</span>
+                        <span class="tooltip">Select radar / precipitation data layer</span>
                     </div>
                     <div class="toggle-switch">
-                        <input type="checkbox" id="radarToggle" checked onchange="toggleLayer('radar', this.checked);">
+                        <input type="checkbox" id="radarToggle" checked
+                            onchange="toggleLayer('radar', this.checked); updateUkCustomRadarColorScaleControlVisibility();">
                         <label for="radarToggle" class="switch"></label>
                     </div>
                 </div>
-                <select id="radarLayer" onchange="radarLayerTypeHandler();">
+                <select id="radarLayer"
+                    onchange="radarLayerTypeHandler(); updateUkCustomRadarColorScaleControlVisibility();">
                     <option value="placeholder" disabled>High Resolution Global Data ↓
                     </option>
-                    <option value="uk-precip-type">UK High Resolution Precipitation Type</option>
                     <option value="uk-precip-intensity">UK High Resolution Rainfall Intensity (Smoothed)</option>
+                    <option value="windy-radar">Windy Radar</option>
+                    <option value="uk-precip-type">UK High Resolution Precipitation Type</option>
+
                     <option value="uk-precip-intensity-pixelated">UK High Resolution Rainfall Intensity (Pixelated)
-                    </option>
-                    <option value="uk-precip-intensity-accessible">UK High Resolution Rainfall Intensity (Accessible)
                     </option>
 
                     <option value="europe-precip-type">Europe High Resolution Precipitation Type 1</option>
@@ -2493,6 +2563,27 @@
                         oninput="updateLayerOpacities()">
 
                 </div>
+                <div class="switch-control uk-custom-radar-colour-control glow-off" id="uk-custom-radar-colour-control"
+                    style="display: none;">
+                    <div class="label-group">
+                        <span class="label-text">Customise your own colour scale</span>
+                        <span class="tooltip">Only recolours UK High Resolution Rainfall Intensity PNG tiles</span>
+                    </div>
+                    <div class="toggle-switch">
+                        <input type="checkbox" id="uk-custom-radar-colour-toggle"
+                            onchange="toggleUkCustomRadarColorScale(this.checked); updateSwitchGlow(this, 'uk-custom-radar-colour-control')">
+                        <label for="uk-custom-radar-colour-toggle" class="switch"></label>
+                    </div>
+                </div>
+                <div class="uk-custom-radar-editor" id="uk-custom-radar-editor" style="display: none;">
+                    <div class="uk-custom-radar-editor-title">UK rainfall intensity semantic colour replacement</div>
+                    <div class="uk-custom-radar-editor-help">DTN PNG lightest rain starts in the green family. This
+                        mapper treats the source green scale as low rainfall: light green → lowest custom levels, green
+                        → heavier low/moderate levels, then yellow/orange/red/purple upward.</div>
+                    <div id="uk-custom-radar-colour-inputs" class="uk-custom-radar-colour-inputs"></div>
+                    <button type="button" class="uk-custom-radar-reset" onclick="resetUkCustomRadarColorScale()">Reset
+                        custom colours</button>
+                </div>
             </div>
 
             <!-- Satellite Layer - ON -->
@@ -2509,6 +2600,8 @@
                     </div>
                 </div>
                 <select id="satelliteLayerSelect" onchange="satelliteLayerTypeHandler();">
+                    <option value="eumetsat-geocolor">EUMETSAT MTG GeoColour (Full Disc)</option>
+                    <option value="europe-vis">Europe visible (MeteoSat)</option>
                     <option value="global-ir">Global infrared (GOES)</option>
                     <option value="satellite-geocolor">Geocolor Global Satellite</option>
                     <option value="satellite-infrared-enhanced-global-raster">Global Enhanced Infrared</option>
@@ -2516,7 +2609,6 @@
                     <option value="satellite-infrared-color">Global Infrared with Cloud Top Temperature</option>
                     <option value="satellite-visible-global-raster">Global Visible</option>
                     <option value="satellite-night-fog-global-raster">Global Night Fog</option>
-                    <option value="europe-vis">Europe visible (MeteoSat)</option>
                     <option value="europe-ir">Europe infrared (MeteoSat)</option>
                     <option value="satellite-water-vapor-global-raster">Global Water Vapor</option>
                     <option value="satellite-water-vapor">Global Water Vapor (alternative)</option>
@@ -2534,7 +2626,7 @@
 
                 </select>
                 <div class="opacity-control">
-                    <input type="range" id="satelliteOpacity" min="0" max="1" step="0.05" value="0.5"
+                    <input type="range" id="satelliteOpacity" min="0" max="1" step="0.05" value="1"
                         oninput="updateLayerOpacities()">
 
                 </div>
@@ -2589,6 +2681,7 @@
 
                 </div>
             </div>
+
             <!-- Wind Direction Layer - ON -->
             <div class="layer-control" id="wind-control">
                 <div class="top-row">
@@ -2597,7 +2690,7 @@
                         <span class="tooltip">Select wind direction data layer</span>
                     </div>
                     <div class="toggle-switch">
-                        <input type="checkbox" id="windToggle" onchange="toggleLayer('wind', this.checked);">
+                        <input type="checkbox" id="windToggle" checked onchange="toggleLayer('wind', this.checked);">
                         <label for="windToggle" class="switch"></label>
                     </div>
                 </div>
@@ -2632,6 +2725,7 @@
                     </div>
                 </div>
                 <select id="lightningLayerSelect" onchange="lightningLayerTypeHandler();">
+                    <option value="windy-live-lightning">Windy Live Global Lightning</option>
                     <option value="lightning-all-tile">Lightning All (Tile)</option>
                     <option value="xweather-lightning">Global Live Strikes</option>
                     <option value="sevwx-lightning-global-plot">Global Lightning</option>
@@ -2981,9 +3075,9 @@
                     </div>
                 </div>
                 <div class="opacity-control">
-                    <input type="range" id="hoco-opacity" min="0" max="1" step="0.05" value="0.25"
+                    <input type="range" id="hoco-opacity" min="0" max="1" step="0.05" value="0.1"
                         oninput="updateHocoOpacity(this.value); this.parentElement.querySelector('.opacity-value').innerText = Math.round(this.value * 100) + '%'">
-                    <span class="opacity-value">25%</span>
+                    <span class="opacity-value">10%</span>
                 </div>
             </div>
         </div>
@@ -3019,6 +3113,23 @@
                     onchange="is3DMode ? update3DView() : toggleNowcast()">
                 <span class="tooltip">Minimum confidence for nowcast cones</span>
             </label>
+            <div class="layer-control neutral-control nowcast-performance-control">
+                <div class="top-row">
+                    <div class="label-group">
+                        <span class="label-text">Performance Mode</span>
+                        <span class="tooltip">Auto detects device speed; manual override available</span>
+                    </div>
+                </div>
+                <select id="nowcast-performance-mode" onchange="setNowcastPerformanceMode(this.value, true)">
+                    <option value="auto" selected>Auto optimise</option>
+                    <option value="high">Quality optimised</option>
+                    <option value="low">Low-end fast</option>
+                </select>
+                <div id="nowcast-performance-status"
+                    style="font-size: 10px; color: #888; margin-top: 6px; line-height: 1.35;">
+                    Detecting device performance…
+                </div>
+            </div>
         </div>
         <div class="section">
             <h4>⏳ Time Filter</h4>
@@ -3233,9 +3344,8 @@
             <h4>🔗 Useful Links</h4>
             <a href="https://handry-outlook.github.io/Convective-Outlook/lightning_strikes_chart.html"
                 target="_blank"><button>Strikes Chart</button></a>
-            <a href="https://handry-outlook.github.io/Convective-Outlook/interactive_map.html"
-                target="_blank"><button>Radar &
-                    Forecast</button></a>
+            <a href="https://handry-outlook.github.io/HOCO-V2.0/index.html" target="_blank"><button>ADV-HOCO
+                    Thunderstorm forecast</button></a>
         </div>
     </div>
     <div id="map"></div>
@@ -3276,121 +3386,91 @@
         <button onclick="switchTo2DForDrawing()">Switch to 2D</button>
         <button onclick="close3DDrawModal()">Cancel</button>
     </div>
-    <div id="tutorial-modal" class="modal" style="display: none;">
-        <h3>📚 Tutorial: RadarLoop</h3>
+    <div id="tutorial-modal" class="modal" style="display: none; max-height: 85vh; overflow-y: auto; padding: 20px;">
+        <h3>📚 Tutorial: RadarLoop & HOCO</h3>
 
         <hr>
 
         <div id="basic-tutorial">
             <h4>🗺️ Map Interaction & Time History</h4>
-
-            <p>Use the **Start Time** and **End Time** inputs to filter lightning strikes by date and time, then click
-                **Apply
-                Filter**.</p>
-
-            <p>The **history slider** below the map controls the data timestamp. The right side is the current time
-                (**Now**),
-                and the left side goes back up to the **Max History** hours (default: 24 hours). Data displayed
-                corresponds to
-                the slider's current position.</p>
-
-            <p>Click **Play** to animate the history of strikes from oldest to newest. Adjust the playback speed using
-                the
-                slider or the **Minutes per Second** input (e.g., 1 = 1 minute of strikes per second). Click **Stop** to
-                pause
-                the animation.</p>
+            <p>Use the Start Time and End Time inputs to filter lightning strikes by date and time, then click Apply
+                Filter.</p>
+            <p>The history slider below the map controls the data timestamp. The right side is the current time (Now),
+                and the left side goes back up to the Max History hours. Data displayed corresponds to the slider's
+                current position.</p>
+            <p>Click Play to animate the history of strikes. Adjust playback speed using the slider or the Minutes per
+                Second input. Click Stop to pause.</p>
         </div>
 
         <hr>
 
         <div id="layer-tutorial">
             <h4>🌐 Layer Management & Visualization</h4>
-
             <p>Use the checkboxes to toggle visualization layers:</p>
             <ul>
-                <li>**UK Lightning Layer:** Displays individual strike markers in the UK.</li>
-                <li>**Lightning Heatmap:** Shows a 2D density map of strikes. Adjust its appearance using the **Heatmap
-                    Blur**
-                    slider.
-                </li>
-                <li>**Lightning Counter:** Displays the total count of strikes within a cluster or area.</li>
-                <li>**Sound:** Enable this to play a thunder sound for each new strike that occurs within the current
-                    map view.
-                </li>
+                <li>UK Lightning Layer: Displays individual strike markers in the UK.</li>
+                <li>Lightning Heatmap: Shows a 2D density map. Adjust appearance using Heatmap Blur.</li>
+                <li>Lightning Counter: Displays the total count of strikes within clusters.</li>
+                <li>Sound: Enable to play thunder audio for new strikes in your current view.</li>
             </ul>
-
-            <p>Use the dropdowns to overlay real-time or modeled weather data. Adjust visibility using the respective
-                **Opacity** slider (if available). Changing a layer selection will automatically refresh the map to plot
-                the new
-                layer at the
-                current history time.</p>
 
             <h5>Weather Overlays:</h5>
             <ul>
-                <li>**Map Style:** Change the base map's appearance (e.g., Satellite, Dark, Light).</li>
-                <li>**Radar and Weather Layer:** Shows precipitation (rain, snow, type) intensity or reflectivity. This
-                    includes
-                    UK high-resolution and global products.</li>
-                <li>**Satellite Layer:** Displays cloud or atmospheric imagery (e.g., Visible, Infrared, Water Vapor).
+                <li>Map Style: Change base map (Satellite, Dark, Light, etc.).</li>
+                <li>Radar & Weather: Displays precipitation intensity and reflectivity (UK High-Res and Global).</li>
+                <li>Satellite: Shows cloud imagery (Infrared, Visible, Water Vapor).</li>
+                <li>Isobar (Pressure): Overlays lines of equal mean sea level pressure.</li>
+                <li>Surface Fronts: Overlays Cold, Warm, Stationary, and Occluded front boundaries.</li>
+                <li>Global Warnings: Displays active weather bulletins and warning zones.</li>
+            </ul>
+        </div>
+
+        <hr>
+
+        <div id="hoco-tutorial">
+            <h4>⚡ HOCO: Automated Convective Outlook</h4>
+            <p>The HOCO (Handry Outlook Convective Outlook) provides automated, high-resolution risk areas for
+                thunderstorms across the UK and Ireland.</p>
+            <ul>
+                <li>Select Run: Use the dropdown menu to choose specific forecast model runs based on creation time.
                 </li>
-                <li>**Isobar Layer (Pressure):** Overlays lines of equal mean sea level pressure (isobars). Used to
-                    locate high
-                    and low pressure centers.</li>
-                <li>**Wind Direction Layer:** Overlays wind direction data.</li>
-                <li>**Tropical Storms Layer:** Displays active tropical storm tracks and forecasts.</li>
-                <li>**Rotation Layer (US Only):** Shows rotational signatures like storm rotation tracks or echo tops.
+                <li>Day Selection: Toggle between Day 0, Day 1, and Day 2 to see short-term and medium-term outlooks.
                 </li>
-                <li>**Surface Front Layer:** Overlays boundaries between different air masses (Cold, Warm, Stationary,
-                    Occluded
-                    fronts).</li>
-                <li>**Global Lightning Layer:** Displays real-time lightning strikes on a global scale.</li>
-                <li>**Observation Layer:** Provides various surface observational data such as Temperature, Wind Speed,
-                    Snow
-                    Depth, and Sea Surface Temperature.</li>
-                <li>**Global Warning Layer:** Displays zones with active weather bulletins or warnings.</li>
-                <li>**Global Nowcast Layer:** Shows immediate short-term predictions for storms.</li>
+                <li>Opacity Slider: Use the HOCO Opacity slider to adjust polygon transparency for better visibility
+                    against radar data.</li>
+                <li>Metadata Legend: A floating legend appears when HOCO is active, showing the specific Creation Time
+                    and Valid Period for the forecast.</li>
+                <li>HOCO V2.0: Use the link in the legend to view the full detailed forecast page.</li>
             </ul>
         </div>
 
         <hr>
 
         <div id="nowcast-tutorial">
-            <h4>⚡ Nowcasting & Prediction</h4>
-
-            <p>Enable **Nowcast** to display predicted lightning movement based on recent strike clusters. Nowcast shows
-                circles at cluster centers and cones indicating the predicted direction of movement.</p>
-            <p>Prediction confidence is indicated by color: **Purple** (very high) and **Red** (high). This feature
-                updates
-                dynamically whenever you apply filters or change the time slider position.</p>
+            <h4>🎯 Nowcasting & Prediction</h4>
+            <p>Enable Nowcast to display predicted lightning movement based on recent clusters. Purple indicates very
+                high confidence; Red indicates high confidence.</p>
+            <p>Nowcast cones update dynamically as you move the time slider or change filters.</p>
         </div>
 
         <hr>
 
         <div id="expert-tutorial">
             <h4>🛠️ Expert Mode & Custom Layers</h4>
-
-            <p>Enable **Expert Mode** to access advanced customization options:</p>
+            <p>Enable Expert Mode for advanced tools:</p>
             <ul>
-                <li>**Custom Layers (KML/PNG):** Upload a KML file to overlay risk zones or a PNG file for custom
-                    imagery (e.g.,
-                    model outputs).</li>
-                <li>**Layer Settings:** Adjust settings like **PNG Opacity** or modify layer z-indices to customize the
-                    display
-                    order relative to the lightning and weather layers.</li>
-                <li>**KML Formatting:** For KML files, ensure polygon names match predefined risk levels ('Low risk',
-                    'Slight
-                    risk', 'Enhanced risk', 'Moderate risk', 'High risk') to ensure correct color styling.</li>
-                <li>**PNG Bounds:** For PNG files, the filename should include the region name (e.g., 'England',
-                    'Wales') to
-                    help the system automatically set the image boundaries on the map.</li>
-                <li>**Export:** Click **Export Strikes As PNG** to save the current map view and lightning strikes as an
-                    image
-                    file. You can enter specific coordinates or drag an area on the map to define the export region.
+                <li>Custom KML/PNG: Upload KML risk zones or PNG model outputs.</li>
+                <li>KML Styling: Ensure polygon names match levels like Slight risk or High risk for automatic coloring.
                 </li>
+                <li>PNG Bounds: Filenames should include region names (e.g., England) for auto-positioning.</li>
+                <li>Export: Click Export Strikes As PNG to save the current map view. You can drag an area on the map to
+                    define the export bounds.</li>
             </ul>
         </div>
-        <button onclick="closeTutorial()">Close</button>
-    </div>
+
+        <button onclick="closeTutorial()"
+            style="width: 100%; padding: 12px; background: #3a4785; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 15px; font-weight: bold;">Close
+            Tutorial</button>
     </div>
     <div id="modal" class="modal" style="display: none;">
         <p>Do you want to adjust the time filter based on the file's timestamp?</p>
@@ -3399,48 +3479,50 @@
     </div>
     <div id="overlay" class="overlay" style="display: none;"></div>
     <div id="hoco-metadata-legend"
-    style="display:none; position: fixed; top: 80px; left: 360px; background: rgba(0,0,0,0.9); color: white; padding: 12px; border-radius: 8px; z-index: 1000; font-family: 'Inter', sans-serif; border: 1px solid #3a4785; box-shadow: 0 4px 15px rgba(0,0,0,0.5); min-width: 250px; transition: all 0.3s ease;">
+        style="display:none; position: fixed; top: 80px; right: 20px; background: rgba(0,0,0,0.9); color: white; padding: 12px; border-radius: 8px; z-index: 1000; font-family: 'Inter', sans-serif; border: 1px solid #3a4785; box-shadow: 0 4px 15px rgba(0,0,0,0.5); min-width: 250px; transition: all 0.3s ease;">
 
-    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; padding-bottom: 5px; margin-bottom: 8px;">
-        <div style="color: #66c2a4; font-weight: bold; font-size: 13px; text-transform: uppercase;">
-            HOCO Thunderstorm Forecast
-        </div>
-        <button id="hoco-toggle-btn" onclick="toggleHocoLegend()"
-            style="background: none; border: none; color: #bbb; cursor: pointer; font-size: 16px; line-height: 1; padding: 0 5px; transition: color 0.2s;">
-            ✕
-        </button>
-    </div>
-
-    <div class="hoco-content">
-    <div style="font-size: 11px; line-height: 1.6; opacity: 0.9; font-family: 'Inter', sans-serif;">
-        
-        <div style="margin-bottom: 4px;">
-            <strong style="color: #bbb;">Run Created:</strong> <span id="hoco-create-date">-</span>
-        </div>
-        
-        <div style="margin-bottom: 8px;">
-            <strong style="color: #bbb;">Valid Period:</strong> <br>
-            <span id="hoco-start-time"></span> – <span id="hoco-end-time"></span>
+        <div
+            style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; padding-bottom: 5px; margin-bottom: 8px;">
+            <div style="color: #66c2a4; font-weight: bold; font-size: 13px; text-transform: uppercase;">
+                HOCO Thunderstorm Forecast
+            </div>
+            <button id="hoco-toggle-btn" onclick="toggleHocoLegend()"
+                style="background: none; border: none; color: #bbb; cursor: pointer; font-size: 16px; line-height: 1; padding: 0 5px; transition: color 0.2s;">
+                ✕
+            </button>
         </div>
 
-        <div style="margin-top: 10px;">
-            <strong style="color: #bbb;">Color Scale (Risk %)</strong>
-        </div>
-        
-        <div class="hoco-color-scale"></div>
-        
-        <div style="display: flex; justify-content: space-between; font-size: 9px; color: #bbb; margin-top: 3px; margin-bottom: 12px;">
-            <span>0%</span>
-            <span>50%</span>
-            <span>100%</span>
-        </div>
-    </div>
+        <div class="hoco-content">
+            <div style="font-size: 11px; line-height: 1.6; opacity: 0.9; font-family: 'Inter', sans-serif;">
 
-    <a href="https://handry-outlook.github.io/HOCO-V2.0/index.html" target="_blank" 
-       style="display: block; text-align: center; background: #66c2a4; color: #000; text-decoration: none; font-size: 11px; font-weight: 600; padding: 6px; border-radius: 4px; transition: background 0.2s; margin-top: 5px;">
-        View Detailed Forecast (HOCO V2.0) ➔
-    </a>
-</div>
+                <div style="margin-bottom: 4px;">
+                    <strong style="color: #bbb;">Run Created:</strong> <span id="hoco-create-date">-</span>
+                </div>
+
+                <div style="margin-bottom: 8px;">
+                    <strong style="color: #bbb;">Valid Period:</strong> <br>
+                    <span id="hoco-start-time"></span> – <span id="hoco-end-time"></span>
+                </div>
+
+                <div style="margin-top: 10px;">
+                    <strong style="color: #bbb;">Risk of lightning (%)</strong>
+                </div>
+
+                <div class="hoco-color-scale"></div>
+
+                <div
+                    style="display: flex; justify-content: space-between; font-size: 9px; color: #bbb; margin-top: 3px; margin-bottom: 12px;">
+                    <span>0%</span>
+                    <span>50%</span>
+                    <span>100%</span>
+                </div>
+            </div>
+
+            <a href="https://handry-outlook.github.io/HOCO-V2.0/index.html" target="_blank"
+                style="display: block; text-align: center; background: #66c2a4; color: #000; text-decoration: none; font-size: 11px; font-weight: 600; padding: 6px; border-radius: 4px; transition: background 0.2s; margin-top: 5px;">
+                View Detailed Forecast (HOCO V2.0) ➔
+            </a>
+        </div>
     </div>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/esri-leaflet@3.0.12/dist/esri-leaflet.js"></script>
@@ -3452,10 +3534,11 @@
     <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.4.3/mapbox-gl-draw.js"></script>
-    <!-- Firebase App (the core Firebase SDK) -->
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <!-- Firebase Firestore -->
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
     <script>
         const mapboxAccessToken = 'pk.eyJ1IjoibWV0ZW9ncm91cC1tYXBib3giLCJhIjoiY2pudWJyMWVhMDQ0bjNxdXFsNWJ5M2ZtbSJ9.ANOKYyv5s0VFVbnesnGGUQ';
         const maptilerApiKey = 'd6FiSbcpDtzJ4g4e0oD4';
@@ -3584,7 +3667,7 @@
 
         // 1. Initialize the Leaflet Map
         map = L.map('map', {
-            layers: [baseLayers['mapbox-dark']],
+            layers: [baseLayers['mapbox-traffic-day']],
             zoomControl: false
         }).setView([53.5, -4.5], 5);
         // --- 1. SETUP HIGH Z-INDEX PANE (Run this after initializing 'map') ---
@@ -3594,8 +3677,10 @@
         map.getPane('labelsPane').style.pointerEvents = 'none'; // Click-through (don't block map clicks)
 
         // --- 2. DEFINE THE REFERENCE LAYER ---
-        // We use Esri's "World Boundaries and Places" which is transparent and high-contrast
-        const referenceLayer = L.tileLayer(`https://api.mapbox.com/styles/v1/handry20191026/cmkxzwlsx000t01sfe7m81tqm/tiles/{z}/{x}/{y}?access_token=` + mapboxAccessToken, {
+        // We use Esri's "World Boundaries and Places" which is transparent and high-contrast'
+
+
+        const referenceLayer = L.tileLayer(`https://api.mapbox.com/styles/v1/handry20191026/cmkxzwlsx000t01sfe7m81tqm/draft/tiles/{z}/{x}/{y}?access_token=` + mapboxAccessToken, {
             attribution: '© Mapbox',
             pane: 'labelsPane', // Keeps your custom lines/labels on top of radar
             opacity: 1.0,
@@ -3610,6 +3695,20 @@
         map.createPane('warningPane');
         map.getPane('warningPane').style.zIndex = 550; // Ensure it sits above tiles but below markers
         map.getPane('warningPane').style.pointerEvents = 'none'; // Allow clicks to pass through empty areas
+
+        // Local nowcast is rendered with Canvas instead of SVG to reduce DOM/path overhead.
+        // Fill stays below the radar pane; outline stays above weather/label layers.
+        if (!map.getPane('nowcastFillPane')) {
+            map.createPane('nowcastFillPane');
+            map.getPane('nowcastFillPane').style.zIndex = 145; // below radar (150), above satellite (140)
+            map.getPane('nowcastFillPane').style.pointerEvents = 'none';
+        }
+        if (!map.getPane('nowcastOutlinePane')) {
+            map.createPane('nowcastOutlinePane');
+            map.getPane('nowcastOutlinePane').style.zIndex = 650; // above warnings/labels
+        }
+        const nowcastFillRenderer = L.canvas({ pane: 'nowcastFillPane', padding: 0.35 });
+        const nowcastOutlineRenderer = L.canvas({ pane: 'nowcastOutlinePane', padding: 0.35 });
 
         // 2. Credentials (Ensure these are defined)
         const X_ID = 'wgE96YE3scTQLKjnqiMsv';
@@ -3700,6 +3799,107 @@
         let pngBounds = null;
         let isPlaying = false;
         let strikeCircles = [];
+        let strikeMarkerMap = new Map(); // strikeKey -> L.circleMarker, for incremental add/remove instead of full rebuild
+        let flashesThisCycle = 0;
+        const MAX_FLASHES_PER_CYCLE = 12; // cap simultaneous flash effects during busy storms
+        let nowcastThrottle = null;
+        let heatmapOverlayThrottle = null;
+        let lastNowcastCalcKey = null;
+        let lastNowcastCalcResult = [];
+        let lastWeatherLayerUpdateTime = 0;
+        let lastZIndexUpdateTime = 0;
+        const WEATHER_TILE_CACHE_TTL_MS = 10 * 60 * 1000;
+        const WEATHER_TILE_NEGATIVE_CACHE_TTL_MS = 90 * 1000;
+        const weatherTileUrlCache = new Map();
+        const weatherTileNegativeCache = new Map();
+
+        // Performance system. Even 'quality' is now quality-optimised, not unlimited.
+        let nowcastPerformanceMode = 'auto';
+        try { nowcastPerformanceMode = localStorage.getItem('nowcast-performance-mode') || 'auto'; } catch (e) { }
+        let LOW_END_NOWCAST_MODE = true;
+        let NOWCAST_MAX_INPUT_POINTS = 500;
+        let NOWCAST_MAX_CLUSTERS = 8;
+        let NOWCAST_RANSAC_MAX = 60;
+        let NOWCAST_FORECAST_STEPS = [30, 60];
+        let ANIMATION_MAP_INTERVAL_MS = 500;
+        let ANIMATION_WEATHER_INTERVAL_MS = 1500;
+        let ANIMATION_REFRESH_NOWCAST = false;
+
+        function detectLowEndDevice() {
+            const cores = navigator.hardwareConcurrency || 4;
+            const memory = navigator.deviceMemory || 4;
+            const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+            const effectiveType = connection && connection.effectiveType ? connection.effectiveType : '';
+            const saveData = !!(connection && connection.saveData);
+            const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            const coarsePointer = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+            const mobileUA = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+            const lowSignals = [
+                cores <= 4,
+                memory <= 4,
+                saveData,
+                effectiveType === 'slow-2g' || effectiveType === '2g' || effectiveType === '3g',
+                reducedMotion,
+                mobileUA && coarsePointer
+            ].filter(Boolean).length;
+            return lowSignals >= 2 || cores <= 2 || memory <= 2;
+        }
+
+        function applyNowcastPerformanceMode() {
+            LOW_END_NOWCAST_MODE = nowcastPerformanceMode === 'low' ||
+                (nowcastPerformanceMode === 'auto' && detectLowEndDevice());
+
+            if (LOW_END_NOWCAST_MODE) {
+                NOWCAST_MAX_INPUT_POINTS = 260;
+                NOWCAST_MAX_CLUSTERS = 4;
+                NOWCAST_RANSAC_MAX = 24;
+                NOWCAST_FORECAST_STEPS = [60];
+                ANIMATION_MAP_INTERVAL_MS = 850;       // fewer heavy redraws on low-end devices
+                ANIMATION_WEATHER_INTERVAL_MS = 3500;  // radar/weather layer checks are expensive
+                ANIMATION_REFRESH_NOWCAST = false;
+            } else {
+                // Quality-optimised mode: still fast. It avoids per-frame nowcast and weather churn.
+                NOWCAST_MAX_INPUT_POINTS = 700;
+                NOWCAST_MAX_CLUSTERS = 8;
+                NOWCAST_RANSAC_MAX = 60;
+                NOWCAST_FORECAST_STEPS = [30, 60];
+                ANIMATION_MAP_INTERVAL_MS = 300;       // ~3 fps heavy map work
+                ANIMATION_WEATHER_INTERVAL_MS = 1200;
+                ANIMATION_REFRESH_NOWCAST = false;     // key speed-up: no local nowcast recompute during playback
+            }
+
+            lastNowcastCalcKey = null; // force recalculation when performance/quality changes
+            const select = document.getElementById('nowcast-performance-mode');
+            if (select) select.value = nowcastPerformanceMode;
+            const status = document.getElementById('nowcast-performance-status');
+            if (status) {
+                const resolved = LOW_END_NOWCAST_MODE ? 'Low-end fast' : 'Quality optimised';
+                const modeLabel = nowcastPerformanceMode === 'auto' ? 'Auto detected' : 'Manual override';
+                status.textContent = `${modeLabel}: ${resolved}`;
+            }
+        }
+
+        function setNowcastPerformanceMode(mode, userRequested = false) {
+            nowcastPerformanceMode = mode || 'auto';
+            try { localStorage.setItem('nowcast-performance-mode', nowcastPerformanceMode); } catch (e) { }
+            applyNowcastPerformanceMode();
+            if (userRequested) {
+                clearTimeout(nowcastThrottle);
+                nowcastThrottle = setTimeout(() => updateNowcast(currentFiltered), 80);
+            }
+        }
+
+        function initNowcastPerformanceMode() {
+            applyNowcastPerformanceMode();
+            const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+            if (connection && connection.addEventListener) {
+                connection.addEventListener('change', () => {
+                    if (nowcastPerformanceMode === 'auto') applyNowcastPerformanceMode();
+                });
+            }
+            console.log('Performance mode:', nowcastPerformanceMode, 'low-end:', LOW_END_NOWCAST_MODE);
+        }
+
         let pendingFile = null;
         let pendingFileType = null;
         let isFullScreen = false;
@@ -3737,6 +3937,7 @@
 
         let isFilterApplied = false;
         var polygonNowcastLayer = L.layerGroup();
+        setTimeout(initNowcastPerformanceMode, 0);
 
         const currentTime = new Date();
         // Assuming 'map' is globally defined by Leaflet setup
@@ -3762,7 +3963,23 @@
                 attribution: 'X weather' //range 30 days
             },
             'uk-precip-intensity': {
-                url: 'https://tiles.meteoguard.dtn.com/tiles/radar-precip-intensity-uk-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
+                // PNG is used deliberately: the DTN PBF gives no useful rainfall-value metadata.
+                // The custom scale maps DTN's source colour semantics, where light rain begins in the green family.
+                url: 'https://tiles.meteoguard.dtn.com/tiles/radar-precip-intensity-uk-contours/${iso}/${iso}/{z}/{x}/{y}.png',
+                interval: 5 * 60 * 1000,
+                type: 'raster-tile',
+                bounds: null,
+                attribution: 'DTN Meteoguard'
+            },
+            'windy-radar': {
+                url: 'https://rdr.windy.com/radar2/composite/${windyRadarYYYY}/${windyRadarMM}/${windyRadarDD}/${windyRadarHHmm}/{z}/{x}/{y}/reflectivity.webp?multichannel=true&maxt=${windyRadarMaxt}',
+                interval: 5 * 60 * 1000,
+                type: 'raster-tile',
+                bounds: null,
+                attribution: 'Windy.com'
+            },
+            'uk-nw-precip-intensity': {
+                url: 'https://max.nwstatic.co.uk/tiles3/${isoNw1}/${isoNw2}/{z}/{x}/{y}.pbf',
                 interval: 5 * 60 * 1000,
                 type: 'vector-tile',
                 bounds: null,
@@ -3861,16 +4078,6 @@
                 ],
                 attribution: 'Met Office'
             },
-            'uk-precip-intensity-accessible': {
-                url: 'https://maps.consumer-digital.api.metoffice.gov.uk/wms_ob/single/high-res/rainfall_radar_accessible/${iso}.png',
-                interval: 5 * 60 * 1000,
-                type: 'image',
-                bounds: [
-                    [44.02, -25],
-                    [64, 16]
-                ],
-                attribution: 'Met Office'
-            },
             'precip-intensity-global-contours': {
 
                 url: 'https://tiles.meteoguard.dtn.com/tiles/precip-intensity-global-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
@@ -3951,7 +4158,7 @@
             },
             'radar-reflectivity-mosaic-global-contours': {
                 url: 'https://tiles.meteoguard.dtn.com/tiles/radar-reflectivity-mosaic-global-contours/${iso}/${iso}/{z}/{x}/{y}.pbf',
-                interval: 10 * 60 * 1000,
+                interval: 5 * 60 * 1000,
                 type: 'vector-tile',
                 bounds: null,
                 attribution: 'dtn'
@@ -4177,6 +4384,22 @@
                 bounds: null,
                 attribution: 'X weather' //range 7 days
             },
+            'windy-optical-flow': {
+                url: 'https://sat.windy.com/satellite/composite/${windyIso}/{z}/{x}/{y}/opticalflow.jpg?maxt=${windyMaxt}',
+                interval: 10 * 60 * 1000,
+                type: 'tile-layer',
+                attribution: 'Windy.com / EUMETSAT / NOAA / JMA'
+            },
+            'eumetsat-geocolor': {
+                // EUMETSAT MTG Full Disc RGB GeoColour — WMS served as XYZ tiles via a
+                // custom getTileUrl that converts {z}/{x}/{y} → EPSG:4326 BBOX.
+                //https://view.eumetsat.int/geoserver/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=mtg_fd%3Argb_geocolour&STYLES=&tiled=true&TIME=2026-05-01T16%3A10%3A00.000Z&WIDTH=512&HEIGHT=512&CRS=EPSG%3A4326&BBOX=39.375%2C-11.25%2C45%2C-5.625
+                //https://view.eumetsat.int/geoserver/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=mtg_fd%3Argb_geocolour&STYLES=&tiled=true&TIME=${isoMs}&WIDTH=512&HEIGHT=512&CRS=EPSG%3A4326&BBOX=56.250%2C-11.250%2C61.875%2C0
+                url: 'https://view.eumetsat.int/geoserver/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=mtg_fd%3Argb_geocolour&STYLES=&tiled=true&TIME=${isoMs}&WIDTH=512&HEIGHT=512&CRS=EPSG%3A4326&BBOX={bbox}',
+                interval: 15 * 60 * 1000,
+                type: 'wms-xyz',
+                attribution: '© EUMETSAT'
+            },
             'satellite-water-vapor': {
                 url: 'https://maps.aerisapi.com/wgE96YE3scTQLKjnqiMsv_1XwHqbCjiTqtzWi8txyN4JtM0ezVNuEfaDXQdkjq/satellite-water-vapor/{z}/{x}/{y}/${iso2}_${iso2}.webp',
                 interval: 5 * 60 * 1000,
@@ -4267,6 +4490,8 @@
             },
         };
         const lightningOptions = {
+
+            'windy-live-lightning': { type: 'custom-live-windy-lightning', label: 'Windy Live Global Lightning SSE' },
 
             'xweather-lightning': {
                 type: 'geojson',
@@ -5123,6 +5348,7 @@
         let currentFilterTimestamp = null;
 
         const SATELLITE_Z_INDEX = 140;
+        const HOCO_Z_INDEX = 145;              // NEW
         const RADAR_Z_INDEX = 150;
         const WIND_Z_INDEX = 155;
         const ISOBAR_Z_INDEX = 160;
@@ -5148,11 +5374,15 @@
         // 1. INITIALIZE THE APP FIRST
         firebase.initializeApp(firebaseConfig);
 
-        // 2. NOW INITIALIZE FIRESTORE (Global Scope)
+        // 2. INITIALIZE SERVICES
         const db = firebase.firestore();
+        // Add this line to create a global storage reference
+        const storage = firebase.storage();
 
         let hocoLayerGroup = L.layerGroup().addTo(map);
         let currentHocoDay = null;
+
+
 
         const lightning_colors = [
             "#ffffff", "#d0cece", "#d0cece", "#d0cece", "#d0cece", "#bea497", "#bea497", "#bea497", "#bea497", "#bea497",
@@ -5180,7 +5410,7 @@
         function hocoStyle(feature) {
             const risk = feature.properties.risk;
             // Fallback to 0.25 if the slider hasn't been touched yet
-            const targetOpacity = window.currentHocoOpacity !== undefined ? window.currentHocoOpacity : 0.25;
+            const targetOpacity = window.currentHocoOpacity !== undefined ? window.currentHocoOpacity : 0.1;
 
             return {
                 fillColor: getHocoColor(risk),
@@ -5263,60 +5493,79 @@
          */
         /**
  * Loads the specific Day and populates the metadata legend
- */
-        function loadHocoByTimestampAndDay(baseSeconds, day) {
+ */async function loadHocoByTimestampAndDay(baseSeconds, day) {
             const startRange = new firebase.firestore.Timestamp(parseInt(baseSeconds), 0);
             const endRange = new firebase.firestore.Timestamp(parseInt(baseSeconds) + 60, 0);
 
-            db.collection("hoco_requests")
-                .where("type", "==", "automated")
-                .where("createdAt", ">=", startRange)
-                .where("createdAt", "<", endRange)
-                .get()
-                .then((querySnapshot) => {
-                    const doc = querySnapshot.docs.find(d => d.data().id.includes(`Day${day}`));
+            try {
+                const querySnapshot = await db.collection("hoco_requests")
+                    .where("type", "==", "automated")
+                    .where("createdAt", ">=", startRange)
+                    .where("createdAt", "<", endRange)
+                    .get();
 
-                    if (doc && doc.data().geojsonUrl) {
-                        const data = doc.data();
+                const doc = querySnapshot.docs.find(d => d.data().id.includes(`Day${day}`));
 
-                        // 1. POPULATE METADATA LEGEND
-                        const creationDate = data.createdAt.toDate().toLocaleString('en-GB', {
-                            day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
-                        });
+                if (doc && doc.data().geojsonUrl) {
+                    const data = doc.data();
 
-                        document.getElementById('hoco-create-date').textContent = creationDate;
-                        document.getElementById('hoco-start-time').textContent = data.startTime || "N/A";
-                        document.getElementById('hoco-end-time').textContent = data.endTime || "N/A";
-                        document.getElementById('hoco-metadata-legend').style.display = 'block';
-
-                        // 2. FETCH AND DISPLAY POLYGONS ONLY (No Markers)
-                        fetch(data.geojsonUrl, { mode: 'cors' })
-                            .then(res => res.json())
-                            .then(geojsonData => {
-                                hocoLayerGroup.clearLayers();
-                                L.geoJSON(geojsonData, {
-                                    // Filter out anything that isn't a polygon
-                                    filter: (f) => f.geometry.type.includes('Polygon'),
-                                    style: hocoStyle,
-                                    onEachFeature: (f, l) => {
-                                        // --- UPDATED POPUP CONTENT ---
-                                        l.bindPopup(`
-                                    <div style="font-family: 'Inter', sans-serif; min-width: 160px;">
-                                        <strong style="color: #66c2a4; font-size: 14px;">HOCO Forecast</strong><br>
-                                        <hr style="margin: 5px 0; border: 0; border-top: 1px solid #eee;">
-                                        <strong>Risk Level:</strong> ${f.properties.risk}%<br>
-                                        <strong>Created:</strong> ${creationDate}<br>
-                                        <strong>Valid:</strong> ${data.startTime} - ${data.endTime}
-                                    </div>
-                                `);
-                                    }
-                                }).addTo(hocoLayerGroup);
-                            });
-                    } else {
-                        document.getElementById('hoco-metadata-legend').style.display = 'none';
-                        hocoLayerGroup.clearLayers();
+                    if (typeof firebase.storage !== 'function') {
+                        console.error("Firebase Storage not loaded yet");
+                        return;
                     }
-                });
+
+                    const storageRef = firebase.storage().refFromURL(data.geojsonUrl);
+                    const freshUrl = await storageRef.getDownloadURL();
+
+                    // Update Metadata UI
+                    const creationDate = data.createdAt.toDate().toLocaleString('en-GB', {
+                        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                    });
+
+                    document.getElementById('hoco-create-date').textContent = creationDate;
+                    document.getElementById('hoco-start-time').textContent = data.startTime || "N/A";
+                    document.getElementById('hoco-end-time').textContent = data.endTime || "N/A";
+                    document.getElementById('hoco-metadata-legend').style.display = 'block';
+
+                    const res = await fetch(freshUrl, { mode: 'cors' });
+                    const geojsonData = await res.json();
+
+                    // Clear previous layers
+                    hocoLayerGroup.clearLayers();
+
+                    // Create a dedicated pane for HOCO inside overlayPane so it interleaves 
+                    // perfectly with Satellite (140) and Radar (150)
+                    if (!map.getPane('hocoPane')) {
+                        map.createPane('hocoPane', map.getPane('overlayPane'));
+                        map.getPane('hocoPane').style.zIndex = HOCO_Z_INDEX;
+                    }
+
+                    L.geoJSON(geojsonData, {
+                        pane: 'hocoPane', // <-- Replaced 'shadowPane' with our custom pane
+                        zIndex: HOCO_Z_INDEX,
+                        filter: (f) => f.geometry.type.includes('Polygon'),
+                        style: hocoStyle,
+                        onEachFeature: (f, l) => {
+                            l.options.interactive = true;
+                            l.bindPopup(`
+            <div style="font-family: 'Inter', sans-serif; min-width: 160px;">
+                <strong style="color: #66c2a4;">HOCO Thunderstorms Forecast</strong><br>
+                <hr style="margin: 5px 0; border: 0; border-top: 1px solid #eee;">
+                <strong>Risk:</strong> ${f.properties.risk}%<br>
+                <strong>Created:</strong> ${creationDate}<br>
+                <strong>Valid:</strong> ${data.startTime} - ${data.endTime}
+            </div>
+        `);
+                        }
+                    }).addTo(hocoLayerGroup);
+                }
+
+            } catch (error) {
+                console.error("HOCO Load Error:", error);
+                if (error.code === 'storage/object-not-found') {
+                    alert("This forecast file no longer exists in storage.");
+                }
+            }
         }
         /**
          * Step 3: Handle UI and trigger search
@@ -5589,7 +5838,7 @@
                 }
             }
         }
-        async function fetchTileUrl(timestamp, layerConfig) {
+        async function fetchTileUrlCore(timestamp, layerConfig) {
             let layerTypeKey;
             if (Object.values(radarOptions).includes(layerConfig)) {
                 layerTypeKey = Object.keys(radarOptions).find(key => radarOptions[key] === layerConfig);
@@ -5621,7 +5870,41 @@
             // 1. Define Formatters FIRST so all blocks can access them
             const formatISO = (d) => d.toISOString().replace(/\.\d{3}Z$/, 'Z');
             const formatISO2 = (d) => d.toISOString().replace(/[-:T.]/g, '').slice(0, 14);
-
+            const formatISOms = (d) => d.toISOString();
+            // REPLACE the existing formatWindyIso line:
+            const formatWindyIso = (d) => {
+                // Round down to nearest 10 minutes for frame_time
+                const rounded = new Date(d);
+                rounded.setMinutes(Math.floor(rounded.getMinutes() / 10) * 10, 0, 0);
+                return rounded.toISOString().replace('T', '-').replace(/:/g, '').slice(0, 15) + '00';
+            };
+            // ADD this new formatter right after:
+            const formatWindyMaxt = (d) => {
+                // maxt is frame_time + ~4 minutes, formatted as YYYYMMDDHHmmss (no separators)
+                const rounded = new Date(d);
+                rounded.setMinutes(Math.floor(rounded.getMinutes() / 10) * 10, 0, 0);
+                const maxt = new Date(rounded.getTime() + 4 * 60 * 1000); // +4 min for update_time approx
+                return maxt.toISOString().replace(/[-:T]/g, '').slice(0, 14);
+            };
+            const getWindyRadarFrameTime = (d) => {
+                const rounded = new Date(d);
+                rounded.setUTCMinutes(Math.floor(rounded.getUTCMinutes() / 5) * 5, 0, 0);
+                return rounded;
+            };
+            const padWindyRadar = (n) => String(n).padStart(2, '0');
+            const formatWindyRadarPart = (d, part) => {
+                const frame = getWindyRadarFrameTime(d);
+                if (part === 'YYYY') return String(frame.getUTCFullYear());
+                if (part === 'MM') return padWindyRadar(frame.getUTCMonth() + 1);
+                if (part === 'DD') return padWindyRadar(frame.getUTCDate());
+                if (part === 'HHmm') return padWindyRadar(frame.getUTCHours()) + padWindyRadar(frame.getUTCMinutes());
+                return '';
+            };
+            const formatWindyRadarMaxt = (d) => {
+                const maxt = new Date(getWindyRadarFrameTime(d).getTime() + (4 * 60 + 51) * 1000);
+                return String(maxt.getUTCFullYear()) + padWindyRadar(maxt.getUTCMonth() + 1) + padWindyRadar(maxt.getUTCDate()) +
+                    padWindyRadar(maxt.getUTCHours()) + padWindyRadar(maxt.getUTCMinutes()) + padWindyRadar(maxt.getUTCSeconds());
+            };
             // --- NOWCAST / FORECAST LOGIC ---
             if (layerConfig.isNowcast) {
                 // A. CONSTANT VALID TIME: The target time the user selected on the slider
@@ -5648,7 +5931,8 @@
                         .replace(/\${iso2}/g, iso2_now)       // Fallback for generic ${iso2} targeting issue time
                         .replace(/\${iso_now}/g, iso_now)
                         .replace(/\${iso_future}/g, iso_future)
-                        .replace(/\${iso2_future}/g, iso2_future);
+                        .replace(/\${iso2_future}/g, iso2_future)
+                        .replace(/\${isoMs}/g, formatISOms(checkTime));
 
                     try {
                         // Check if this specific model run (iso_now) is available on the server.
@@ -5676,11 +5960,7 @@
                 return null;
             }
 
-            // --- STANDARD TILE LAYER LOGIC ---
-            else if (layerConfig.type === 'tile-layer') {
-                const date = new Date(timestamp);
-                return layerConfig.url.replace(/\${iso}/g, formatISO(date)).replace(/\${iso2}/g, formatISO2(date));
-            }
+
 
             // --- STANDARD CACHED/VALIDATED VECTOR & IMAGE LOGIC ---
             const cacheKey = `${layerTypeKey}_${timestamp}`;
@@ -5719,8 +5999,16 @@
             if (layerConfig.type === 'image') {
                 for (let attempt = 0; attempt < maxAttempts && currentTimeCheck >= minTime; attempt++) {
                     const url = layerConfig.url
+                        .replace(/\${isoMs}/g, formatISOms(currentTimeCheck))   // ← must be BEFORE ${iso}
                         .replace(/\${iso}/g, formatISO(currentTimeCheck))
-                        .replace(/\${iso2}/g, formatISO2(currentTimeCheck));
+                        .replace(/\${iso2}/g, formatISO2(currentTimeCheck))
+                        .replace(/\${windyIso}/g, formatWindyIso(currentTimeCheck))
+                        .replace(/\${windyMaxt}/g, formatWindyMaxt(currentTimeCheck))
+                        .replace(/\${windyRadarYYYY}/g, formatWindyRadarPart(currentTimeCheck, 'YYYY'))
+                        .replace(/\${windyRadarMM}/g, formatWindyRadarPart(currentTimeCheck, 'MM'))
+                        .replace(/\${windyRadarDD}/g, formatWindyRadarPart(currentTimeCheck, 'DD'))
+                        .replace(/\${windyRadarHHmm}/g, formatWindyRadarPart(currentTimeCheck, 'HHmm'))
+                        .replace(/\${windyRadarMaxt}/g, formatWindyRadarMaxt(currentTimeCheck));
                     const img = new Image();
                     img.src = url;
                     const isValid = await new Promise((resolve) => {
@@ -5741,13 +6029,21 @@
                     if (checkTime < minTime && !layerConfig.allowFuture) return null;
                     const iso = formatISO(checkTime);
                     const iso2 = formatISO2(checkTime);
+                    const windyIso = formatWindyIso(checkTime);
                     let tileUrl = layerConfig.url
+                        .replace(/\${isoMs}/g, formatISOms(checkTime))   // ← ADD THIS FIRST
                         .replace(/\${iso}/g, iso)
-                        .replace(/\${iso2}/g, iso2);
-
+                        .replace(/\${iso2}/g, iso2)
+                        .replace(/\${windyIso}/g, windyIso)
+                        .replace(/\${windyMaxt}/g, formatWindyMaxt(checkTime))
+                        .replace(/\${windyRadarYYYY}/g, formatWindyRadarPart(checkTime, 'YYYY'))
+                        .replace(/\${windyRadarMM}/g, formatWindyRadarPart(checkTime, 'MM'))
+                        .replace(/\${windyRadarDD}/g, formatWindyRadarPart(checkTime, 'DD'))
+                        .replace(/\${windyRadarHHmm}/g, formatWindyRadarPart(checkTime, 'HHmm'))
+                        .replace(/\${windyRadarMaxt}/g, formatWindyRadarMaxt(checkTime));
                     const checkUrl = tileUrl.replace(
-                        /(\{z\}\/\{x\}\/\{y\}|z=\{z\}&x=\{x\}&y=\{y\})/,
-                        match => match.startsWith('{') ? '6/31/23' : 'z=6&x=31&y=23'
+                        /(\{z\}\/\{x\}\/\{y\}|z=\{z\}&x=\{x\}&y=\{y\}|\{bbox\})/,   // ← ADD {bbox}
+                        match => match.startsWith('{z}') ? '5/16/11' : match === '{bbox}' ? '39.375,-11.25,45,-5.625' : 'z=6&x=31&y=23'
                     );
 
                     for (let retry = 0; retry < 2; retry++) {
@@ -5776,6 +6072,71 @@
                 return cacheAndReturn(null);
             }
         }
+
+        const weatherTileInFlight = new Map();
+        const WEATHER_TILE_INFLIGHT_LIMIT = 48;
+
+        function resolveLayerConfigKey(layerConfig) {
+            const optionGroups = [radarOptions, satelliteOptions, isobarOptions, windOptions, lightningOptions,
+                tropicalStormsOptions, rotationOptions, surfaceFrontOptions, observationOptions, nowcastOptions, warningOptions];
+            for (const group of optionGroups) {
+                const found = Object.keys(group).find(key => group[key] === layerConfig);
+                if (found) return found;
+            }
+            return layerConfig && (layerConfig.url || layerConfig.type || 'unknown');
+        }
+
+        function pruneWeatherTileCaches() {
+            const prune = (mapLike, limit) => {
+                if (!mapLike || mapLike.size <= limit) return;
+                const removeCount = mapLike.size - limit;
+                let i = 0;
+                for (const key of mapLike.keys()) {
+                    mapLike.delete(key);
+                    if (++i >= removeCount) break;
+                }
+            };
+            prune(weatherTileUrlCache, 320);
+            prune(weatherTileNegativeCache, 240);
+            prune(weatherTileInFlight, WEATHER_TILE_INFLIGHT_LIMIT);
+        }
+
+        async function fetchTileUrl(timestamp, layerConfig) {
+            if (!layerConfig) return null;
+            const layerKey = resolveLayerConfigKey(layerConfig);
+            const roundedTimestamp = Number(timestamp) || 0;
+            const requestKey = `${layerKey}|${roundedTimestamp}|${layerConfig.type || ''}|${layerConfig.url || ''}`;
+            const nowMs = Date.now();
+
+            const cached = weatherTileUrlCache.get(requestKey);
+            if (cached && (nowMs - cached.cachedAt) < WEATHER_TILE_CACHE_TTL_MS) {
+                return cached.url;
+            }
+            const neg = weatherTileNegativeCache.get(requestKey);
+            if (neg && (nowMs - neg.cachedAt) < WEATHER_TILE_NEGATIVE_CACHE_TTL_MS) {
+                return null;
+            }
+            if (weatherTileInFlight.has(requestKey)) {
+                return weatherTileInFlight.get(requestKey);
+            }
+
+            pruneWeatherTileCaches();
+            const job = fetchTileUrlCore(roundedTimestamp, layerConfig)
+                .then(url => {
+                    if (url) weatherTileUrlCache.set(requestKey, { url, cachedAt: Date.now() });
+                    else weatherTileNegativeCache.set(requestKey, { cachedAt: Date.now() });
+                    return url;
+                })
+                .catch(err => {
+                    console.warn('Tile URL lookup failed:', layerKey, err);
+                    weatherTileNegativeCache.set(requestKey, { cachedAt: Date.now() });
+                    return null;
+                })
+                .finally(() => weatherTileInFlight.delete(requestKey));
+            weatherTileInFlight.set(requestKey, job);
+            return job;
+        }
+
         // ==========================================
         // 4. MAIN UPDATE FUNCTIONS (UNIFIED)
         // ==========================================
@@ -5794,6 +6155,16 @@
             const opacitySliderId = `${layerKey}Opacity`;
             const sliderElement = document.getElementById(opacitySliderId);
             const currentOpacity = sliderElement ? parseFloat(sliderElement.value) : 0.8;
+            const efficientTileOptions = {
+                updateWhenIdle: true,
+                updateWhenZooming: false,
+                keepBuffer: LOW_END_NOWCAST_MODE ? 0 : 1,
+                maxNativeZoom: 12,
+                reuseTiles: true,
+                unloadInvisibleTiles: true,
+                detectRetina: false,
+                className: 'seamless-layer'
+            };
 
             switch (layerKey) {
                 case 'satellite':
@@ -6009,11 +6380,20 @@
                         closeButton: false             // Removes the default 'x' that often looks messy with custom headers
                     });
                 } else if (layerOptions.type === 'image') {
+
+                    // 1. Conditionally add your pixelated CSS class based on the layerType
+                    let imageClass = 'seamless-layer';
+                    if (layerType === 'uk-precip-intensity-pixelated') {
+                        imageClass += ' leaflet-layer-pixelated';
+                    }
+
+                    // 2. Pass the dynamic class into Leaflet
                     newLayer = L.imageOverlay(finalUrl, layerOptions.bounds, {
-                        opacity: 0.01,
+                        opacity: currentOpacity,
                         zIndex: zIndex,
+                        pane: 'overlayPane',
                         attribution: layerOptions.attribution,
-                        className: 'seamless-layer'
+                        className: imageClass
                     }); newLayer.bindPopup(function (l) {
                         const p = l.feature.properties;
 
@@ -6110,14 +6490,62 @@
                         className: 'met-office-popup',
                         closeButton: false
                     });
-                } else if (layerOptions.type === 'image') {
-                    // Important: Set opacity immediately on creation
-                    newLayer = L.imageOverlay(finalUrl, layerOptions.bounds, {
-                        opacity: currentOpacity, // Use the correct user setting
+                } else if (layerOptions.type === 'wms-xyz') {
+                    // Converts {z}/{x}/{y} to EPSG:4326 BBOX for WMS GetMap requests.
+                    // The TIME parameter is already baked into finalUrl via ${iso} substitution.
+                    //https://view.eumetsat.int/geoserver/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=mtg_fd%3Argb_geocolour&STYLES=&tiled=true&TIME=2026-05-01T16%3A10%3A00.000Z&WIDTH=512&HEIGHT=512&CRS=EPSG%3A4326&BBOX=61.875%2C-5.625%2C67.5%2C0
+                    //https://view.eumetsat.int/geoserver/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=mtg_fd%3Argb_geocolour&STYLES=&TIME=2026-05-01T17:00:00Z&WIDTH=256&HEIGHT=256&CRS=EPSG%3A4326&BBOX=56.250,-33.750,61.875,-22.500
+                    const EumetsatWMSLayer = L.TileLayer.extend({
+                        getTileUrl(coords) {
+                            const { x, y, z } = coords;
+                            const totalTiles = Math.pow(2, z);
+
+                            // Calculate exact longitude bounds (minLon, maxLon)
+                            const lon1 = (x / totalTiles) * 360 - 180;
+                            const lon2 = ((x + 1) / totalTiles) * 360 - 180;
+
+                            // Calculate exact latitude bounds (maxLat, minLat)
+                            // Note: 'y' increases from North (0) to South in Web Mercator
+                            const lat1 = Math.atan(Math.sinh(Math.PI * (1 - 2 * y / totalTiles))) * 180 / Math.PI;
+                            const lat2 = Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 1) / totalTiles))) * 180 / Math.PI;
+
+                            const fmt = v => (v === 0 || Object.is(v, -0)) ? '0' : parseFloat(v.toFixed(7));
+
+                            // Format for WMS 1.3.0 (EPSG:4326 usually expects minLat, minLon, maxLat, maxLon)
+                            const bbox = `${fmt(lat2)}%2C${fmt(lon1)}%2C${fmt(lat1)}%2C${fmt(lon2)}`;
+
+                            return finalUrl.replace('{bbox}', bbox);
+                        }
+                    });
+                    newLayer = new EumetsatWMSLayer('', {
+                        opacity: currentOpacity,
                         zIndex: zIndex,
+                        pane: 'overlayPane',
                         attribution: layerOptions.attribution,
+                        tileSize: 256,
                         className: 'seamless-layer'
                     });
+                } else if (layerOptions.type === 'raster-tile') {
+                    const tileOptions = {
+                        ...efficientTileOptions,
+                        opacity: currentOpacity,
+                        zIndex: zIndex,
+                        pane: 'overlayPane',
+                        tms: layerOptions.tms === true,
+                        tileSize: 256,
+                        crossOrigin: true,
+                        className: 'seamless-layer'
+                    };
+                    if (layerKey === 'radar' && layerType === 'windy-radar') {
+                        newLayer = createWindyRadarArchiveAwareTileLayer(finalUrl, {
+                            ...tileOptions,
+                            applyWindyColourReplacement: isUkCustomRadarActiveForCurrentSelection()
+                        });
+                    } else if (layerKey === 'radar' && layerType === 'uk-precip-intensity' && isUkCustomRadarActiveForCurrentSelection()) {
+                        newLayer = createUkRadarDtnSemanticMappedTileLayer(finalUrl, tileOptions);
+                    } else {
+                        newLayer = L.tileLayer(finalUrl, tileOptions);
+                    }
                 } else if (layerOptions.type === 'vector-tile') {
                     try {
                         const defaultStyle = { fill: true, opacity: currentOpacity, fillOpacity: currentOpacity, weight: 0, color: 'inherit' };
@@ -6133,22 +6561,19 @@
                         const isEuropeForecast = (layerType === 'radar-nowcast-forecast');
 
                         newLayer = L.vectorGrid.protobuf(finalUrl, {
+                            ...efficientTileOptions,
                             opacity: currentOpacity,
                             vectorTileLayerStyles: vectorStyles,
                             className: 'seamless-layer',
                             zIndex: zIndex,
+                            pane: 'overlayPane',
                             tms: isEuropeForecast // Apply TMS if it's the Europe forecast
                         });
                     } catch (error) {
-                        newLayer = L.tileLayer(finalUrl, {
-                            opacity: currentOpacity,
-                            zIndex: zIndex,
-                            className: 'seamless-layer',
-                            tms: (layerType === 'radar-nowcast-forecast') // Fallback tile layer also gets TMS
-                        });
+                        newLayer = L.tileLayer(finalUrl, { ...efficientTileOptions, opacity: currentOpacity, zIndex: zIndex, pane: 'overlayPane', tms: layerOptions.tms === true, tileSize: 256, className: 'seamless-layer' });
                     }
                 } else {
-                    newLayer = L.tileLayer(finalUrl, { opacity: currentOpacity, zIndex: zIndex, tms: true, tileSize: 256, className: 'seamless-layer' });
+                    newLayer = L.tileLayer(finalUrl, { ...efficientTileOptions, opacity: currentOpacity, zIndex: zIndex, pane: 'overlayPane', tms: true, tileSize: 256, className: 'seamless-layer' });
                 }
 
                 if (!newLayer) return;
@@ -6314,32 +6739,35 @@
             if (timeSlider && timeSlider.value === timeSlider.max) {
                 targetTimestamp = Date.now() - PROCESSING_DELAY_MS;
             }
-            const getLayerType = (id) => {
-                const el = document.getElementById(id);
-                return el && !el.disabled ? el.value : null;
-            };
-            const radarType = getLayerType('radarLayer');
-            const satelliteType = getLayerType('satelliteLayerSelect');
-            const isobarType = getLayerType('isobarLayerSelect');
-            const windType = getLayerType('windLayerSelect');
-            const lightningType = getLayerType('lightningLayerSelect');
-            const tropicalStormsType = getLayerType('tropicalStormsLayerSelect');
-            const rotationType = getLayerType('rotationLayerSelect');
-            const surfaceFrontType = getLayerType('surfaceFrontLayerSelect');
-            const observationType = getLayerType('observationLayerSelect');
-            const nowcastType = getLayerType('nowcastLayerSelect');
-            const warningType = getLayerType('warningLayerSelect');
-            if (radarType) await plotLayerIfNecessary(radarType, radarOptions, targetTimestamp, 'radar');
-            if (satelliteType) await plotLayerIfNecessary(satelliteType, satelliteOptions, targetTimestamp, 'satellite');
-            if (isobarType) await plotLayerIfNecessary(isobarType, isobarOptions, targetTimestamp, 'isobar');
-            if (windType) await plotLayerIfNecessary(windType, windOptions, targetTimestamp, 'wind');
-            if (lightningType) await plotLayerIfNecessary(lightningType, lightningOptions, targetTimestamp, 'lightning');
-            if (tropicalStormsType) await plotLayerIfNecessary(tropicalStormsType, tropicalStormsOptions, targetTimestamp, 'tropicalStorms');
-            if (rotationType) await plotLayerIfNecessary(rotationType, rotationOptions, targetTimestamp, 'rotation');
-            if (surfaceFrontType) await plotLayerIfNecessary(surfaceFrontType, surfaceFrontOptions, targetTimestamp, 'surfaceFront');
-            if (observationType) await plotLayerIfNecessary(observationType, observationOptions, targetTimestamp, 'observation');
-            if (nowcastType) await plotLayerIfNecessary(nowcastType, nowcastOptions, targetTimestamp, 'nowcast');
-            if (warningType) await plotLayerIfNecessary(warningType, warningOptions, targetTimestamp, 'warning');
+
+            const layerDefs = [
+                { key: 'radar', select: 'radarLayer', toggle: 'radarToggle', options: radarOptions },
+                { key: 'satellite', select: 'satelliteLayerSelect', toggle: 'satelliteToggle', options: satelliteOptions },
+                { key: 'isobar', select: 'isobarLayerSelect', toggle: 'isobarToggle', options: isobarOptions },
+                { key: 'wind', select: 'windLayerSelect', toggle: 'windToggle', options: windOptions },
+                { key: 'lightning', select: 'lightningLayerSelect', toggle: 'lightningToggle', options: lightningOptions },
+                { key: 'tropicalStorms', select: 'tropicalStormsLayerSelect', toggle: 'tropicalStormsToggle', options: tropicalStormsOptions },
+                { key: 'rotation', select: 'rotationLayerSelect', toggle: 'rotationToggle', options: rotationOptions },
+                { key: 'surfaceFront', select: 'surfaceFrontLayerSelect', toggle: 'surfaceFrontToggle', options: surfaceFrontOptions },
+                { key: 'observation', select: 'observationLayerSelect', toggle: 'observationToggle', options: observationOptions },
+                { key: 'nowcast', select: 'nowcastLayerSelect', toggle: 'nowcastToggle', options: nowcastOptions },
+                { key: 'warning', select: 'warningLayerSelect', toggle: 'warningToggle', options: warningOptions }
+            ];
+
+            const jobs = layerDefs
+                .filter(def => {
+                    const select = document.getElementById(def.select);
+                    const toggle = document.getElementById(def.toggle);
+                    return select && !select.disabled && (!toggle || toggle.checked) && select.value && select.value !== 'none' && select.value !== 'placeholder';
+                })
+                .map(def => () => plotLayerIfNecessary(document.getElementById(def.select).value, def.options, targetTimestamp, def.key));
+
+            // Weather tile layers should load concurrently, but not all at once on weaker networks.
+            const concurrency = isPlaying ? 2 : (LOW_END_NOWCAST_MODE ? 2 : 3);
+            for (let i = 0; i < jobs.length; i += concurrency) {
+                await Promise.allSettled(jobs.slice(i, i + concurrency).map(job => job()));
+            }
+
             isPlotting = false;
             updateLegend();
         }
@@ -6818,6 +7246,11 @@
                 // ... (Layer cleanup logic omitted for brevity, assuming it's correct from your snippet) ...
                 return;
             }
+            if (layerKey === 'lightning' && layerConfig.type === 'custom-live-windy-lightning') {
+                startWindyLiveLightning();
+                updateLegend();
+                return;
+            }
             if (layerType === 'stormHailThreat' || layerConfig.isCustomLayer) {
                 console.log("Bypassing standard fetch for combined layer...");
                 handleXweatherData(layerType);
@@ -6868,33 +7301,53 @@
             try {
                 let finalUrl = null;
                 let finalTimestamp = roundedTimestampMs;
-                // Optimized Fetch Logic (fetches up to 3 tiles back)
-                const urls = await Promise.all(Array.from({ length: 6 }, (_, i) =>
-                    fetchTileUrl(roundedTimestampMs - i * interval, layerConfig).catch(() => null)
-                ));
-                finalUrl = urls.find(url => url);
-                const [currentUrl, previousUrl1, previousUrl2, previousUrl3, previousUrl4] = urls;
-                // Find the most recent valid URL and update the effective timestamp
-                if (currentUrl) {
-                    finalUrl = currentUrl;
-                    finalTimestamp = roundedTimestampMs;
-                } else if (previousUrl1) {
-                    finalUrl = previousUrl1;
-                    finalTimestamp = roundedTimestampMs - interval;
-                } else if (previousUrl2) {
-                    finalUrl = previousUrl2;
-                    finalTimestamp = roundedTimestampMs - 2 * interval;
-                } else if (previousUrl3) {
-                    finalUrl = previousUrl3;
-                    finalTimestamp = roundedTimestampMs - 3 * interval;
-                } else if (previousUrl4) {
-                    finalUrl = previousUrl4;
-                    finalTimestamp = roundedTimestampMs - 4 * interval;
-                } else if (lastValidTileUrls[layerType]) {
-                    // Fallback to the last successfully plotted URL (no timestamp update)
+
+                // Efficient tile probing:
+                // - use positive and short negative caches
+                // - check fewer frames back during animation
+                // - probe sequentially and stop at first valid timestamp instead of firing many requests
+                const framesToCheck = isPlaying ? 2 : (LOW_END_NOWCAST_MODE ? 4 : 6);
+                const cacheNow = Date.now();
+
+                for (let i = 0; i < framesToCheck; i++) {
+                    const candidateTs = roundedTimestampMs - i * interval;
+                    const cacheKey = `${layerKey}|${layerType}|${candidateTs}`;
+                    const cached = weatherTileUrlCache.get(cacheKey);
+                    if (cached && (cacheNow - cached.checkedAt) < WEATHER_TILE_CACHE_TTL_MS) {
+                        finalUrl = cached.url;
+                        finalTimestamp = candidateTs;
+                        break;
+                    }
+                    const negative = weatherTileNegativeCache.get(cacheKey);
+                    if (negative && (cacheNow - negative) < WEATHER_TILE_NEGATIVE_CACHE_TTL_MS) {
+                        continue;
+                    }
+
+                    const url = await fetchTileUrl(candidateTs, layerConfig).catch(() => null);
+                    if (url) {
+                        weatherTileUrlCache.set(cacheKey, { url, checkedAt: cacheNow });
+                        finalUrl = url;
+                        finalTimestamp = candidateTs;
+                        break;
+                    } else {
+                        weatherTileNegativeCache.set(cacheKey, cacheNow);
+                    }
+                }
+
+                if (!finalUrl && lastValidTileUrls[layerType]) {
+                    // Fallback to the last successfully plotted URL without forcing a timestamp update.
                     finalUrl = lastValidTileUrls[layerType];
                     finalTimestamp = null;
                 }
+
+                // Keep cache bounded so long sessions don't grow memory indefinitely.
+                if (weatherTileUrlCache.size > 500) {
+                    for (const key of weatherTileUrlCache.keys()) { weatherTileUrlCache.delete(key); if (weatherTileUrlCache.size <= 350) break; }
+                }
+                if (weatherTileNegativeCache.size > 500) {
+                    for (const key of weatherTileNegativeCache.keys()) { weatherTileNegativeCache.delete(key); if (weatherTileNegativeCache.size <= 350) break; }
+                }
+
                 if (finalUrl) {
                     await plotMainLayer(finalUrl, layerType, finalTimestamp, layerKey);
                 } else {
@@ -7063,6 +7516,385 @@
 
             if (typeof updateLegend === 'function') updateLegend();
         }
+        // ==========================================
+        // UK HIGH-RES RADAR PNG CUSTOM COLOUR SCALE — DTN SOURCE-SEMANTIC MAPPER
+        // Applies ONLY to radarOptions['uk-precip-intensity'].
+        // DTN PNG does not expose rainfall values. The important observed fact is that DTN's lightest rain
+        // starts in the green family, not the blue family. This function therefore interprets SOURCE colour
+        // families in DTN order: light green -> green -> dark green -> yellow -> orange -> red -> purple,
+        // and then replaces those levels with the selected custom template colours.
+        // ==========================================
+
+        const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
+            // [Threshold, [R, G, B, Alpha]]
+            [1, [174, 212, 242, 255]], // 2. Light Blue
+            [2, [88, 75, 226, 255]], // 4. Dark Blue / Indigo
+            [3, [0, 223, 104, 255]], // 6. Emerald Green
+            [4, [153, 250, 179, 255]], // 8. Pale Mint Green
+            [5, [255, 255, 0, 255]], // 9. Bright Yellow
+            [6, [255, 206, 0, 255]], // 10. Gold / Warm Yellow
+            [7, [255, 155, 0, 255]], // 11. Light Orange
+            [8, [255, 100, 0, 255]], // 12. Dark Orange
+            [9, [255, 0, 0, 255]], // 13. Bright Red
+            [13, [213, 0, 0, 255]], // 14. Medium Red
+            [14, [166, 0, 0, 255]], // 15. Dark Red
+            [15, [121, 0, 0, 255]], // 16. Maroon / Deep Red
+            [16, [163, 56, 93, 255]], // 17. Deep Wine / Dark Magenta
+            [17, [212, 116, 135, 255]], // 18. Rose Pink
+            [18, [244, 179, 200, 255]], // 19. Soft Pink
+            [19, [253, 226, 235, 255]], // 20. Very Light Pink
+            [20, [236, 209, 250, 255]], // 21. Pale Violet / Lavender
+            [21, [207, 160, 235, 255]], // 22. Light Purple
+            [22, [166, 99, 206, 255]], // 23. Medium Purple
+            [23, [130, 48, 178, 255]]  // 24. Deep Purple
+        ];
+
+        let ukCustomRadarColorScaleEnabled = false;
+        let ukCustomRadarLevelOverrides = {};
+        function clampRadarByte(v) { return Math.max(0, Math.min(255, Math.round(Number(v) || 0))); }
+        function radarRgbaToHex(rgba) {
+            return '#' + [clampRadarByte(rgba[0]), clampRadarByte(rgba[1]), clampRadarByte(rgba[2])].map(v => v.toString(16).padStart(2, '0')).join('');
+        }
+        function radarHexToRgba(hex, alpha = 255) {
+            const h = String(hex || '#000000').replace('#', '').trim();
+            return [parseInt(h.slice(0, 2), 16) || 0, parseInt(h.slice(2, 4), 16) || 0, parseInt(h.slice(4, 6), 16) || 0, alpha];
+        }
+        function sameRadarRgb(a, b) {
+            return clampRadarByte(a[0]) === clampRadarByte(b[0]) && clampRadarByte(a[1]) === clampRadarByte(b[1]) && clampRadarByte(a[2]) === clampRadarByte(b[2]);
+        }
+        function getUkRadarTemplateStepLevels() {
+            const levels = [];
+            let previousColour = null;
+            UK_CUSTOM_RADAR_COLOR_TEMPLATE.forEach(([value, rgba]) => {
+                const alpha = Number(rgba[3]);
+                if (Number(value) === 255 || Number(value) === 256 || alpha <= 0) return;
+                if (!previousColour || !sameRadarRgb(previousColour, rgba)) {
+                    levels.push({ value, rgba: [clampRadarByte(rgba[0]), clampRadarByte(rgba[1]), clampRadarByte(rgba[2]), Math.max(0, Math.min(255, alpha || 255))] });
+                    previousColour = rgba;
+                }
+            });
+            return levels;
+        }
+        function getUkRadarTargetLevels() {
+            return getUkRadarTemplateStepLevels().map((level, index) => {
+                const override = ukCustomRadarLevelOverrides[String(index)];
+                return { ...level, rgba: override ? radarHexToRgba(override, level.rgba[3]) : level.rgba, index };
+            });
+        }
+        function rgbToHsvForDtnSource(r, g, b) {
+            r /= 255; g /= 255; b /= 255;
+            const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+            let h = 0;
+            if (d !== 0) {
+                if (max === r) h = ((g - b) / d) % 6;
+                else if (max === g) h = (b - r) / d + 2;
+                else h = (r - g) / d + 4;
+                h *= 60;
+                if (h < 0) h += 360;
+            }
+            return { h, s: max === 0 ? 0 : d / max, v: max };
+        }
+        function classifyDtnSourcePixelToTemplateIndex(r, g, b) {
+            const { h, s, v } = rgbToHsvForDtnSource(r, g, b);
+            // Very low saturation anti-aliased pixels. Keep bright greys low, darker greys mid/high.
+            if (s < 0.10) {
+                if (v > 0.72) return 0;
+                if (v > 0.48) return 2;
+                return 7;
+            }
+            // DTN source semantics observed by user: lightest rain is light green, then green is heavier.
+            // Green/lime family is therefore deliberately mapped to LOWER custom template levels, not to
+            // nearest yellow/green target colours.
+            if (h >= 75 && h < 165) {
+                // lime / light green -> lowest two template steps
+                if (v >= 0.84) return 0;          // lightest green = lightest rain
+                if (v >= 0.68) return 1;
+                if (v >= 0.52) return 2;          // green = slightly heavier
+                return 3;                         // darker green = heavier low/moderate
+            }
+            // Yellow is above the green family.
+            if (h >= 45 && h < 75) {
+                if (v >= 0.82) return 4;
+                return 5;
+            }
+            // Orange family.
+            if (h >= 15 && h < 45) {
+                if (v >= 0.76) return 6;
+                return 7;
+            }
+            // Red family.
+            if (h >= 345 || h < 15) {
+                if (v >= 0.58) return 8;
+                return 9;
+            }
+            // Purple / magenta family.
+            if (h >= 260 && h < 345) {
+                if (v >= 0.55) return 10;
+                return 11;
+            }
+            // Cyan/blue if present: keep as lower rainfall, because they are not high-end colours.
+            if (h >= 165 && h < 260) {
+                if (v >= 0.75) return 1;
+                return 2;
+            }
+            return 0;
+        }
+        function recolourUkRadarImageDataDtnSemantic(imageData) {
+            const targetLevels = getUkRadarTargetLevels();
+            const data = imageData.data;
+            const localRgbToLevelCache = new Map();
+            for (let i = 0; i < data.length; i += 4) {
+                const originalAlpha = data[i + 3];
+                if (originalAlpha < 2) continue;
+                const key = (data[i] << 16) | (data[i + 1] << 8) | data[i + 2];
+                let levelIndex = localRgbToLevelCache.get(key);
+                if (levelIndex === undefined) {
+                    levelIndex = classifyDtnSourcePixelToTemplateIndex(data[i], data[i + 1], data[i + 2]);
+                    localRgbToLevelCache.set(key, levelIndex);
+                }
+                const target = targetLevels[Math.min(levelIndex, targetLevels.length - 1)].rgba;
+                data[i] = target[0];
+                data[i + 1] = target[1];
+                data[i + 2] = target[2];
+                data[i + 3] = Math.round(originalAlpha * (target[3] / 255));
+            }
+            return imageData;
+        }
+        const UkRadarDtnSemanticMappedTileLayer = L.TileLayer.extend({
+            createTile: function (coords, done) {
+                const tile = document.createElement('canvas');
+                const size = this.getTileSize();
+                tile.width = size.x;
+                tile.height = size.y;
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = () => {
+                    try {
+                        const ctx = tile.getContext('2d', { willReadFrequently: true });
+                        ctx.clearRect(0, 0, size.x, size.y);
+                        ctx.drawImage(img, 0, 0, size.x, size.y);
+                        const imageData = ctx.getImageData(0, 0, size.x, size.y);
+                        ctx.putImageData(recolourUkRadarImageDataDtnSemantic(imageData), 0, 0);
+                        done(null, tile);
+                    } catch (error) {
+                        console.warn('UK radar DTN semantic colour mapping failed for this tile; showing original PNG tile instead.', error);
+                        const fallbackCtx = tile.getContext('2d');
+                        fallbackCtx.clearRect(0, 0, size.x, size.y);
+                        fallbackCtx.drawImage(img, 0, 0, size.x, size.y);
+                        done(null, tile);
+                    }
+                };
+                img.onerror = () => done(new Error('Failed to load UK radar PNG tile'), tile);
+                img.src = this.getTileUrl(coords);
+                return tile;
+            }
+        });
+        function createUkRadarDtnSemanticMappedTileLayer(url, options) {
+            return new UkRadarDtnSemanticMappedTileLayer(url, { ...options, crossOrigin: true });
+        }
+        // ==========================================
+        // WINDY RADAR CUSTOM COLOUR SCALE — YELLOW-ONLY, GRADUAL + Z7 + ARCHIVE FALLBACK
+        // Normal endpoint: /radar2/composite/... ; archive fallback: /radar2/archive/composite/...
+        // If a normal tile fails for frame T, store T in localStorage and use archive first for any frame <= T.
+        // ==========================================
+        const WINDY_RADAR_MAX_NATIVE_ZOOM = 7;
+        const WINDY_RADAR_ARCHIVE_CUTOFF_KEY = 'windy-radar-archive-only-before-frame-ms-v1';
+        function getWindyRadarArchiveCutoffMs() {
+            const value = Number(localStorage.getItem(WINDY_RADAR_ARCHIVE_CUTOFF_KEY));
+            return Number.isFinite(value) && value > 0 ? value : null;
+        }
+        function rememberWindyRadarArchiveCutoff(frameMs) {
+            if (!Number.isFinite(frameMs)) return;
+            const previous = getWindyRadarArchiveCutoffMs() || 0;
+            const next = Math.max(previous, frameMs);
+            localStorage.setItem(WINDY_RADAR_ARCHIVE_CUTOFF_KEY, String(next));
+            console.info(`Windy Radar: normal endpoint missing for ${new Date(frameMs).toISOString()}; stored archive-only cutoff ${new Date(next).toISOString()}. Frames at/before this time will use archive first.`);
+        }
+        function getWindyRadarFrameMsFromUrl(url) {
+            const match = String(url).match(/\/radar2\/(?:archive\/)?composite\/(\d{4})\/(\d{2})\/(\d{2})\/(\d{4})\//);
+            if (!match) return null;
+            const hh = Number(match[4].slice(0, 2));
+            const mm = Number(match[4].slice(2, 4));
+            return Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), hh, mm, 0, 0);
+        }
+        function windyRadarArchiveUrl(url) {
+            return String(url).replace('/radar2/composite/', '/radar2/archive/composite/');
+        }
+        const WINDY_RADAR_LIVE_ONLY_WINDOW_MS = 2 * 60 * 60 * 1000;
+
+        function shouldUseWindyRadarArchiveFirst(url) {
+            const frameMs = getWindyRadarFrameMsFromUrl(url);
+            if (!Number.isFinite(frameMs)) return false;
+
+            // If frame is more than 2 hours old, use archive endpoint first.
+            if (Date.now() - frameMs > WINDY_RADAR_LIVE_ONLY_WINDOW_MS) {
+                return true;
+            }
+
+            // Keep existing learned-cutoff fallback logic.
+            const cutoff = getWindyRadarArchiveCutoffMs();
+            return Number.isFinite(cutoff) && frameMs <= cutoff;
+        }
+        function getWindyYellowRampPosition(r, g, b) {
+            const hsv = rgbToHsvForDtnSource(r, g, b);
+            if (hsv.s < 0.24 || hsv.v < 0.14) return null;
+            if (hsv.h < 38 || hsv.h > 74) return null;
+            const vNorm = Math.max(0, Math.min(1, (hsv.v - 0.14) / (0.98 - 0.14)));
+            const sNorm = Math.max(0, Math.min(1, (hsv.s - 0.24) / (1.0 - 0.24)));
+            let t = vNorm * 0.86 + sNorm * 0.14;
+            return Math.max(0, Math.min(1, t * t * (3 - 2 * t)));
+        }
+        function interpolateWindyTargetColour(t, targetLevels) {
+            if (!targetLevels.length) return [0, 0, 0, 0];
+            if (targetLevels.length === 1) return targetLevels[0].rgba;
+            const scaled = t * (targetLevels.length - 1);
+            const lo = Math.floor(scaled), hi = Math.ceil(scaled), f = scaled - lo;
+            const a = targetLevels[Math.max(0, Math.min(targetLevels.length - 1, lo))].rgba;
+            const b = targetLevels[Math.max(0, Math.min(targetLevels.length - 1, hi))].rgba;
+            return [Math.round(a[0] + (b[0] - a[0]) * f), Math.round(a[1] + (b[1] - a[1]) * f), Math.round(a[2] + (b[2] - a[2]) * f), Math.round(a[3] + (b[3] - a[3]) * f)];
+        }
+        function recolourWindyRadarImageDataYellowOnly(imageData) {
+            const targetLevels = getUkRadarTargetLevels();
+            const data = imageData.data;
+            const cache = new Map();
+            for (let i = 0; i < data.length; i += 4) {
+                const originalAlpha = data[i + 3];
+                if (originalAlpha < 2) continue;
+                const key = (data[i] << 16) | (data[i + 1] << 8) | data[i + 2];
+                let target = cache.get(key);
+                if (target === undefined) {
+                    const t = getWindyYellowRampPosition(data[i], data[i + 1], data[i + 2]);
+                    target = t === null ? false : interpolateWindyTargetColour(t, targetLevels);
+                    cache.set(key, target);
+                }
+                if (target === false) { data[i + 3] = 0; continue; }
+                data[i] = target[0]; data[i + 1] = target[1]; data[i + 2] = target[2]; data[i + 3] = Math.round(originalAlpha * (target[3] / 255));
+            }
+            return imageData;
+        }
+        const WindyRadarArchiveAwareTileLayer = L.TileLayer.extend({
+            createTile: function (coords, done) {
+                const tile = document.createElement('canvas');
+                const size = this.getTileSize();
+                tile.width = size.x; tile.height = size.y;
+                const ctx = tile.getContext('2d', { willReadFrequently: true });
+                const originalZoom = coords.z;
+                const nativeZoom = Math.min(originalZoom, WINDY_RADAR_MAX_NATIVE_ZOOM);
+                const scale = Math.pow(2, originalZoom - nativeZoom);
+                const nativeCoords = { x: Math.floor(coords.x / scale), y: Math.floor(coords.y / scale), z: nativeZoom };
+                if (originalZoom > WINDY_RADAR_MAX_NATIVE_ZOOM) console.info(`Windy Radar: requested zoom ${originalZoom} is above native max ${WINDY_RADAR_MAX_NATIVE_ZOOM}; using ${nativeZoom}/${nativeCoords.x}/${nativeCoords.y} and scaling/cropping it.`);
+                const drawImage = (img) => {
+                    ctx.clearRect(0, 0, size.x, size.y);
+                    if (nativeZoom < originalZoom) {
+                        const srcX = (coords.x - nativeCoords.x * scale) * (size.x / scale);
+                        const srcY = (coords.y - nativeCoords.y * scale) * (size.y / scale);
+                        ctx.drawImage(img, srcX, srcY, size.x / scale, size.y / scale, 0, 0, size.x, size.y);
+                    } else ctx.drawImage(img, 0, 0, size.x, size.y);
+                    if (this.options.applyWindyColourReplacement !== false) {
+                        const imageData = ctx.getImageData(0, 0, size.x, size.y);
+                        ctx.putImageData(recolourWindyRadarImageDataYellowOnly(imageData), 0, 0);
+                    }
+                    done(null, tile);
+                };
+                const normalUrl = this.getTileUrl(nativeCoords);
+                const frameMs = getWindyRadarFrameMsFromUrl(normalUrl);
+                const archiveFirst = shouldUseWindyRadarArchiveFirst(normalUrl);
+                const firstUrl = archiveFirst ? windyRadarArchiveUrl(normalUrl) : normalUrl;
+                if (archiveFirst) console.info(`Windy Radar: ${new Date(frameMs).toISOString()} is at/before saved archive cutoff, using archive endpoint first.`);
+                const loadUrl = (url, isArchiveAttempt) => {
+                    const img = new Image(); img.crossOrigin = 'anonymous';
+                    img.onload = () => drawImage(img);
+                    img.onerror = () => {
+                        if (!isArchiveAttempt) {
+                            rememberWindyRadarArchiveCutoff(frameMs);
+                            const archiveUrl = windyRadarArchiveUrl(url);
+                            console.info('Windy Radar: normal tile failed; retrying archive tile:', archiveUrl);
+                            loadUrl(archiveUrl, true);
+                        } else {
+                            console.warn('Windy Radar: archive tile also failed:', url);
+                            done(new Error('Failed to load Windy radar normal/archive tile'), tile);
+                        }
+                    };
+                    img.src = url;
+                };
+                loadUrl(firstUrl, archiveFirst);
+                return tile;
+            }
+        });
+        function createWindyRadarArchiveAwareTileLayer(url, options) {
+            return new WindyRadarArchiveAwareTileLayer(url, { ...options, crossOrigin: true, maxNativeZoom: WINDY_RADAR_MAX_NATIVE_ZOOM });
+        }
+        function isUkCustomRadarActiveForCurrentSelection() {
+            const selectedRadarLayer = document.getElementById('radarLayer')?.value;
+            return ukCustomRadarColorScaleEnabled && ['uk-precip-intensity', 'windy-radar'].includes(selectedRadarLayer);
+        }
+        function updateUkCustomRadarColorScaleControlVisibility() {
+            const selectedRadarLayer = document.getElementById('radarLayer')?.value;
+            const selected = ['uk-precip-intensity', 'windy-radar'].includes(selectedRadarLayer);
+            const radarOn = document.getElementById('radarToggle')?.checked !== false;
+            const control = document.getElementById('uk-custom-radar-colour-control');
+            const editor = document.getElementById('uk-custom-radar-editor');
+            if (control) control.style.display = selected && radarOn ? 'flex' : 'none';
+            if (editor) editor.style.display = selected && radarOn && ukCustomRadarColorScaleEnabled ? 'block' : 'none';
+        }
+        function rebuildUkRadarOnly() {
+            const select = document.getElementById('radarLayer');
+            if (['uk-precip-intensity', 'windy-radar'].includes(select?.value) && !select.disabled && document.getElementById('radarToggle')?.checked !== false) {
+                clearRadarLayers();
+                plotLayerIfNecessary(select.value, radarOptions, getCurrentSliderTimestamp(), 'radar');
+            }
+            if (typeof updateLegend === 'function') updateLegend();
+        }
+        function toggleUkCustomRadarColorScale(enabled) {
+            ukCustomRadarColorScaleEnabled = !!enabled;
+            try { localStorage.setItem('uk-custom-radar-colour-enabled', ukCustomRadarColorScaleEnabled ? '1' : '0'); } catch (e) { }
+            updateUkCustomRadarColorScaleControlVisibility();
+            rebuildUkRadarOnly();
+        }
+        function buildUkCustomRadarColorInputs() {
+            const container = document.getElementById('uk-custom-radar-colour-inputs');
+            if (!container || container.dataset.built === '1') return;
+            const levels = getUkRadarTemplateStepLevels();
+            levels.forEach((level, index) => {
+                const id = `uk-radar-colour-level-${index}`;
+                const label = document.createElement('label');
+                label.setAttribute('for', id);
+                label.textContent = `Template colour step ${index + 1} / ${levels.length} (${level.value})`;
+                const input = document.createElement('input');
+                input.type = 'color';
+                input.id = id;
+                input.value = ukCustomRadarLevelOverrides[String(index)] || radarRgbaToHex(level.rgba);
+                input.addEventListener('input', () => {
+                    ukCustomRadarLevelOverrides[String(index)] = input.value;
+                    try { localStorage.setItem('uk-custom-radar-level-overrides', JSON.stringify(ukCustomRadarLevelOverrides)); } catch (e) { }
+                    if (radarLayer && radarLayer.redraw && isUkCustomRadarActiveForCurrentSelection()) radarLayer.redraw();
+                });
+                input.addEventListener('change', rebuildUkRadarOnly);
+                container.appendChild(label);
+                container.appendChild(input);
+            });
+            container.dataset.built = '1';
+        }
+        function resetUkCustomRadarColorScale() {
+            ukCustomRadarLevelOverrides = {};
+            try { localStorage.removeItem('uk-custom-radar-level-overrides'); } catch (e) { }
+            const container = document.getElementById('uk-custom-radar-colour-inputs');
+            if (container) { container.innerHTML = ''; container.dataset.built = '0'; }
+            buildUkCustomRadarColorInputs();
+            rebuildUkRadarOnly();
+        }
+        function initialiseUkCustomRadarColourControls() {
+            try {
+                ukCustomRadarColorScaleEnabled = localStorage.getItem('uk-custom-radar-colour-enabled') === '1';
+                ukCustomRadarLevelOverrides = JSON.parse(localStorage.getItem('uk-custom-radar-level-overrides') || '{}') || {};
+            } catch (e) { ukCustomRadarLevelOverrides = {}; }
+            const toggle = document.getElementById('uk-custom-radar-colour-toggle');
+            if (toggle) toggle.checked = ukCustomRadarColorScaleEnabled;
+            buildUkCustomRadarColorInputs();
+            updateUkCustomRadarColorScaleControlVisibility();
+        }
+        document.addEventListener('DOMContentLoaded', initialiseUkCustomRadarColourControls);
+
         /**
          * Creates the style object required for L.vectorGrid.setStyle()
          * @param {number} opacity - The target opacity.
@@ -7081,7 +7913,20 @@
             if (!historySlider) return Date.now();
             const maxHoursInput = parseInt(document.getElementById('max-history-hours').value) || 6;
             const maxMinutes = maxHoursInput * 60;
-            const sliderValue = parseInt(historySlider.value);
+            const sliderValue = parseInt(historySlider.value) || 0;
+
+            // When a manual Start/End filter is active, anchor layer time to that range.
+            if (lastFilterMode === 'inputs' && customFilterStart && customFilterEnd) {
+                const filterStart = new Date(customFilterStart);
+                const filterEnd = new Date(customFilterEnd);
+                if (!isNaN(filterStart) && !isNaN(filterEnd) && filterEnd > filterStart) {
+                    const totalMinutes = (filterEnd - filterStart) / (60 * 1000);
+                    const lifespanHours = parseFloat(document.getElementById('lightning-lifespan')?.value) || 3;
+                    const sliderMax = Math.max(totalMinutes, lifespanHours * 60);
+                    const clampedSliderValue = Math.max(0, Math.min(sliderValue, sliderMax));
+                    return filterStart.getTime() + (clampedSliderValue * 60 * 1000);
+                }
+            }
 
             const now = Date.now();
             const startOfHistory = now - (maxMinutes * 60 * 1000);
@@ -7113,6 +7958,7 @@
             }
             fetchData();
             const newType = select.value;
+            updateUkCustomRadarColorScaleControlVisibility();
             clearRadarLayers();
 
             // Update history to ADD the future 3 hours to slider
@@ -7193,70 +8039,304 @@
             const timestamp = getCurrentSliderTimestamp();
             plotLayerIfNecessary(newType, surfaceFrontOptions, timestamp, 'surfaceFront');
         }
+        // ==========================================
+        // ==========================================
+        // WINDY LIGHTNING: LIVE HOT + HISTORICAL 5-MINUTE ARCHIVE
+        // Current time uses https://node.windy.com/blitz/v3/hot...
+        // Any non-current slider/filter time uses https://ims.windy.com/blitz/v3/5mins/{frameMs}?version=3
+        // Payload rows: [timestamp10, mercatorX, mercatorY, typeOrStrength]
+        // ==========================================
+        const WINDY_LIGHTNING_HOT_TOKEN2 = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJtYWdpYyI6MjQzLCJ1c2VySUQiOjQwMDc4NjUsImlhdCI6MTc4MzA5MDc2NCwiZXhwIjoxNzgzMjYzNTY0fQ.gXIP4_qomWDUN2MV09RFpiTQ4km8HnbzJBmCJCI8H-U';
+        const WINDY_LIGHTNING_HOT_UID = '74acfeba-ac35-4b07-76b2-6c4028cd3b4f';
+        const WINDY_LIGHTNING_HOT_VERSION = '50.1.2';
+        const WINDY_LIGHTNING_HOT_POLL_MS = 15000;
+        const WINDY_LIGHTNING_FRAME_MS = 5 * 60 * 1000;
+        const WINDY_LIGHTNING_CURRENT_WINDOW_MS = 10 * 60 * 1000;
+        const WINDY_LIGHTNING_MAX_ARCHIVE_FRAMES = 96;
+        let windyLightningPollTimer = null, windyLightningLayer = null, windyLightningArchive = [], windyLightningLastFrameTs = 0;
+        let windyLightningActiveSourceKey = null;
+        const windyLightningSourceRanges = new Map();
+        const WINDY_LIGHTNING_ARCHIVE_KEY = 'windy-lightning-hot-plus-ims-5mins-v1';
+        const WINDY_LIGHTNING_ARCHIVE_RETENTION_MS = 31 * 24 * 60 * 60 * 1000;
+
+        function isWindyLiveLightningSelected() {
+            const s = document.getElementById('lightningLayerSelect');
+            const t = document.getElementById('lightningToggle');
+            return s?.value === 'windy-live-lightning' && s?.disabled !== true && t?.checked !== false;
+        }
+        function buildWindyLightningHotUrl(lastFrameTs, poc = 66) {
+            const qs = new URLSearchParams({ version: '3', lastFrameTs: String(Math.max(0, Math.floor(Number(lastFrameTs) || 0))), pr: '0', sc: '12', token2: WINDY_LIGHTNING_HOT_TOKEN2, uid: WINDY_LIGHTNING_HOT_UID, v: WINDY_LIGHTNING_HOT_VERSION, poc: String(poc) });
+            return `https://node.windy.com/blitz/v3/hot?${qs.toString()}`;
+        }
+        function buildWindyLightningArchiveUrl(frameMs) {
+            return `https://ims.windy.com/blitz/v3/5mins/${Math.floor(Number(frameMs) || 0)}?version=3`;
+        }
+        function windLightningRangeKey(startMs, endMs, mode) {
+            return `${mode}_${Math.floor(startMs / 60000) * 60000}_${Math.ceil(endMs / 60000) * 60000}`;
+        }
+        function isWindyLightningCurrentTime(endMs) {
+            const slider = document.getElementById('history-slider');
+            const sliderAtNow = slider && String(slider.value) === String(slider.max) && lastFilterMode !== 'inputs';
+            return sliderAtNow || Math.abs(Date.now() - Number(endMs)) <= WINDY_LIGHTNING_CURRENT_WINDOW_MS;
+        }
+        function windyMercatorToLatLon(x, y) {
+            const world = 256000;
+            const lon = (x / world) * 360 - 180;
+            const yTop = world - y; // Windy blitz Y is bottom-origin.
+            const n = Math.PI - 2 * Math.PI * (yTop / world);
+            const lat = (180 / Math.PI) * Math.atan(Math.sinh(n));
+            return { lat, lon };
+        }
+        function windyArchive18bToLatLon(lon18, lat18) {
+            // Windy's archive binary uses 18-bit packed Web-Mercator coordinates.
+            const world = 1 << 18; // 262144
+            const lon = (lon18 / world) * 360 - 180;
+            const n = Math.PI - 2 * Math.PI * (lat18 / world);
+            const lat = (180 / Math.PI) * Math.atan(Math.sinh(n));
+            return { lat, lon };
+        }
+        function decodeWindyLightningArchiveBinary(arrayBuffer, frameMs) {
+            const view = new DataView(arrayBuffer);
+            if (view.byteLength < 3) return [];
+            const header = view.getUint8(0);
+            const count = view.getUint16(1); // Big-endian, same as Windy's radar-plus.js ml.parse().
+            if (header !== 2) {
+                console.warn('Windy lightning archive: unsupported binary header', header, 'for frame', new Date(frameMs).toISOString());
+                return [];
+            }
+            const strikes = [];
+            let pos = 3;
+            let tick = 0;
+            for (let i = 0; i < count && pos + 5 < view.byteLength; i++) {
+                let lon18 = view.getUint16(pos);
+                let lat18 = view.getUint16(pos + 2);
+                const packed = view.getUint8(pos + 4);
+                const deltaOrMarker = view.getUint8(pos + 5);
+                lon18 += (packed & 192) << 10;
+                lat18 += (packed & 48) << 12;
+                const kind = packed & 15;
+                let recordLength;
+                if (deltaOrMarker < 255) {
+                    tick += deltaOrMarker;
+                    recordLength = 6;
+                } else {
+                    if (pos + 7 >= view.byteLength) break;
+                    tick = view.getUint16(pos + 6);
+                    recordLength = 8;
+                }
+                const time = frameMs + tick * 100;
+                const { lat, lon } = windyArchive18bToLatLon(lon18, lat18);
+                if (Number.isFinite(lat) && Number.isFinite(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+                    strikes.push({ time, lat, lon, kind, lon18, lat18, tick });
+                }
+                pos += recordLength;
+            }
+            console.info(`Windy lightning archive binary decoded ${new Date(frameMs).toISOString()}: declared=${count}, decoded=${strikes.length}, bytes=${view.byteLength}`);
+            return strikes;
+        }
+        function addWindyLightningStrikeObjects(strikes, sourceKey, mode, filterStartMs = null, filterEndMs = null) {
+            const seen = new Set(windyLightningArchive.slice(-15000).map(s => s.id));
+            let added = 0;
+            for (const s of strikes || []) {
+                if (!s || !Number.isFinite(s.time) || !Number.isFinite(s.lat) || !Number.isFinite(s.lon)) continue;
+                if (filterStartMs != null && (s.time < filterStartMs || s.time > filterEndMs)) continue;
+                const kind = Number(s.kind) || 0;
+                const id = `${sourceKey}_${Math.round(s.time)}_${s.lat.toFixed(5)}_${s.lon.toFixed(5)}_${kind}`;
+                if (seen.has(id)) continue;
+                seen.add(id);
+                windyLightningArchive.push({ id, time: s.time, lat: s.lat, lon: s.lon, kind, sourceKey, mode, sourceFetchedAt: Date.now() });
+                added++;
+            }
+            pruneWindyLightningArchive();
+            saveWindyLightningArchive();
+            return added;
+        }
+        function windyLightningStrikeColourFromTime(strikeMs) {
+            const ageMs = Math.max(0, Date.now() - Number(strikeMs));
+            if (ageMs < 60000) return '#ffffff';
+            if (ageMs < 300000) return '#ffff00';
+            if (ageMs < 900000) return '#ff9900';
+            return '#ff3333';
+        }
+        function loadWindyLightningArchive() {
+            try { windyLightningArchive = JSON.parse(localStorage.getItem(WINDY_LIGHTNING_ARCHIVE_KEY) || '[]') || []; } catch (e) { windyLightningArchive = []; }
+            pruneWindyLightningArchive();
+            const latest = windyLightningArchive.reduce((m, s) => Math.max(m, Number(s.time) || 0), 0);
+            windyLightningLastFrameTs = Math.max(windyLightningLastFrameTs || 0, latest || Date.now() - 20 * 60 * 1000);
+        }
+        function saveWindyLightningArchive() {
+            try { localStorage.setItem(WINDY_LIGHTNING_ARCHIVE_KEY, JSON.stringify(windyLightningArchive.slice(-40000))); } catch (e) { }
+        }
+        function pruneWindyLightningArchive() {
+            const cutoff = Date.now() - WINDY_LIGHTNING_ARCHIVE_RETENTION_MS;
+            windyLightningArchive = windyLightningArchive.filter(s => Number(s.time) >= cutoff);
+        }
+        function extractWindyLightningValues(payload) {
+            const out = [];
+            const push = (a) => {
+                if (!Array.isArray(a) || a.length < 4) return;
+                const t = Number(a[0]), x = Number(a[1]), y = Number(a[2]), k = Number(a[3]);
+                if ([t, x, y, k].every(Number.isFinite)) out.push(t, x, y, k);
+            };
+            if (Array.isArray(payload?.hotQueue?.values)) payload.hotQueue.values.forEach(push);
+            else if (Array.isArray(payload?.values)) payload.values.forEach(push);
+            else if (Array.isArray(payload)) {
+                if (Array.isArray(payload[0])) payload.forEach(push);
+                else for (let i = 0; i + 3 < payload.length; i += 4) push([payload[i], payload[i + 1], payload[i + 2], payload[i + 3]]);
+            }
+            return out;
+        }
+        function getWindyPayloadCursor(payload, values, fallbackCursor) {
+            let maxValue = 0;
+            for (let i = 0; Array.isArray(values) && i + 3 < values.length; i += 4) maxValue = Math.max(maxValue, Math.round(Number(values[i]) * 100));
+            const infoFrame = Number(payload?.info?.lastFrame);
+            return Math.max(Number.isFinite(infoFrame) ? infoFrame : 0, maxValue, Number(fallbackCursor) || 0);
+        }
+        function addWindyLightningValues(values, sourceKey, mode, filterStartMs = null, filterEndMs = null, advanceLiveCursor = true) {
+            const seen = new Set(windyLightningArchive.slice(-12000).map(s => s.id));
+            let maxT = windyLightningLastFrameTs || 0, added = 0;
+            for (let i = 0; Array.isArray(values) && i + 3 < values.length; i += 4) {
+                const time = Math.round(Number(values[i]) * 100); // Windy timestamp10 -> ms.
+                const x = Number(values[i + 1]), y = Number(values[i + 2]), kind = Number(values[i + 3]);
+                if (!Number.isFinite(time) || !Number.isFinite(x) || !Number.isFinite(y)) continue;
+                if (filterStartMs != null && (time < filterStartMs || time > filterEndMs)) continue;
+                maxT = Math.max(maxT, time);
+                const { lat, lon } = windyMercatorToLatLon(x, y);
+                if (lat < -90 || lat > 90 || lon < -180 || lon > 180) continue;
+                const id = `${sourceKey}_${time}_${x}_${y}_${kind}`;
+                if (seen.has(id)) continue;
+                seen.add(id);
+                windyLightningArchive.push({ id, time, lat, lon, kind, sourceKey, mode, sourceFetchedAt: Date.now() });
+                added++;
+            }
+            if (advanceLiveCursor) windyLightningLastFrameTs = Math.max(windyLightningLastFrameTs || 0, maxT);
+            pruneWindyLightningArchive();
+            saveWindyLightningArchive();
+            return added;
+        }
+        async function fetchWindyLightningHotPayload(cursor) {
+            const urls = [buildWindyLightningHotUrl(cursor, 66), buildWindyLightningHotUrl(cursor, 65)];
+            let lastError = null;
+            for (const url of urls) {
+                try {
+                    console.info('Windy lightning LIVE/HOT fetch:', url);
+                    const r = await fetch(url, { method: 'GET', cache: 'no-store' });
+                    if (!r.ok) { lastError = new Error(`HTTP ${r.status}`); continue; }
+                    return await r.json();
+                } catch (e) { lastError = e; }
+            }
+            throw lastError || new Error('Windy hot fetch failed');
+        }
+        async function fetchWindyLightningArchivePayload(frameMs) {
+            const url = buildWindyLightningArchiveUrl(frameMs);
+            console.info('Windy lightning ARCHIVE/BINARY 5mins fetch:', url);
+            const r = await fetch(url, { method: 'GET', cache: 'no-store' });
+            if (!r.ok) throw new Error(`Windy archive HTTP ${r.status} for ${url}`);
+            const arrayBuffer = await r.arrayBuffer();
+            return decodeWindyLightningArchiveBinary(arrayBuffer, frameMs);
+        }
+        async function fetchLiveWindyLightningForRange(startMs, endMs, sourceKey) {
+            const cursor = windyLightningLastFrameTs || Date.now() - 20 * 60 * 1000;
+            const payload = await fetchWindyLightningHotPayload(cursor);
+            const values = extractWindyLightningValues(payload);
+            const added = addWindyLightningValues(values, sourceKey, 'live', null, null, true);
+            windyLightningLastFrameTs = Math.max(windyLightningLastFrameTs || 0, getWindyPayloadCursor(payload, values, cursor));
+            return { added, values: values.length / 4, frames: 1, mode: 'live' };
+        }
+        async function fetchArchiveWindyLightningForRange(startMs, endMs, sourceKey) {
+            const firstFrame = Math.floor(startMs / WINDY_LIGHTNING_FRAME_MS) * WINDY_LIGHTNING_FRAME_MS;
+            const lastFrame = Math.floor(endMs / WINDY_LIGHTNING_FRAME_MS) * WINDY_LIGHTNING_FRAME_MS;
+            let added = 0, valuesCount = 0, frames = 0;
+            for (let frame = firstFrame; frame <= lastFrame && frames < WINDY_LIGHTNING_MAX_ARCHIVE_FRAMES; frame += WINDY_LIGHTNING_FRAME_MS) {
+                try {
+                    const strikes = await fetchWindyLightningArchivePayload(frame);
+                    valuesCount += strikes.length;
+                    added += addWindyLightningStrikeObjects(strikes, sourceKey, 'archive5mins', startMs, endMs);
+                    frames++;
+                } catch (e) {
+                    console.warn('Windy lightning archive binary frame failed:', new Date(frame).toISOString(), e);
+                    frames++;
+                }
+            }
+            return { added, values: valuesCount, frames, mode: 'archive5mins', firstFrame, lastFrame };
+        }
+        async function fetchAndDisplayWindyLightningForRange(startMs, endMs) {
+            if (!isWindyLiveLightningSelected()) return;
+            const useLive = isWindyLightningCurrentTime(endMs);
+            const mode = useLive ? 'live' : 'archive5mins';
+            const sourceKey = windLightningRangeKey(startMs, endMs, mode);
+            windyLightningActiveSourceKey = sourceKey;
+            const existing = windyLightningSourceRanges.get(sourceKey);
+            if (existing?.inFlight) return;
+
+            // Source-first: clear this source range before fetching, so stale local cache cannot masquerade as fresh archive.
+            windyLightningArchive = windyLightningArchive.filter(s => s.sourceKey !== sourceKey);
+            saveWindyLightningArchive();
+            windyLightningSourceRanges.set(sourceKey, { inFlight: true, fetchedAt: 0, added: 0, mode });
+            try {
+                const result = useLive ? await fetchLiveWindyLightningForRange(startMs, endMs, sourceKey)
+                    : await fetchArchiveWindyLightningForRange(startMs, endMs, sourceKey);
+                windyLightningSourceRanges.set(sourceKey, { inFlight: false, fetchedAt: Date.now(), ...result });
+                console.info(`Windy lightning ${mode} complete for ${new Date(startMs).toISOString()} – ${new Date(endMs).toISOString()}:`, result);
+            } catch (e) {
+                windyLightningSourceRanges.set(sourceKey, { inFlight: false, fetchedAt: Date.now(), added: 0, error: String(e), mode });
+                console.warn(`Windy lightning ${mode} source fetch failed.`, e);
+            } finally {
+                renderWindyLightningArchive(false);
+            }
+        }
+        async function fetchWindyLightningHotOnce() {
+            if (!isWindyLiveLightningSelected()) return;
+            const end = Number(typeof getCurrentSliderTimestamp === 'function' ? getCurrentSliderTimestamp() : Date.now()) || Date.now();
+            if (!isWindyLightningCurrentTime(end)) return; // archive mode is driven by render range fetches.
+            const start = end - parseFloat(document.getElementById('lightning-lifespan')?.value || 3) * 3600 * 1000;
+            await fetchAndDisplayWindyLightningForRange(start, end);
+        }
+        function renderWindyLightningArchive(requestSource = true) {
+            if (!isWindyLiveLightningSelected()) return;
+            if (!windyLightningLayer) windyLightningLayer = L.layerGroup().addTo(map);
+            windyLightningLayer.clearLayers();
+            const opacity = parseFloat(document.getElementById('lightningOpacity')?.value || 0.8);
+            const end = Number(typeof getCurrentSliderTimestamp === 'function' ? getCurrentSliderTimestamp() : Date.now()) || Date.now();
+            const start = end - parseFloat(document.getElementById('lightning-lifespan')?.value || 3) * 3600 * 1000;
+            const mode = isWindyLightningCurrentTime(end) ? 'live' : 'archive5mins';
+            const sourceKey = windLightningRangeKey(start, end, mode);
+            windyLightningActiveSourceKey = sourceKey;
+            if (requestSource) fetchAndDisplayWindyLightningForRange(start, end);
+            const visible = windyLightningArchive.filter(s => s.sourceKey === sourceKey).slice(-3000);
+            visible.forEach(s => {
+                const c = windyLightningStrikeColourFromTime(s.time);
+                windyLightningLayer.addLayer(L.circleMarker([s.lat, s.lon], {
+                    radius: Math.max(2, Math.min(5, 2 + (Number(s.kind) || 0) * 0.35)),
+                    color: c, weight: 1, opacity, fillColor: c, fillOpacity: Math.min(1, opacity + 0.1), pane: 'markerPane'
+                }).bindTooltip(`Windy lightning ${s.mode}<br>${new Date(s.time).toLocaleString()}<br>type/strength: ${s.kind}`));
+            });
+            console.info(`Windy lightning render ${mode}: visible=${visible.length}, range=${new Date(start).toISOString()} – ${new Date(end).toISOString()}`, windyLightningSourceRanges.get(sourceKey));
+        }
+        function startWindyLiveLightning() {
+            loadWindyLightningArchive();
+            if (!windyLightningLayer) windyLightningLayer = L.layerGroup().addTo(map);
+            renderWindyLightningArchive(true);
+            if (windyLightningPollTimer) return;
+            windyLightningPollTimer = setInterval(fetchWindyLightningHotOnce, WINDY_LIGHTNING_HOT_POLL_MS);
+        }
+        function stopWindyLiveLightning(removeLayer = true) {
+            if (windyLightningPollTimer) { clearInterval(windyLightningPollTimer); windyLightningPollTimer = null; }
+            if (removeLayer && windyLightningLayer) { windyLightningLayer.clearLayers(); if (map.hasLayer(windyLightningLayer)) map.removeLayer(windyLightningLayer); windyLightningLayer = null; }
+        }
+
         function lightningLayerTypeHandler() {
             const select = document.getElementById('lightningLayerSelect');
-
-            // 1. Clear everything if disabled
-            if (select?.disabled) {
-                clearLightningLayers();
-                if (window.xWeatherLayers['xweather-lightning']) {
-                    map.removeLayer(window.xWeatherLayers['xweather-lightning']);
-                    window.xWeatherLayers['xweather-lightning'] = null;
-                }
-                if (mapsglController) {
-                    // Remove known MapsGL lightning layers
-                    ['lightning-all', 'lightning-density', 'lightning-density-accum'].forEach(id => {
-                        mapsglController.removeWeatherLayer(id);
-                    });
-                }
-                updateLegend(); // Ensure legend is hidden
-                return;
-            }
-
+            if (select?.disabled) { stopWindyLiveLightning(true); clearLightningLayers(); updateLegend(); return; }
             const newType = select.value;
             const config = lightningOptions[newType];
-
-            // 2. Clear existing standard layers
             clearLightningLayers();
-
-            // 3. Clear XWeather GeoJSON if switching away
-            if (newType !== 'xweather-lightning') {
-                if (window.xWeatherLayers['xweather-lightning']) {
-                    map.removeLayer(window.xWeatherLayers['xweather-lightning']);
-                    window.xWeatherLayers['xweather-lightning'] = null;
-                }
-            }
-
-            // 4. Clear MapsGL layers (prevent stacking)
-            if (mapsglController) {
-                ['lightning-all', 'lightning-density', 'lightning-density-accum'].forEach(id => {
-                    // Only remove if it's not the one we are currently trying to add
-                    if (config?.type !== 'mapsgl' || config.id !== id) {
-                        mapsglController.removeWeatherLayer(id);
-                    }
-                });
-            }
-
-            // 5. Handle MapsGL Selection
-            if (config && config.type === 'mapsgl') {
-                // --- ADDED: Get current opacity from slider ---
-                const currentOpacity = parseFloat(document.getElementById('lightningOpacity')?.value || 0.8);
-
-                console.log(`Adding MapsGL Layer: ${config.id} with opacity: ${currentOpacity}`);
-
-                // Pass the opacity in the options object
-                mapsglController.addWeatherLayer(config.id, {
-                    opacity: currentOpacity
-                });
-
-                updateLegend(); // Show the MapsGL legend in your container
-                return;
-            }
-
-            // 6. Handle Standard Layers
-            const timestamp = getCurrentSliderTimestamp();
-            plotLayerIfNecessary(newType, lightningOptions, timestamp, 'lightning');
-
+            if (newType !== 'windy-live-lightning') stopWindyLiveLightning(true);
+            if (newType !== 'xweather-lightning' && window.xWeatherLayers['xweather-lightning']) { map.removeLayer(window.xWeatherLayers['xweather-lightning']); window.xWeatherLayers['xweather-lightning'] = null; }
+            if (mapsglController) ['lightning-all', 'lightning-density', 'lightning-density-accum'].forEach(id => { if (config?.type !== 'mapsgl' || config.id !== id) mapsglController.removeWeatherLayer(id); });
+            if (config && config.type === 'custom-live-windy-lightning') { startWindyLiveLightning(); updateLegend(); return; }
+            if (config && config.type === 'mapsgl') { const currentOpacity = parseFloat(document.getElementById('lightningOpacity')?.value || 0.8); mapsglController.addWeatherLayer(config.id, { opacity: currentOpacity }); updateLegend(); return; }
+            plotLayerIfNecessary(newType, lightningOptions, getCurrentSliderTimestamp(), 'lightning');
             updateLegend();
         }
         function observationLayerTypeHandler() {
@@ -7573,28 +8653,7 @@
             updateLegendContainer(); // Ensure correct container
         }
 
-        // Modify toggle3DMode to update legend container
-        function toggle3DMode() {
-            is3DMode = !is3DMode;
-            document.body.classList.toggle('three-d-mode', is3DMode);
-            if (is3DMode) {
-                document.getElementById('map').style.opacity = '0';
-                document.getElementById('map').style.pointerEvents = 'none';
-                document.getElementById('map-3d').style.display = 'block';
-                document.getElementById('map-3d').style.opacity = '1';
-                map3D.resize();
-                update3DView();
-            } else {
-                document.getElementById('map').style.opacity = '1';
-                document.getElementById('map').style.pointerEvents = 'auto';
-                document.getElementById('map-3d').style.display = 'none';
-                document.getElementById('map-3d').style.opacity = '0';
-                map.invalidateSize();
-            }
-            updateLegendContainer(); // Move legend to correct container
-            updateZIndex();
-            updateLegend();
-        }
+
         function initializeRectangleExport() {
             // Add Export Rectangle Strikes button
             const exportButton = document.createElement('button');
@@ -8221,36 +9280,7 @@
 
         }
 
-        // Toggle 3D mode
-        function toggle3DMode() {
-            is3DMode = !is3DMode;
-            const button = document.querySelector('#top-bar button[onclick="toggle3DMode()"]') || document.querySelector('#control-panel button[onclick="toggle3DMode()"]');
-            if (button) {
-                button.textContent = is3DMode ? 'Switch to 2D' : 'Switch to 3D';
-            }
-            document.body.classList.toggle('three-d-mode', is3DMode);
-            if (is3DMode) {
-                map3D.resize();
-                syncPolygonsTo3D();
-                if (isDrawingEnabled) {
-                    isDrawingEnabled = false;
-                    const drawButton = document.querySelector('#top-bar button[onclick="toggleDrawing()"]') || document.querySelector('#control-panel button[onclick="toggleDrawing()"]');
-                    if (drawButton) {
-                        drawButton.textContent = 'Enable Drawing';
-                    }
-                    console.log('Drawing disabled when switching to 3D mode');
-                }
-            } else {
-                map.getContainer().style.display = 'block';
-                map.getContainer().style.opacity = '1';
-                map.getContainer().style.height = 'auto';
-                map.getContainer().style.overflow = 'visible';
-                clear3DPolygons();
-                map3D.getContainer().style.opacity = '0';
-            }
-            updateLegend();
-            console.log('Toggled to', is3DMode ? '3D' : '2D', 'mode, synced polygons');
-        }
+
 
         // Toggle drawing mode
         function toggleDrawing() {
@@ -8302,6 +9332,7 @@
         }
         // Sync 2D polygons to 3D
         function syncPolygonsTo3D() {
+            if (!map3D || !map3D.isStyleLoaded()) return;
             clear3DPolygons();
             console.log('Syncing polygons to 3D, drawnItems layers:', drawnItems.getLayers().length);
             drawnItems.eachLayer(layer => {
@@ -8731,8 +9762,8 @@
 
             if (isDark) {
                 // Switch to a good dark base map
-                mapStyleSelect.value = 'mapbox-dark'; // or 'mapbox-dark' or 'maptiler-dark'
-                switchBaseMap('mapbox-dark');
+                mapStyleSelect.value = 'mapbox-traffic-day'; // or 'mapbox-dark' or 'maptiler-dark'
+                switchBaseMap('mapbox-traffic-day');
 
                 // Update button text
                 event.target.textContent = '☀️ Light Mode';
@@ -8895,14 +9926,25 @@
             if (is3DMode) {
                 map3D.jumpTo({ center: [-4.5, 53.5], zoom: 5 });
                 map3D.resize();
-                update3DView();
-                toggleKMLLayer();
-                togglePNGLayer();
-                syncPolygonsTo3D();
-                updateOverlay(currentFiltered);
-                toggleNowcast();
-                updateLegend();
-                updateTerrainExaggeration();
+
+                // Bundle the drawing functions into a setup variable
+                const setup3DEnvironment = () => {
+                    update3DView();
+                    toggleKMLLayer();
+                    togglePNGLayer();
+                    syncPolygonsTo3D();
+                    updateOverlay(currentFiltered);
+                    toggleNowcast();
+                    updateLegend();
+                    updateTerrainExaggeration();
+                };
+
+                // Check if Mapbox is ready; if not, wait for the 'style.load' event
+                if (map3D.isStyleLoaded()) {
+                    setup3DEnvironment();
+                } else {
+                    map3D.once('style.load', setup3DEnvironment);
+                }
             } else {
                 map.invalidateSize();
                 map.addLayer(drawnItems);
@@ -8914,6 +9956,7 @@
 
 
         function update3DView() {
+            if (!map3D || !map3D.isStyleLoaded()) return;
             // Clear existing layers
             strikeLayer3D.forEach(marker => marker.remove());
             strikeLayer3D = [];
@@ -9340,6 +10383,123 @@
             return '⏱️ ' + result.trim() + (minutesBack > 0 ? ' ago | ' : ' from now | ');
         }
 
+        /**
+         * A lightweight L.CircleMarker subclass that renders as a "+" glyph instead of a
+         * filled circle. Used for strike markers so dense clusters don't paint a solid
+         * blob that occludes the radar layer underneath — only the thin cross strokes
+         * cover the radar, leaving most of the pixel visible.
+         *
+         * Stays within Leaflet's normal SVG/Canvas Path rendering pipeline (same _point/
+         * _radius the renderer already computes for CircleMarker), so it's a drop-in
+         * replacement: setStyle(), bindPopup(), addLayer()/removeLayer() all still work,
+         * and it's exactly as cheap to redraw as a regular circleMarker.
+         */
+        L.CrossMarker = L.CircleMarker.extend({
+            _updatePath: function () {
+                const renderer = this._renderer;
+                const p = this._point;
+                const r = Math.max(Math.round(this._radius), 2);
+
+                if (!p) return;
+
+                if (renderer._ctx) {
+                    // Canvas renderer: draw two strokes directly, skip SVG path string
+                    const ctx = renderer._ctx;
+                    if (!renderer._drawing || this._empty()) return;
+                    ctx.beginPath();
+                    ctx.moveTo(p.x - r, p.y);
+                    ctx.lineTo(p.x + r, p.y);
+                    ctx.moveTo(p.x, p.y - r);
+                    ctx.lineTo(p.x, p.y + r);
+                    ctx.lineWidth = this.options.weight + 1; // crosses read thin; bump for visibility
+                    ctx.strokeStyle = this.options.color;
+                    ctx.globalAlpha = this.options.opacity;
+                    ctx.stroke();
+                    return;
+                }
+
+                // SVG renderer: build a "+" as a single path (two strokes, no fill)
+                const d = this._empty() ? 'M0 0' :
+                    'M' + (p.x - r) + ',' + p.y + 'L' + (p.x + r) + ',' + p.y +
+                    'M' + p.x + ',' + (p.y - r) + 'L' + p.x + ',' + (p.y + r);
+                renderer._setPath(this, d);
+            }
+        });
+
+        L.crossMarker = function (latlng, options) {
+            return new L.CrossMarker(latlng, options);
+        };
+
+
+        function renderStrikeMarkers(filtered, end, lifespanHours, currentBounds) {
+            const colorModeEl = document.getElementById('color-mode');
+            const lightningToggle = document.getElementById('lightning-layer-toggle');
+            const colorMode = !!(colorModeEl && colorModeEl.checked);
+            const lightningLayerOn = !!(lightningToggle && lightningToggle.checked);
+            const newStrikeKeys = new Set();
+            const toRemove = [];
+            const maxVisibleFlashes = LOW_END_NOWCAST_MODE ? 4 : MAX_FLASHES_PER_CYCLE;
+            const maxMarkerCount = LOW_END_NOWCAST_MODE ? 2500 : 9000;
+            const step = filtered.length > maxMarkerCount ? Math.ceil(filtered.length / maxMarkerCount) : 1;
+            const lifespanMs = Math.max(1, lifespanHours * 3600 * 1000);
+            flashesThisCycle = 0;
+            strikeCircles = [];
+
+            for (let i = 0; i < filtered.length; i += step) {
+                const s = filtered[i];
+                if (!s || !s.time || !s.coordinates) continue;
+                const lon = +s.coordinates[0];
+                const lat = +s.coordinates[1];
+                if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+
+                const strikeKey = s._markerKey || (s._markerKey = `${+s.time}_${lon.toFixed(4)}_${lat.toFixed(4)}`);
+                newStrikeKeys.add(strikeKey);
+
+                const ageFraction = (end - s.time) / lifespanMs;
+                const color = colorMode ? getColorFromAge(ageFraction) : '#111111';
+                let marker = strikeMarkerMap.get(strikeKey);
+                const isNewStrike = !marker;
+
+                if (!marker) {
+                    marker = L.crossMarker([lat, lon], {
+                        radius: LOW_END_NOWCAST_MODE ? 5 : 6,
+                        color,
+                        weight: LOW_END_NOWCAST_MODE ? 1.5 : 2,
+                        opacity: 0.9,
+                        fill: false,
+                        interactive: !LOW_END_NOWCAST_MODE
+                    });
+                    if (!LOW_END_NOWCAST_MODE) marker.bindPopup(() => s.time.toISOString());
+                    strikeLayer.addLayer(marker);
+                    strikeMarkerMap.set(strikeKey, marker);
+                } else if (marker._lastColor !== color) {
+                    marker.setStyle({ color });
+                }
+                marker._lastColor = color;
+                strikeCircles.push({ circle: marker, strike: s });
+
+                if (isNewStrike && lightningLayerOn && flashesThisCycle < maxVisibleFlashes) {
+                    const inBounds = is3DMode
+                        ? currentBounds.contains([lon, lat])
+                        : currentBounds.contains([lat, lon]);
+                    if (inBounds) {
+                        if (!LOW_END_NOWCAST_MODE) playThunderSound();
+                        if (!is3DMode) addLightningFlash2D(lat, lon);
+                        flashesThisCycle++;
+                    }
+                }
+            }
+
+            strikeMarkerMap.forEach((marker, key) => {
+                if (!newStrikeKeys.has(key)) toRemove.push([key, marker]);
+            });
+            for (let i = 0; i < toRemove.length; i++) {
+                strikeLayer.removeLayer(toRemove[i][1]);
+                strikeMarkerMap.delete(toRemove[i][0]);
+            }
+            return newStrikeKeys;
+        }
+
         function updateHistory() {
             isAdjustingHistory = true;
             const slider = document.getElementById('history-slider');
@@ -9435,10 +10595,7 @@
             animationStart = start;
             animationEnd = end;
 
-            strikeLayer.clearLayers();
-            strikeCircles = [];
             const currentBounds = is3DMode ? map3D.getBounds() : map.getBounds();
-            const newStrikes = new Set();
 
             currentFiltered = strikeData.filter(s => {
                 if (showAllStrikes) {
@@ -9447,41 +10604,42 @@
                 return s.time >= start && s.time <= end;
             });
 
-            currentFiltered.forEach(s => {
-                const strikeKey = `${s.time.toISOString()}_${s.coordinates[0]}_${s.coordinates[1]}`;
-                newStrikes.add(strikeKey);
-                const isNewStrike = !lastRenderedStrikes.has(strikeKey);
-                const inBounds = is3DMode ?
-                    currentBounds.contains([s.coordinates[0], s.coordinates[1]]) :
-                    currentBounds.contains([s.coordinates[1], s.coordinates[0]]);
-                const ageFraction = (end - s.time) / (lifespanHours * 3600 * 1000);
-                const color = document.getElementById('color-mode').checked ? getColorFromAge(ageFraction) : 'black';
-                const circle = L.circleMarker([s.coordinates[1], s.coordinates[0]], {
-                    radius: 5,
-                    color: color,
-                    fillColor: color,
-                    fillOpacity: 0.8
-                }).bindPopup(s.time.toISOString());
-                strikeLayer.addLayer(circle);
-                strikeCircles.push({ circle, strike: s });
-                if (isNewStrike && inBounds && document.getElementById('lightning-layer-toggle').checked) {
-                    playThunderSound();
-                    if (!is3DMode) addLightningFlash2D(s.coordinates[1], s.coordinates[0]);
-                }
-            });
+            lastRenderedStrikes = renderStrikeMarkers(currentFiltered, end, lifespanHours, currentBounds);
 
-            lastRenderedStrikes = newStrikes;
+            // Heatmap/counter redraws can be heavy. During animation, debounce them harder.
+            clearTimeout(heatmapOverlayThrottle);
+            const heatmapDelay = isPlaying ? 450 : 0;
+            heatmapOverlayThrottle = setTimeout(() => {
+                updateHeatmap(currentFiltered);
+                updateOverlay(currentFiltered);
+            }, heatmapDelay);
 
-            updateHeatmap(currentFiltered);
-            updateOverlay(currentFiltered);
-            updateNowcast(currentFiltered);
-            updateZIndex();
+            // Local nowcast calculation is the main CPU hotspot. Keep the last nowcast during playback
+            // and refresh it once playback stops. This applies to both detected high and low-end devices.
+            clearTimeout(nowcastThrottle);
+            if (!isPlaying || ANIMATION_REFRESH_NOWCAST) {
+                nowcastThrottle = setTimeout(() => updateNowcast(currentFiltered), isPlaying ? 1200 : 180);
+            }
+
+            // Re-layering every frame is expensive; only do it occasionally in animation.
+            if (!isPlaying || Date.now() - lastZIndexUpdateTime > 1500) {
+                updateZIndex();
+                lastZIndexUpdateTime = Date.now();
+            }
             updateLegend();
-            updateMapLayers(end.getTime());
 
-            if (is3DMode) update3DView();
+            // Weather/radar tile layer checks are also expensive. Throttle them separately.
+            if (!isPlaying || Date.now() - lastWeatherLayerUpdateTime > ANIMATION_WEATHER_INTERVAL_MS) {
+                lastWeatherLayerUpdateTime = Date.now();
+                updateMapLayers(end.getTime());
+            }
 
-            setTimeout(() => { isAdjustingHistory = false; }, 1000);
+            if (is3DMode && (!isPlaying || Date.now() - lastWeatherLayerUpdateTime > ANIMATION_WEATHER_INTERVAL_MS)) update3DView();
+
+            setTimeout(() => {
+                if (typeof renderWindyLightningArchive === 'function' && isWindyLiveLightningSelected()) renderWindyLightningArchive(); // update Windy archive after slider/time change
+                isAdjustingHistory = false;
+            }, isPlaying ? 150 : 1000);
         }
 
         function removeTimeFilter() {
@@ -9580,6 +10738,8 @@
         async function fetchData() {
             const githubUrl1 = 'https://raw.githubusercontent.com/HandryOutlook/lightning_data_new/refs/heads/main/lightning_data.json';
             const githubUrl2 = 'https://raw.githubusercontent.com/HandryOutlook/lightning_data_new/refs/heads/main/lightning_data_2025_autumn.json';
+            const githubUrl3 = 'https://raw.githubusercontent.com/HandryOutlook/lightning_data_new_2026/refs/heads/main/lightning_data_2026_summer_part1.json';
+            const githubUrl4 = 'https://raw.githubusercontent.com/HandryOutlook/lightning_data_new_2026/refs/heads/main/lightning_data_2026_summer.json';
             const metOfficeBaseUrl = 'https://data.consumer-digital.api.metoffice.gov.uk/v1/lightning';
 
             try {
@@ -9608,6 +10768,8 @@
                 const fetchPromises = [
                     fetch(githubUrl1).then(res => res.json()).catch(() => null),
                     fetch(githubUrl2).then(res => res.json()).catch(() => null),
+                    fetch(githubUrl3).then(res => res.json()).catch(() => null),
+                    fetch(githubUrl4).then(res => res.json()).catch(() => null),
                     ...chunkUrls.map(url => fetch(url).then(res => res.json()).catch(() => null))
                 ];
 
@@ -9667,7 +10829,7 @@
         }
 
         function getColorFromAge(ageFraction) {
-
+            if (ageFraction < 0.05) return '#ff0000';
             if (ageFraction < 0.2) return '#ffd700'; // Newest
             if (ageFraction < 0.4) return '#ff69b4';
             if (ageFraction < 0.6) return '#ff00ff';
@@ -9799,6 +10961,7 @@
                 legendDiv.innerHTML += '<h4>Lightning Strikes</h4>';
                 if (colorMode) {
                     legendDiv.innerHTML += `
+        <div><div class="color-box" style="background: #ff0000"></div>Newest</div>
         <div><div class="color-box" style="background: #ffd700"></div>Newest</div>
         <div><div class="color-box" style="background: #ff69b4"></div></div>
         <div><div class="color-box" style="background: #ff00ff"></div></div>
@@ -10333,10 +11496,7 @@
             slider.value = totalMinutes;
             slider.min = 0;
 
-            strikeLayer.clearLayers();
-            strikeCircles = [];
             const currentBounds = is3DMode ? map3D.getBounds() : map.getBounds();
-            const newStrikes = new Set();
 
             currentFiltered = strikeData.filter(s => {
                 if (showAllStrikes) {
@@ -10348,41 +11508,20 @@
             // Sort strikes by time (oldest first) to ensure newer strikes are plotted on top
             currentFiltered.sort((a, b) => a.time.getTime() - b.time.getTime());
 
-            currentFiltered.forEach(s => {
-                const strikeKey = `${s.time.toISOString()}_${s.coordinates[0]}_${s.coordinates[1]}`;
-                newStrikes.add(strikeKey);
-                const isNewStrike = !lastRenderedStrikes.has(strikeKey);
-                const inBounds = is3DMode ?
-                    currentBounds.contains([s.coordinates[0], s.coordinates[1]]) :
-                    currentBounds.contains([s.coordinates[1], s.coordinates[0]]);
-                const lifespanHours = parseFloat(document.getElementById('lightning-lifespan').value);
-                const ageFraction = (end - s.time) / (lifespanHours * 3600 * 1000);
-                const color = document.getElementById('color-mode').checked ? getColorFromAge(ageFraction) : 'black';
-                const circle = L.circleMarker([s.coordinates[1], s.coordinates[0]], {
-                    radius: 5,
-                    color: color,
-                    fillColor: color,
-                    fillOpacity: 0.8
-                }).bindPopup(s.time.toISOString());
-                strikeLayer.addLayer(circle);
-                strikeCircles.push({ circle, strike: s });
-                if (isNewStrike && inBounds && document.getElementById('lightning-layer-toggle').checked) {
-                    playThunderSound();
-                    if (!is3DMode) addLightningFlash2D(s.coordinates[1], s.coordinates[0]);
-                }
-            });
-
-            lastRenderedStrikes = newStrikes;
+            const lifespanHours = parseFloat(document.getElementById('lightning-lifespan').value);
+            lastRenderedStrikes = renderStrikeMarkers(currentFiltered, end, lifespanHours, currentBounds);
 
             updateHeatmap(currentFiltered);
             updateOverlay(currentFiltered);
-            updateNowcast(currentFiltered);
+            clearTimeout(nowcastThrottle);
+            nowcastThrottle = setTimeout(() => updateNowcast(currentFiltered), 150);
             document.getElementById('time-range').innerText = `Filter applied: ${start.toLocaleString()} - ${end.toLocaleString()}`;
             document.getElementById('history-label').innerText = formatTimeAgo(0);
             document.getElementById('history-time').innerText = `${start.toLocaleString()} - ${end.toLocaleString()}`;
             document.getElementById('remove-filter').style.display = 'block';
             updateZIndex();
             updateLegend();
+            triggerMapUpdate(end.getTime(), true);
             if (is3DMode) update3DView();
         }
         /**
@@ -10461,7 +11600,7 @@
                 } else {
                     color = 'black';
                 }
-                circle.setStyle({ color, fillColor: color });
+                circle.setStyle({ color });
             });
             if (is3DMode) update3DView();
             updateLegend();
@@ -10697,7 +11836,11 @@
                 numberOverlay.setZIndex(numbersZ);
                 map.addLayer(numberOverlay);
             }
-
+            if (hocoLayerGroup) {
+                hocoLayerGroup.eachLayer(layer => {
+                    if (layer.setZIndex) layer.setZIndex(HOCO_Z_INDEX);
+                });
+            }
             // In 3D mode, ensure correct layer order by re-adding layers
             if (is3DMode) {
                 // Remove existing 3D layers
@@ -10957,14 +12100,13 @@
             const maxValue = parseFloat(slider.max);
             const speed = parseFloat(document.getElementById('speed-slider').value); // Minutes per second
             let lastFrameTime = performance.now();
+            let lastMapUpdateTime = 0;
 
             function animate(currentTime) {
                 if (!isPlaying) return;
 
-                const deltaTime = (currentTime - lastFrameTime) / 1000; // Time since last frame in seconds
+                const deltaTime = (currentTime - lastFrameTime) / 1000;
                 lastFrameTime = currentTime;
-
-                // Increment slider value: speed (min/sec) * deltaTime (sec) = minutes to advance
                 currentValue += speed * deltaTime;
 
                 if (currentValue >= maxValue) {
@@ -10976,7 +12118,12 @@
                 }
 
                 slider.value = currentValue;
-                updateHistory();
+
+                // Slider remains smooth, but expensive map/nowcast/weather work is capped.
+                if (currentTime - lastMapUpdateTime >= ANIMATION_MAP_INTERVAL_MS) {
+                    lastMapUpdateTime = currentTime;
+                    updateHistory();
+                }
 
                 animationInterval = requestAnimationFrame(animate);
             }
@@ -10990,6 +12137,9 @@
                 animationInterval = null;
             }
             isPlaying = false;
+            clearTimeout(nowcastThrottle);
+            nowcastThrottle = setTimeout(() => updateNowcast(currentFiltered), 120);
+            updateMapLayers(animationEnd ? animationEnd.getTime() : Date.now());
         }
 
         function toggleFullScreen() {
@@ -11163,8 +12313,26 @@
 
             if (document.getElementById('nowcast-toggle').checked && !is3DMode) {
 
-                // Recalculate based on current data
-                currentNowcasts = calculateLightningNowcast(currentFiltered);
+                // Recalculate based on current data with bounded-complexity cache.
+                const nowcastCalcKey = [
+                    currentFiltered ? currentFiltered.length : 0,
+                    currentFiltered && currentFiltered.length ? currentFiltered[0].time.getTime() : 0,
+                    currentFiltered && currentFiltered.length ? currentFiltered[currentFiltered.length - 1].time.getTime() : 0,
+                    animationEnd ? Math.floor(animationEnd.getTime() / 60000) : 0,
+                    minNowcastConfidence,
+                    NOWCAST_MAX_INPUT_POINTS,
+                    NOWCAST_MAX_CLUSTERS,
+                    NOWCAST_RANSAC_MAX,
+                    NOWCAST_FORECAST_STEPS.join('-')
+                ].join('|');
+
+                if (nowcastCalcKey === lastNowcastCalcKey) {
+                    currentNowcasts = lastNowcastCalcResult;
+                } else {
+                    currentNowcasts = calculateLightningNowcast(currentFiltered);
+                    lastNowcastCalcKey = nowcastCalcKey;
+                    lastNowcastCalcResult = currentNowcasts;
+                }
 
                 currentNowcasts.forEach((cluster) => {
                     const confidence = cluster.confidenceScore;
@@ -11188,8 +12356,8 @@
                         if (potentialImpact.includes('LEVEL 5 - EXTREME') || potentialImpact.includes('LEVEL 4 - HIGH')) {
                             // Apply special styling for high-risk alerts
                             customStrokeColor = '#8A2BE2'; // BlueViolet/Purple
-                            customStrokeWeight = 8;        // Thick outline for the hull
-                            forecastStrokeWeight = 4;      // Thicker outline for the forecast polygons
+                            customStrokeWeight = 9;        // Thick outline for the hull
+                            forecastStrokeWeight = 5;      // Thicker outline for the forecast polygons
                         }
                         // ------------------------------------------
 
@@ -11207,12 +12375,23 @@
                                     const finalFillOpacity = baseOpacity * timeDecayFactor * 0.3;
 
                                     L.polygon(latLngs, {
+                                        pane: 'nowcastFillPane',
+                                        renderer: nowcastFillRenderer,
+                                        stroke: false,
+                                        fillColor: confidenceColor,
+                                        fillOpacity: finalFillOpacity,
+                                        interactive: false
+                                    }).addTo(polygonNowcastLayer);
+
+                                    L.polygon(latLngs, {
+                                        pane: 'nowcastOutlinePane',
+                                        renderer: nowcastOutlineRenderer,
                                         // Use conditional weight/color for forecast stroke
                                         color: customStrokeColor !== 'black' ? customStrokeColor : confidenceColor,
                                         weight: forecastStrokeWeight,
                                         opacity: finalStrokeOpacity,
                                         fillColor: confidenceColor,
-                                        fillOpacity: finalFillOpacity,
+                                        fillOpacity: 0,
                                         dashArray: '5, 5'
                                     }).bindPopup(`
                                 <div style="font-size: 14px;">
@@ -11231,9 +12410,22 @@
                             if (cluster.hullGeometry) {
 
                                 L.geoJSON(cluster.hullGeometry, {
+                                    pane: 'nowcastFillPane',
+                                    renderer: nowcastFillRenderer,
+                                    interactive: false,
                                     style: {
                                         fillColor: confidenceColor,
                                         fillOpacity: Math.min(baseOpacity, 0.7),
+                                        stroke: false
+                                    }
+                                }).addTo(polygonNowcastLayer);
+
+                                L.geoJSON(cluster.hullGeometry, {
+                                    pane: 'nowcastOutlinePane',
+                                    renderer: nowcastOutlineRenderer,
+                                    style: {
+                                        fillColor: confidenceColor,
+                                        fillOpacity: 0,
                                         // Apply conditional stroke color and weight
                                         color: customStrokeColor,
                                         weight: customStrokeWeight,
@@ -11489,10 +12681,13 @@
             const referenceTime = typeof animationEnd !== 'undefined' && animationEnd ? new Date(animationEnd) : new Date();
 
             const initialMaxTimeRange = 7 * 3600 * 1000;
-            const recentLightning = lightningData.filter(s => (referenceTime.getTime() - s.time.getTime()) <= initialMaxTimeRange);
+            let recentLightning = lightningData.filter(s => (referenceTime.getTime() - s.time.getTime()) <= initialMaxTimeRange);
             const recentLightningLength = recentLightning.length;
 
             recentLightning.sort((a, b) => a.time.getTime() - b.time.getTime());
+            if (recentLightning.length > NOWCAST_MAX_INPUT_POINTS) {
+                recentLightning = recentLightning.slice(-NOWCAST_MAX_INPUT_POINTS);
+            }
 
             // --- BASE PARAMETER DEFINITION (Dynamic) ---
 
@@ -11542,7 +12737,7 @@
 
             let maxTemporalSeparation = Math.max(10 * 60 * 1000, 30 * 60 * 1000 * (1.0 - densityRatio * 0.6));
 
-            let ransacIterations = Math.min(250, 100 + Math.floor(recentLightningLength / 2));
+            let ransacIterations = Math.min(NOWCAST_RANSAC_MAX, 25 + Math.floor(recentLightningLength / 18));
             let baseDecayConstant = 0.5 + (0.1 * densityRatio);
             let binSize = 5 * 60 * 1000;
             let jumpAnalysisWindow = 10 * 60 * 1000;
@@ -11550,7 +12745,10 @@
             // NEW CONSTANT: Enforce a speed cap, especially useful for highly stable, slow-moving cells
             const maxSpeedCapKmH = 80;
 
-            const finalLightning = recentLightning.filter(s => (referenceTime.getTime() - s.time.getTime()) <= maxTimeRange);
+            let finalLightning = recentLightning.filter(s => (referenceTime.getTime() - s.time.getTime()) <= maxTimeRange);
+            if (finalLightning.length > NOWCAST_MAX_INPUT_POINTS) {
+                finalLightning = finalLightning.slice(-NOWCAST_MAX_INPUT_POINTS);
+            }
 
             // --- 1. CLUSTERING ---
             const clusters = clusterLightningStrikes(finalLightning, { minClusterSize, maxDistance, maxTemporalSeparation });
@@ -11559,7 +12757,7 @@
             const rawClusterInfos = [];
             const minBinCountForHighConfidence = 5;
 
-            clusters.forEach((cluster) => {
+            clusters.sort((a, b) => b.length - a.length).slice(0, NOWCAST_MAX_CLUSTERS).forEach((cluster) => {
                 const strikeTimes = cluster.map(s => s.time.getTime());
                 const minTime = Math.min(...strikeTimes);
                 const maxTime = Math.max(...strikeTimes);
@@ -11736,7 +12934,7 @@
                 const nowcastPolygons = [];
                 if (hullGeometry && hullGeometry.geometry && hullGeometry.geometry.coordinates) {
                     const hullCoords = hullGeometry.geometry.coordinates[0];
-                    const projectionTimesMin = [15, 30, 45, 60];
+                    const projectionTimesMin = NOWCAST_FORECAST_STEPS;
 
                     for (const tMin of projectionTimesMin) {
                         const distanceKm = moderatedSpeedKmH * (tMin / 60);
@@ -11787,12 +12985,58 @@
          * ==================================================================================
          */
 
+        /**
+         * Builds a uniform lat/lon grid index over the strikes so that neighbor
+         * lookups only need to scan nearby cells instead of the entire dataset.
+         * cellSizeKm should be >= the largest search radius you'll query with,
+         * so that a 3x3 block of cells always covers the full search radius.
+         */
+        function buildSpatialGrid(lightningData, cellSizeKm) {
+            const grid = new Map();
+            const KM_PER_DEG_LAT = 111;
+
+            const cellKeyFor = (lat, lon) => {
+                const latDeg = cellSizeKm / KM_PER_DEG_LAT;
+                // Guard against lon-cell collapsing to 0-width near the poles
+                const lonDeg = cellSizeKm / (KM_PER_DEG_LAT * Math.max(0.1, Math.cos(lat * Math.PI / 180)));
+                const row = Math.floor(lat / latDeg);
+                const col = Math.floor(lon / lonDeg);
+                return { row, col, key: `${row}_${col}`, latDeg, lonDeg };
+            };
+
+            lightningData.forEach((s, idx) => {
+                const [lon, lat] = s.coordinates;
+                const { key } = cellKeyFor(lat, lon);
+                if (!grid.has(key)) grid.set(key, []);
+                grid.get(key).push(idx);
+            });
+
+            // Returns indices of all strikes in the 3x3 block of cells around (lat, lon)
+            function queryNearby(lat, lon) {
+                const { row, col, latDeg, lonDeg } = cellKeyFor(lat, lon);
+                const result = [];
+                for (let dr = -1; dr <= 1; dr++) {
+                    for (let dc = -1; dc <= 1; dc++) {
+                        const bucket = grid.get(`${row + dr}_${col + dc}`);
+                        if (bucket) result.push(...bucket);
+                    }
+                }
+                return result;
+            }
+
+            return { queryNearby };
+        }
+
         function clusterLightningStrikes(lightningData, params) {
             if (!lightningData || lightningData.length === 0) return [];
 
             const { minClusterSize, maxDistance, maxTemporalSeparation } = params;
             const localDensityWindowMs = 5 * 60 * 1000;
             const densityDistanceKm = 50;
+
+            // Cell size must cover the largest radius we query (density check or neighbor search)
+            const cellSizeKm = Math.max(densityDistanceKm, maxDistance);
+            const spatialIndex = buildSpatialGrid(lightningData, cellSizeKm);
 
             const clusters = [];
             const used = new Set();
@@ -11809,15 +13053,19 @@
                     const strike = lightningData[idx];
                     currentCluster.push(strike);
 
-                    const localDensityCount = lightningData.filter(s =>
-                        (strike.time.getTime() - s.time.getTime()) <= localDensityWindowMs &&
-                        calculateDistance(strike.coordinates, s.coordinates) <= densityDistanceKm
-                    ).length;
+                    // Only scan nearby strikes (3x3 grid cells) instead of the full dataset
+                    const nearbyIndices = spatialIndex.queryNearby(strike.coordinates[1], strike.coordinates[0]);
+
+                    const localDensityCount = nearbyIndices.filter(j => {
+                        const s = lightningData[j];
+                        return (strike.time.getTime() - s.time.getTime()) <= localDensityWindowMs &&
+                            calculateDistance(strike.coordinates, s.coordinates) <= densityDistanceKm;
+                    }).length;
 
                     const densityFactor = Math.max(0.5, 1.0 - (localDensityCount / 50) * 0.5);
                     const dynamicMaxDistance = maxDistance * densityFactor;
 
-                    for (let j = 0; j < lightningData.length; j++) {
+                    for (const j of nearbyIndices) {
                         if (used.has(j)) continue;
                         const neighbor = lightningData[j];
                         const dist = calculateDistance(strike.coordinates, neighbor.coordinates);
@@ -12084,7 +13332,25 @@
 
             // 4. CALCULATE NOWCAST WITH FILTERED DATA
             const minNowcastConfidence = parseFloat(document.getElementById('min-nowcast-confidence').value) || 0.5;
-            currentNowcasts = calculateLightningNowcast(filtered);
+            const nowcastCalcKey = [
+                filtered ? filtered.length : 0,
+                filtered && filtered.length ? filtered[0].time.getTime() : 0,
+                filtered && filtered.length ? filtered[filtered.length - 1].time.getTime() : 0,
+                animationEnd ? Math.floor(animationEnd.getTime() / 60000) : 0,
+                minNowcastConfidence,
+                NOWCAST_MAX_INPUT_POINTS,
+                NOWCAST_MAX_CLUSTERS,
+                NOWCAST_RANSAC_MAX,
+                NOWCAST_FORECAST_STEPS.join('-')
+            ].join('|');
+
+            if (nowcastCalcKey === lastNowcastCalcKey) {
+                currentNowcasts = lastNowcastCalcResult;
+            } else {
+                currentNowcasts = calculateLightningNowcast(filtered);
+                lastNowcastCalcKey = nowcastCalcKey;
+                lastNowcastCalcResult = currentNowcasts;
+            }
 
             // 5. DRAWING LOOP (Local Data)
             currentNowcasts.forEach((cluster, index) => {
@@ -12097,13 +13363,13 @@
                 const impactHtml = getImpactHtml(potentialImpact);
 
                 let customStrokeColor = 'red';
-                let customStrokeWeight = 2;
-                let forecastStrokeWeight = 1;
+                let customStrokeWeight = 3;
+                let forecastStrokeWeight = 2;
 
                 if (potentialImpact.includes('LEVEL 5') || potentialImpact.includes('LEVEL 4')) {
                     customStrokeColor = '#8A2BE2'; // Purple alert
-                    customStrokeWeight = 8;
-                    forecastStrokeWeight = 4;
+                    customStrokeWeight = 9;
+                    forecastStrokeWeight = 5;
                 }
 
                 if (!is3DMode) {
@@ -12113,13 +13379,25 @@
                         cluster.nowcastPolygons.forEach(forecast => {
                             const latLngs = forecast.polygon.map(p => [p[1], p[0]]);
                             const timeDecay = 1.0 - (forecast.timeMinutes / 80);
+                            const finalFillOpacity = baseOpacity * timeDecay * 0.3;
 
                             L.polygon(latLngs, {
+                                pane: 'nowcastFillPane',
+                                renderer: nowcastFillRenderer,
+                                stroke: false,
+                                fillColor: confidenceColor,
+                                fillOpacity: finalFillOpacity,
+                                interactive: false
+                            }).addTo(polygonNowcastLayer);
+
+                            L.polygon(latLngs, {
+                                pane: 'nowcastOutlinePane',
+                                renderer: nowcastOutlineRenderer,
                                 color: customStrokeColor !== 'black' ? customStrokeColor : confidenceColor,
                                 weight: forecastStrokeWeight,
                                 opacity: baseOpacity * timeDecay,
                                 fillColor: confidenceColor,
-                                fillOpacity: baseOpacity * timeDecay * 0.3,
+                                fillOpacity: 0,
                                 dashArray: '5, 5'
                             }).bindPopup(`
                                 <div class="weather-popup-container light-theme" style="min-width: 260px; border-top: 4px solid ${confidenceColor};">
@@ -12154,9 +13432,22 @@
 
                     if (cluster.hullGeometry) {
                         L.geoJSON(cluster.hullGeometry, {
+                            pane: 'nowcastFillPane',
+                            renderer: nowcastFillRenderer,
+                            interactive: false,
                             style: {
                                 fillColor: confidenceColor,
                                 fillOpacity: Math.min(baseOpacity, 0.7),
+                                stroke: false
+                            }
+                        }).addTo(polygonNowcastLayer);
+
+                        L.geoJSON(cluster.hullGeometry, {
+                            pane: 'nowcastOutlinePane',
+                            renderer: nowcastOutlineRenderer,
+                            style: {
+                                fillColor: confidenceColor,
+                                fillOpacity: 0,
                                 color: customStrokeColor,
                                 weight: customStrokeWeight,
                                 opacity: 0.9
@@ -12285,16 +13576,18 @@
 
         map.on('moveend', () => {
             if (!is3DMode && document.getElementById('lightning-layer-toggle').checked) {
+                if (LOW_END_NOWCAST_MODE) return; // avoid full strike scans while panning on low-end devices
                 const currentBounds = map.getBounds();
-                currentFiltered.forEach(s => {
-                    const strikeKey = `${s.time.toISOString()}_${s.coordinates[0]}_${s.coordinates[1]}`;
-                    const isNewStrike = !lastRenderedStrikes.has(strikeKey);
-                    const inBounds = currentBounds.contains([s.coordinates[1], s.coordinates[0]]);
-                    if (isNewStrike && inBounds) {
+                let flashes = 0;
+                for (let i = Math.max(0, currentFiltered.length - 1500); i < currentFiltered.length; i++) {
+                    const s = currentFiltered[i];
+                    const strikeKey = s._markerKey || `${+s.time}_${(+s.coordinates[0]).toFixed(4)}_${(+s.coordinates[1]).toFixed(4)}`;
+                    if (!lastRenderedStrikes.has(strikeKey) && currentBounds.contains([s.coordinates[1], s.coordinates[0]])) {
                         playThunderSound();
                         addLightningFlash2D(s.coordinates[1], s.coordinates[0]);
+                        if (++flashes >= MAX_FLASHES_PER_CYCLE) break;
                     }
-                });
+                }
             }
         });
 
