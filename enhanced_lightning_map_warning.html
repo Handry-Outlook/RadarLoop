@@ -2400,6 +2400,14 @@
                     #fff200, #ffb327, #ff7f27, #ff5227, #ec1c24,
                     #b83dba, #3e00e9, #2600ff);
         }
+        .windy-radar-crisp-tile {
+            image-rendering: pixelated !important;
+            image-rendering: crisp-edges !important;
+            image-rendering: -webkit-optimize-contrast !important;
+            transform: translateZ(0);
+            backface-visibility: hidden;
+            will-change: transform;
+        }
     </style>
 </head>
 <!-- Google tag (gtag.js) -->
@@ -2480,7 +2488,7 @@
                         <span class="tooltip">Show coastline on top of weather</span>
                     </div>
                     <div class="toggle-switch">
-                        <input type="checkbox" id="overlay-toggle" checked
+                        <input type="checkbox" id="overlay-toggle"
                             onchange="toggleReferenceLayer(this.checked)">
                         <label for="overlay-toggle" class="switch"></label>
                     </div>
@@ -2498,8 +2506,8 @@
                         <span class="tooltip">Select radar / precipitation data layer</span>
                     </div>
                     <div class="toggle-switch">
-                        <input type="checkbox" id="radarToggle" checked
-                            onchange="toggleLayer('radar', this.checked); updateUkCustomRadarColorScaleControlVisibility();">
+                        <input type="checkbox" id="radarToggle"
+                            onchange="toggleLayer('radar', this.checked); updateUkCustomRadarColorScaleControlVisibility();" checked>
                         <label for="radarToggle" class="switch"></label>
                     </div>
                 </div>
@@ -2594,8 +2602,8 @@
                         <span class="tooltip">Select satellite data layer</span>
                     </div>
                     <div class="toggle-switch">
-                        <input type="checkbox" id="satelliteToggle" checked
-                            onchange="toggleLayer('satellite', this.checked);">
+                        <input type="checkbox" id="satelliteToggle"
+                            onchange="toggleLayer('satellite', this.checked);" checked>
                         <label for="satelliteToggle" class="switch"></label>
                     </div>
                 </div>
@@ -2640,7 +2648,7 @@
                         <span class="tooltip">Select isobar data layer</span>
                     </div>
                     <div class="toggle-switch">
-                        <input type="checkbox" id="isobarToggle" checked
+                        <input type="checkbox" id="isobarToggle"
                             onchange="toggleLayer('isobar', this.checked);">
                         <label for="isobarToggle" class="switch"></label>
                     </div>
@@ -2690,7 +2698,7 @@
                         <span class="tooltip">Select wind direction data layer</span>
                     </div>
                     <div class="toggle-switch">
-                        <input type="checkbox" id="windToggle" checked onchange="toggleLayer('wind', this.checked);">
+                        <input type="checkbox" id="windToggle" onchange="toggleLayer('wind', this.checked);">
                         <label for="windToggle" class="switch"></label>
                     </div>
                 </div>
@@ -2968,8 +2976,8 @@
                         <span class="tooltip">Show lightning strikes</span>
                     </div>
                     <div class="toggle-switch">
-                        <input type="checkbox" id="lightning-layer-toggle" checked
-                            onchange="toggleLightningLayer(); updateSwitchGlow(this, 'lightning-layer-control')">
+                        <input type="checkbox" id="lightning-layer-toggle"
+                            onchange="toggleLightningLayer(); updateSwitchGlow(this, 'lightning-layer-control')" checked>
                         <label for="lightning-layer-toggle" class="switch"></label>
                     </div>
                 </div>
@@ -2980,8 +2988,8 @@
                         <span class="tooltip">Color strikes by age</span>
                     </div>
                     <div class="toggle-switch">
-                        <input type="checkbox" id="color-mode" checked
-                            onchange="updateStrikeColors(); updateSwitchGlow(this, 'color-mode-control')">
+                        <input type="checkbox" id="color-mode"
+                            onchange="updateStrikeColors(); updateSwitchGlow(this, 'color-mode-control')" checked>
                         <label for="color-mode" class="switch"></label>
                     </div>
                 </div>
@@ -3101,7 +3109,7 @@
                     <span class="tooltip">Show lightning predictions</span>
                 </div>
                 <div class="toggle-switch">
-                    <input type="checkbox" id="nowcast-toggle" checked
+                    <input type="checkbox" id="nowcast-toggle"
                         onchange="toggleAllNowcast(); updateSwitchGlow(this, 'nowcast-control')">
                     <label for="nowcast-toggle" class="switch"></label>
                 </div>
@@ -3156,7 +3164,7 @@
                     <span class="tooltip">Auto-adjust time based on data</span>
                 </div>
                 <div class="toggle-switch">
-                    <input type="checkbox" id="auto-time-filter" checked>
+                    <input type="checkbox" id="auto-time-filter">
                     <label for="auto-time-filter" class="switch"></label>
                 </div>
             </div>
@@ -3237,7 +3245,7 @@
                     <span class="tooltip">Keep time slider at most recent data</span>
                 </div>
                 <div class="toggle-switch">
-                    <input type="checkbox" id="auto-latest" checked onchange="toggleAutoLatest()">
+                    <input type="checkbox" id="auto-latest" onchange="toggleAutoLatest()">
                     <label for="auto-latest" class="switch"></label>
                 </div>
             </div>
@@ -3270,7 +3278,7 @@
                         <span class="tooltip">Toggle custom KML overlay</span>
                     </div>
                     <div class="toggle-switch">
-                        <input type="checkbox" id="kml-layer-toggle" checked
+                        <input type="checkbox" id="kml-layer-toggle"
                             onchange="toggleKMLLayer(); updateSwitchGlow(this, 'kml-control')">
                         <label for="kml-layer-toggle" class="switch"></label>
                     </div>
@@ -3288,7 +3296,7 @@
                         <span class="tooltip">Toggle custom PNG overlay</span>
                     </div>
                     <div class="toggle-switch">
-                        <input type="checkbox" id="png-layer-toggle" checked
+                        <input type="checkbox" id="png-layer-toggle"
                             onchange="togglePNGLayer(); updateSwitchGlow(this, 'png-control')">
                         <label for="png-layer-toggle" class="switch"></label>
                     </div>
@@ -5977,7 +5985,7 @@
                 return result;
             };
             if (typeof timestamp !== 'number' || isNaN(timestamp)) {
-                return cacheAndReturn(lastValidTileUrls[layerTypeKey] || null);
+                return cacheAndReturn(isWindyRadarLayer ? null : (lastValidTileUrls[layerTypeKey] || null));
             }
             const date = new Date(timestamp);
             const interval = layerConfig.interval || 5 * 60 * 1000;
@@ -5985,7 +5993,8 @@
             date.setSeconds(0);
             date.setMilliseconds(0);
 
-            let minTime = new Date(Date.now() - sixDaysInMs);
+            const isWindyRadarLayer = layerTypeKey === 'windy-radar';
+            let minTime = new Date(Date.now() - (isWindyRadarLayer ? WINDY_RADAR_ARCHIVE_LOOKBACK_MS : sixDaysInMs));
 
             let maxAttempts = layerConfig.type === 'image' ? 4 : 288;
             let isHistoricalView = currentFilterTimestamp && (Date.now() - currentFilterTimestamp) > recentTimeThreshold;
@@ -5998,7 +6007,7 @@
 
             if (layerConfig.type === 'image') {
                 for (let attempt = 0; attempt < maxAttempts && currentTimeCheck >= minTime; attempt++) {
-                    const url = layerConfig.url
+                    let url = layerConfig.url
                         .replace(/\${isoMs}/g, formatISOms(currentTimeCheck))   // ← must be BEFORE ${iso}
                         .replace(/\${iso}/g, formatISO(currentTimeCheck))
                         .replace(/\${iso2}/g, formatISO2(currentTimeCheck))
@@ -6009,12 +6018,16 @@
                         .replace(/\${windyRadarDD}/g, formatWindyRadarPart(currentTimeCheck, 'DD'))
                         .replace(/\${windyRadarHHmm}/g, formatWindyRadarPart(currentTimeCheck, 'HHmm'))
                         .replace(/\${windyRadarMaxt}/g, formatWindyRadarMaxt(currentTimeCheck));
+                    if (isWindyRadarLayer) {
+                        url = normaliseWindyRadarLiveUrl(url);
+                        if (isWindyRadarFrameArchiveOnly(url)) url = windyRadarArchiveUrl(url);
+                    }
                     const img = new Image();
                     img.src = url;
                     const isValid = await new Promise((resolve) => {
                         img.onload = () => resolve(true);
                         img.onerror = () => resolve(false);
-                        setTimeout(() => resolve(false), 5000);
+                        setTimeout(() => resolve(false), activeWeatherLayerPlotCount >= 4 ? 2500 : 5000);
                     });
                     if (isValid) {
                         lastValidTileUrls[layerTypeKey] = url;
@@ -6022,7 +6035,7 @@
                     }
                     currentTimeCheck.setMinutes(currentTimeCheck.getMinutes() - (interval / 60 / 1000));
                 }
-                return cacheAndReturn(lastValidTileUrls[layerTypeKey] || null);
+                return cacheAndReturn(isWindyRadarLayer ? null : (lastValidTileUrls[layerTypeKey] || null));
             } else {
                 // Tile Logic (Vector Tiles)
                 async function validateTile(checkTime) {
@@ -6041,6 +6054,10 @@
                         .replace(/\${windyRadarDD}/g, formatWindyRadarPart(checkTime, 'DD'))
                         .replace(/\${windyRadarHHmm}/g, formatWindyRadarPart(checkTime, 'HHmm'))
                         .replace(/\${windyRadarMaxt}/g, formatWindyRadarMaxt(checkTime));
+                    if (isWindyRadarLayer) {
+                        tileUrl = normaliseWindyRadarLiveUrl(tileUrl);
+                        if (isWindyRadarFrameArchiveOnly(tileUrl)) tileUrl = windyRadarArchiveUrl(tileUrl);
+                    }
                     const checkUrl = tileUrl.replace(
                         /(\{z\}\/\{x\}\/\{y\}|z=\{z\}&x=\{x\}&y=\{y\}|\{bbox\})/,   // ← ADD {bbox}
                         match => match.startsWith('{z}') ? '5/16/11' : match === '{bbox}' ? '39.375,-11.25,45,-5.625' : 'z=6&x=31&y=23'
@@ -6730,13 +6747,20 @@
          * Main function to coordinate updating the map layers.
          * @param {number} timestamp - The target timestamp from the slider/current time.
          */
+        let pendingWeatherLayerTimestamp = null;
+        let activeWeatherLayerPlotCount = 0;
+
         async function updateMapLayers(timestamp) {
-            if (isPlotting) return;
+            if (isPlotting) {
+                pendingWeatherLayerTimestamp = timestamp;
+                return;
+            }
             isPlotting = true;
             const PROCESSING_DELAY_MS = 5 * 60 * 1000;
             let targetTimestamp = timestamp;
             const timeSlider = document.getElementById('history-slider');
-            if (timeSlider && timeSlider.value === timeSlider.max) {
+            const isManualTimeFilterActive = lastFilterMode === 'inputs' && customFilterStart && customFilterEnd;
+            if (timeSlider && timeSlider.value === timeSlider.max && !isManualTimeFilterActive) {
                 targetTimestamp = Date.now() - PROCESSING_DELAY_MS;
             }
 
@@ -6762,14 +6786,21 @@
                 })
                 .map(def => () => plotLayerIfNecessary(document.getElementById(def.select).value, def.options, targetTimestamp, def.key));
 
-            // Weather tile layers should load concurrently, but not all at once on weaker networks.
-            const concurrency = isPlaying ? 2 : (LOW_END_NOWCAST_MODE ? 2 : 3);
+            activeWeatherLayerPlotCount = jobs.length;
+            const concurrency = isPlaying ? 1 : (LOW_END_NOWCAST_MODE ? 1 : (jobs.length >= 4 ? 1 : (jobs.length >= 3 ? 2 : 3)));
             for (let i = 0; i < jobs.length; i += concurrency) {
+                if (pendingWeatherLayerTimestamp !== null) break;
                 await Promise.allSettled(jobs.slice(i, i + concurrency).map(job => job()));
             }
 
             isPlotting = false;
+            activeWeatherLayerPlotCount = 0;
             updateLegend();
+            if (pendingWeatherLayerTimestamp !== null) {
+                const nextTimestamp = pendingWeatherLayerTimestamp;
+                pendingWeatherLayerTimestamp = null;
+                setTimeout(() => updateMapLayers(nextTimestamp), 0);
+            }
         }
         window.toggleWeatherDetails = function (headerElement) {
             const container = headerElement.closest('.weather-popup-container');
@@ -7306,7 +7337,7 @@
                 // - use positive and short negative caches
                 // - check fewer frames back during animation
                 // - probe sequentially and stop at first valid timestamp instead of firing many requests
-                const framesToCheck = isPlaying ? 2 : (LOW_END_NOWCAST_MODE ? 4 : 6);
+                const framesToCheck = isPlaying ? 1 : (LOW_END_NOWCAST_MODE ? 1 : (activeWeatherLayerPlotCount >= 4 ? 1 : (activeWeatherLayerPlotCount >= 3 ? 2 : 4)));
                 const cacheNow = Date.now();
 
                 for (let i = 0; i < framesToCheck; i++) {
@@ -7334,7 +7365,7 @@
                     }
                 }
 
-                if (!finalUrl && lastValidTileUrls[layerType]) {
+                if (!finalUrl && layerType !== 'windy-radar' && lastValidTileUrls[layerType]) {
                     // Fallback to the last successfully plotted URL without forcing a timestamp update.
                     finalUrl = lastValidTileUrls[layerType];
                     finalTimestamp = null;
@@ -7721,28 +7752,89 @@
             return String(url).replace('/radar2/composite/', '/radar2/archive/composite/');
         }
         const WINDY_RADAR_LIVE_ONLY_WINDOW_MS = 2 * 60 * 60 * 1000;
+        const WINDY_RADAR_ARCHIVE_LOOKBACK_MS = 31 * 24 * 60 * 60 * 1000;
+
+        function normaliseWindyRadarLiveUrl(url) {
+            return String(url).replace('/radar2/archive/composite/', '/radar2/composite/');
+        }
+
+        function isWindyRadarFrameArchiveOnly(url, nowMs = Date.now()) {
+            const frameMs = getWindyRadarFrameMsFromUrl(url);
+            if (!Number.isFinite(frameMs)) return false;
+            return (nowMs - frameMs) >= WINDY_RADAR_LIVE_ONLY_WINDOW_MS;
+        }
 
         function shouldUseWindyRadarArchiveFirst(url) {
             const frameMs = getWindyRadarFrameMsFromUrl(url);
             if (!Number.isFinite(frameMs)) return false;
-
-            // If frame is more than 2 hours old, use archive endpoint first.
-            if (Date.now() - frameMs > WINDY_RADAR_LIVE_ONLY_WINDOW_MS) {
-                return true;
-            }
-
-            // Keep existing learned-cutoff fallback logic.
+            if (isWindyRadarFrameArchiveOnly(url)) return true;
             const cutoff = getWindyRadarArchiveCutoffMs();
             return Number.isFinite(cutoff) && frameMs <= cutoff;
         }
         function getWindyYellowRampPosition(r, g, b) {
             const hsv = rgbToHsvForDtnSource(r, g, b);
-            if (hsv.s < 0.24 || hsv.v < 0.14) return null;
-            if (hsv.h < 38 || hsv.h > 74) return null;
-            const vNorm = Math.max(0, Math.min(1, (hsv.v - 0.14) / (0.98 - 0.14)));
-            const sNorm = Math.max(0, Math.min(1, (hsv.s - 0.24) / (1.0 - 0.24)));
-            let t = vNorm * 0.86 + sNorm * 0.14;
-            return Math.max(0, Math.min(1, t * t * (3 - 2 * t)));
+            const max = Math.max(r, g, b);
+            const min = Math.min(r, g, b);
+            const avgRG = (r + g) / 2;
+            const yellowDominance = avgRG - b;
+            const rgDelta = Math.abs(r - g);
+            const rgMax = Math.max(r, g, 1);
+            const rgBalance = 1 - (rgDelta / rgMax);
+            const chroma = max - min;
+
+            // Ultra-sensitive yellow-only detection: any credible faint yellow tint is rain.
+            if (max < 6) return null;
+            if (r < b && g < b) return null;
+            if (g > r + 40 && g > b + 40) return null;
+            if (r > g + 95 && r > b + 40) return null;
+
+            const hsvYellow = hsv.h >= 28 && hsv.h <= 92 && hsv.s >= 0.025 && hsv.v >= 0.025 && yellowDominance >= 0.75 && rgBalance >= 0.22;
+            const ultraFaintYellow = avgRG >= 7 && yellowDominance >= 0.35 && r >= b && g >= b && rgDelta <= Math.max(42, avgRG * 0.72) && rgBalance >= 0.16;
+            const beigeYellowEdge = avgRG >= 12 && yellowDominance >= 0.15 && r >= b - 1 && g >= b - 1 && rgDelta <= Math.max(34, avgRG * 0.55) && chroma <= 70 && hsv.h >= 25 && hsv.h <= 105;
+            if (!hsvYellow && !ultraFaintYellow && !beigeYellowEdge) return null;
+
+            // Slightly nerfed upper response: red/purple remain reachable, but yellow/orange does not jump to red too quickly.
+            const hueCentre = 56;
+            const hueDistance = Math.abs(hsv.h - hueCentre);
+            const hueCloseness = Math.max(0, 1 - (hueDistance / 43));
+            const dominanceNorm = Math.max(0, Math.min(1, yellowDominance / 118));
+            const satNorm = Math.max(0, Math.min(1, hsv.s / 0.92));
+            const valueNorm = Math.max(0, Math.min(1, (hsv.v - 0.025) / 1.02));
+            const balanceNorm = Math.max(0, Math.min(1, (rgBalance - 0.16) / 0.84));
+
+            let raw = (hueCloseness * 0.135) + (dominanceNorm * 0.43) + (satNorm * 0.17) + (valueNorm * 0.14) + (balanceNorm * 0.125);
+            raw = Math.max(0, Math.min(1, raw));
+
+            let t = Math.pow(raw, 1.92) * 0.78;
+
+            if (raw < 0.31) {
+                t *= 0.59;
+            } else if (raw < 0.49) {
+                const f = (raw - 0.31) / 0.18;
+                const release = f * f * (3 - 2 * f);
+                t *= 0.59 + (0.41 * release);
+            }
+
+            // Nerfed boost compared with the red-heavy version.
+            if (raw > 0.50) {
+                const f = Math.max(0, Math.min(1, (raw - 0.50) / 0.50));
+                const boost = f * f * (3 - 2 * f);
+                t += 0.16 * boost;
+            }
+            if (raw > 0.66) {
+                const f = Math.max(0, Math.min(1, (raw - 0.66) / 0.34));
+                const boost = f * f * (3 - 2 * f);
+                t += 0.10 * boost;
+            }
+
+            if (beigeYellowEdge && !hsvYellow) t = Math.min(0.032, Math.max(0.005, t));
+            if (ultraFaintYellow && !hsvYellow) t = Math.min(0.055, Math.max(0.009, t));
+            if (hsvYellow && hsv.s < 0.12 && yellowDominance < 12) t = Math.min(0.085, Math.max(0.016, t));
+            if (yellowDominance < 20 && hsv.s < 0.17) t = Math.min(t, 0.135);
+            if (yellowDominance < 32 && hsv.s < 0.24) t = Math.min(t, 0.235);
+
+            t = Math.max(0.005, Math.min(1, t));
+            return t * t * (3 - 2 * t);
         }
         function interpolateWindyTargetColour(t, targetLevels) {
             if (!targetLevels.length) return [0, 0, 0, 0];
@@ -7768,7 +7860,14 @@
                     cache.set(key, target);
                 }
                 if (target === false) { data[i + 3] = 0; continue; }
-                data[i] = target[0]; data[i + 1] = target[1]; data[i + 2] = target[2]; data[i + 3] = Math.round(originalAlpha * (target[3] / 255));
+                data[i] = target[0];
+                data[i + 1] = target[1];
+                data[i + 2] = target[2];
+
+                // Sharpen pixel edges: Windy/WebP source tiles often have semi-transparent antialias pixels.
+                // At high map zoom those alpha edges look blurry, so snap detected rain pixels to the target alpha.
+                // Very faint edge pixels still survive detection, but render as crisp pixels instead of soft halos.
+                data[i + 3] = target[3];
             }
             return imageData;
         }
@@ -7776,43 +7875,73 @@
             createTile: function (coords, done) {
                 const tile = document.createElement('canvas');
                 const size = this.getTileSize();
-                tile.width = size.x; tile.height = size.y;
-                const ctx = tile.getContext('2d', { willReadFrequently: true });
+
+                // Use a HiDPI canvas and nearest-neighbour draw. This cannot invent new Windy detail
+                // above native z7, but it avoids soft browser interpolation on pixel edges.
+                const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
+                tile.width = Math.round(size.x * dpr);
+                tile.height = Math.round(size.y * dpr);
+                tile.style.width = `${size.x}px`;
+                tile.style.height = `${size.y}px`;
+                tile.className = 'windy-radar-crisp-tile';
+
+                const ctx = tile.getContext('2d', { willReadFrequently: true, alpha: true });
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                ctx.imageSmoothingEnabled = false;
+                ctx.webkitImageSmoothingEnabled = false;
+                ctx.mozImageSmoothingEnabled = false;
+                ctx.msImageSmoothingEnabled = false;
+
                 const originalZoom = coords.z;
                 const nativeZoom = Math.min(originalZoom, WINDY_RADAR_MAX_NATIVE_ZOOM);
                 const scale = Math.pow(2, originalZoom - nativeZoom);
                 const nativeCoords = { x: Math.floor(coords.x / scale), y: Math.floor(coords.y / scale), z: nativeZoom };
-                if (originalZoom > WINDY_RADAR_MAX_NATIVE_ZOOM) console.info(`Windy Radar: requested zoom ${originalZoom} is above native max ${WINDY_RADAR_MAX_NATIVE_ZOOM}; using ${nativeZoom}/${nativeCoords.x}/${nativeCoords.y} and scaling/cropping it.`);
+                if (originalZoom > WINDY_RADAR_MAX_NATIVE_ZOOM) console.info(`Windy Radar: requested zoom ${originalZoom} is above native max ${WINDY_RADAR_MAX_NATIVE_ZOOM}; using ${nativeZoom}/${nativeCoords.x}/${nativeCoords.y} and crisp nearest-neighbour scaling/cropping it.`);
+
                 const drawImage = (img) => {
                     ctx.clearRect(0, 0, size.x, size.y);
+                    ctx.imageSmoothingEnabled = false;
+                    ctx.webkitImageSmoothingEnabled = false;
+                    ctx.mozImageSmoothingEnabled = false;
+                    ctx.msImageSmoothingEnabled = false;
+
                     if (nativeZoom < originalZoom) {
-                        const srcX = (coords.x - nativeCoords.x * scale) * (size.x / scale);
-                        const srcY = (coords.y - nativeCoords.y * scale) * (size.y / scale);
-                        ctx.drawImage(img, srcX, srcY, size.x / scale, size.y / scale, 0, 0, size.x, size.y);
-                    } else ctx.drawImage(img, 0, 0, size.x, size.y);
+                        const srcX = Math.round((coords.x - nativeCoords.x * scale) * (size.x / scale));
+                        const srcY = Math.round((coords.y - nativeCoords.y * scale) * (size.y / scale));
+                        const srcSize = Math.max(1, Math.round(size.x / scale));
+                        ctx.drawImage(img, srcX, srcY, srcSize, srcSize, 0, 0, size.x, size.y);
+                    } else {
+                        ctx.drawImage(img, 0, 0, size.x, size.y);
+                    }
+
                     if (this.options.applyWindyColourReplacement !== false) {
-                        const imageData = ctx.getImageData(0, 0, size.x, size.y);
+                        const imageData = ctx.getImageData(0, 0, tile.width, tile.height);
                         ctx.putImageData(recolourWindyRadarImageDataYellowOnly(imageData), 0, 0);
                     }
                     done(null, tile);
                 };
-                const normalUrl = this.getTileUrl(nativeCoords);
+
+                const rawTileUrl = this.getTileUrl(nativeCoords);
+                const normalUrl = normaliseWindyRadarLiveUrl(rawTileUrl);
                 const frameMs = getWindyRadarFrameMsFromUrl(normalUrl);
-                const archiveFirst = shouldUseWindyRadarArchiveFirst(normalUrl);
-                const firstUrl = archiveFirst ? windyRadarArchiveUrl(normalUrl) : normalUrl;
-                if (archiveFirst) console.info(`Windy Radar: ${new Date(frameMs).toISOString()} is at/before saved archive cutoff, using archive endpoint first.`);
+                const archiveOnlyByAge = isWindyRadarFrameArchiveOnly(normalUrl);
+                const archiveFirst = archiveOnlyByAge || shouldUseWindyRadarArchiveFirst(normalUrl);
+                const archiveUrl = windyRadarArchiveUrl(normalUrl);
+                const firstUrl = archiveFirst ? archiveUrl : normalUrl;
+                if (archiveOnlyByAge) console.info(`Windy Radar: selected frame ${new Date(frameMs).toISOString()} is >= 2 hours older than real browser now ${new Date().toISOString()}, forcing archive endpoint first:`, archiveUrl);
+                else if (archiveFirst) console.info(`Windy Radar: selected frame ${new Date(frameMs).toISOString()} is at/before learned archive cutoff, using archive endpoint first:`, archiveUrl);
+
                 const loadUrl = (url, isArchiveAttempt) => {
                     const img = new Image(); img.crossOrigin = 'anonymous';
                     img.onload = () => drawImage(img);
                     img.onerror = () => {
                         if (!isArchiveAttempt) {
                             rememberWindyRadarArchiveCutoff(frameMs);
-                            const archiveUrl = windyRadarArchiveUrl(url);
-                            console.info('Windy Radar: normal tile failed; retrying archive tile:', archiveUrl);
+                            console.info('Windy Radar: live tile failed; retrying archive tile:', archiveUrl);
                             loadUrl(archiveUrl, true);
                         } else {
-                            console.warn('Windy Radar: archive tile also failed:', url);
-                            done(new Error('Failed to load Windy radar normal/archive tile'), tile);
+                            console.warn('Windy Radar: archive tile failed:', url);
+                            done(new Error('Failed to load Windy radar archive tile'), tile);
                         }
                     };
                     img.src = url;
@@ -10528,7 +10657,9 @@
 
                 const totalMinutes = (filterEnd - filterStart) / (60 * 1000);
                 sliderMax = Math.max(totalMinutes, lifespanHours * 60);
-                sliderValue = parseInt(slider.value) || sliderMax;
+                sliderValue = parseInt(slider.value);
+                if (!Number.isFinite(sliderValue)) sliderValue = totalMinutes;
+                sliderValue = Math.max(0, Math.min(sliderValue, sliderMax));
                 minutesBack = sliderMax - sliderValue;
 
                 end = new Date(filterStart.getTime() + sliderValue * 60 * 1000);
