@@ -7553,8 +7553,10 @@
 
         const WINDY_RADAR_DBZ_PER_ENCODED_UNIT = 56 / 94; // calibrated from Windy picker: RGB(93,95,26) → 56 dBZ
         const WINDY_RADAR_MIN_VISIBLE_MMH = 0.03;
+        const WINDY_RADAR_MMH_NERF = 0.3;
         function windyDbzToMmh(dbz) {
-            return Math.pow(Math.pow(10, dbz / 10) * 0.005, 0.625);
+            const rawMmh = Math.pow(Math.pow(10, dbz / 10) * 0.005, 0.625);
+            return rawMmh * WINDY_RADAR_MMH_NERF;
         }
         function windyRadarEncodedToDbz(encoded) {
             return Math.max(0, encoded * WINDY_RADAR_DBZ_PER_ENCODED_UNIT);
