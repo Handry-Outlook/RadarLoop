@@ -2409,6 +2409,70 @@
             backface-visibility: hidden;
             will-change: transform;
         }
+
+        .windy-accum-progress-wrap {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+            padding: 9px;
+            border-radius: 10px;
+            background: rgba(33, 150, 243, .08);
+            border: 1px solid rgba(33, 150, 243, .18)
+        }
+
+        body.dark-mode .windy-accum-progress-wrap {
+            background: rgba(75, 155, 255, .10);
+            border-color: rgba(75, 155, 255, .25)
+        }
+
+        .windy-accum-progress-circle {
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            background: conic-gradient(#2196F3 0%, rgba(33, 150, 243, .18) 0%);
+            position: relative;
+            flex: 0 0 auto;
+            transition: background .2s linear
+        }
+
+        .windy-accum-progress-circle:after {
+            content: "";
+            position: absolute;
+            inset: 6px;
+            border-radius: 50%;
+            background: #fff
+        }
+
+        body.dark-mode .windy-accum-progress-circle:after {
+            background: #2a2a2a
+        }
+
+        .windy-accum-progress-percent {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 800;
+            color: #1a2a44;
+            z-index: 1
+        }
+
+        body.dark-mode .windy-accum-progress-percent {
+            color: #e0e0e0
+        }
+
+        .windy-accum-progress-text {
+            font-size: 11px;
+            line-height: 1.35;
+            color: #555
+        }
+
+        body.dark-mode .windy-accum-progress-text {
+            color: #bbb
+        }
     </style>
 </head>
 <!-- Google tag (gtag.js) -->
@@ -2580,6 +2644,30 @@
                     <div id="uk-custom-radar-colour-inputs" class="uk-custom-radar-colour-inputs"></div>
                     <button type="button" class="uk-custom-radar-reset" onclick="resetUkCustomRadarColorScale()">Reset
                         custom colours</button>
+                </div>
+                <div class="uk-custom-radar-editor" id="windy-radar-accumulation-panel" style="display:none;">
+                    <div class="uk-custom-radar-editor-title">Windy Radar rainfall accumulation map</div>
+                    <div class="uk-custom-radar-editor-help">Calculate an accumulated rainfall raster for the current
+                        view. Plot hides the current radar until Unplot is pressed. While plotted, clicking the map
+                        shows the accumulated total for this timeframe.</div>
+                    <label class="pretty-input">Start time<input type="datetime-local"
+                            id="windy-accum-start-time"></label>
+                    <label class="pretty-input">End time<input type="datetime-local" id="windy-accum-end-time"></label>
+                    <div class="button-group"><button type="button"
+                            onclick="calculateWindyRadarAccumulationMap()">Generate map</button><button type="button"
+                            onclick="plotWindyRadarAccumulationMap()" id="plot-windy-accum-map"
+                            disabled>Plot</button><button type="button" onclick="unplotWindyRadarAccumulationMap()"
+                            id="unplot-windy-accum-map" disabled>Unplot</button></div>
+                    <div id="windy-radar-accumulation-status"
+                        style="font-size:11px;line-height:1.4;color:#666;margin-top:6px;">Generate an accumulation map
+                        for the current viewport.</div>
+                    <div id="windy-accum-progress-wrap" class="windy-accum-progress-wrap">
+                        <div id="windy-accum-progress-circle" class="windy-accum-progress-circle">
+                            <div id="windy-accum-progress-percent" class="windy-accum-progress-percent">0%</div>
+                        </div>
+                        <div id="windy-accum-progress-text" class="windy-accum-progress-text">Preparing accumulation
+                            map…</div>
+                    </div>
                 </div>
             </div>
 
@@ -3694,16 +3782,19 @@
         map.getPane('warningPane').style.pointerEvents = 'none'; // Allow clicks to pass through empty areas
 
         // Local nowcast is rendered with Canvas instead of SVG to reduce DOM/path overhead.
-        // Fill stays below the radar pane; outline stays above weather/label layers.
+        // IMPORTANT: the fill pane is created *inside overlayPane* so its z-index
+        // interleaves with the satellite/radar tile layers instead of sitting below
+        // the whole overlayPane. Desired order: satellite (140) < nowcast fill (145) < radar (150).
         if (!map.getPane('nowcastFillPane')) {
-            map.createPane('nowcastFillPane');
-            map.getPane('nowcastFillPane').style.zIndex = 145; // below radar (150), above satellite (140)
-            map.getPane('nowcastFillPane').style.pointerEvents = 'none';
+            map.createPane('nowcastFillPane', map.getPane('overlayPane'));
         }
+        map.getPane('nowcastFillPane').style.zIndex = 145; // above satellite (140), below radar (150)
+        map.getPane('nowcastFillPane').style.pointerEvents = 'none';
+
         if (!map.getPane('nowcastOutlinePane')) {
             map.createPane('nowcastOutlinePane');
-            map.getPane('nowcastOutlinePane').style.zIndex = 650; // above warnings/labels
         }
+        map.getPane('nowcastOutlinePane').style.zIndex = 650; // above warnings/labels
         const nowcastFillRenderer = L.canvas({ pane: 'nowcastFillPane', padding: 0.35 });
         const nowcastOutlineRenderer = L.canvas({ pane: 'nowcastOutlinePane', padding: 0.35 });
 
@@ -7580,6 +7671,10 @@
         function windyRadarEncodedToMmh(encoded) {
             return windyDbzToMmh(windyRadarEncodedToDbz(encoded));
         }
+        function getWindyRadarFrameTimeGlobal(d) { const r = new Date(d); r.setUTCMinutes(Math.floor(r.getUTCMinutes() / 5) * 5, 0, 0); return r; }
+        function padWindyRadarGlobal(n) { return String(n).padStart(2, '0'); }
+        function formatWindyRadarMaxtGlobal(d) { const m = new Date(getWindyRadarFrameTimeGlobal(d).getTime() + (4 * 60 + 51) * 1000); return String(m.getUTCFullYear()) + padWindyRadarGlobal(m.getUTCMonth() + 1) + padWindyRadarGlobal(m.getUTCDate()) + padWindyRadarGlobal(m.getUTCHours()) + padWindyRadarGlobal(m.getUTCMinutes()) + padWindyRadarGlobal(m.getUTCSeconds()); }
+        function buildWindyRadarTileUrlForTime(date, z, x, y) { const f = getWindyRadarFrameTimeGlobal(date); const yyyy = String(f.getUTCFullYear()), mm = padWindyRadarGlobal(f.getUTCMonth() + 1), dd = padWindyRadarGlobal(f.getUTCDate()), hhmm = padWindyRadarGlobal(f.getUTCHours()) + padWindyRadarGlobal(f.getUTCMinutes()), maxt = formatWindyRadarMaxtGlobal(f); return `https://rdr.windy.com/radar2/composite/${yyyy}/${mm}/${dd}/${hhmm}/${z}/${x}/${y}/reflectivity.webp?multichannel=true&maxt=${maxt}`; }
         function formatRadarMmhLabel(value, index, total) {
             if (index === 0) return `<${value} mm/h`;
             if (index === total - 1) return `≥${value} mm/h`;
@@ -8022,6 +8117,90 @@
             const mmh = windyDbzToMmh(dbz);
             return { mmh, dbz, encoded, rgba: [d[0], d[1], d[2], d[3]], tile, url: source.url, frameLabel, sourceZoom: z };
         }
+
+        function formatWindyAccumDateTimeLocal(date) { const p = n => String(n).padStart(2, '0'); return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}T${p(date.getHours())}:${p(date.getMinutes())}`; }
+        function setDefaultWindyAccumulationTimes(force = false) { const s = document.getElementById('windy-accum-start-time'), e = document.getElementById('windy-accum-end-time'); if (!s || !e) return; if (!force && s.value && e.value) return; const end = new Date(typeof getCurrentSliderTimestamp === 'function' ? getCurrentSliderTimestamp() : Date.now()); const start = new Date(end.getTime() - 60 * 60 * 1000); s.value = formatWindyAccumDateTimeLocal(start); e.value = formatWindyAccumDateTimeLocal(end); }
+        function getWindyAccumulationTimeRange() { const sv = document.getElementById('windy-accum-start-time')?.value, ev = document.getElementById('windy-accum-end-time')?.value; const start = sv ? new Date(sv) : null, end = ev ? new Date(ev) : null; if (!start || !end || !Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) throw new Error('Please enter a valid start and end time.'); if (end <= start) throw new Error('End time must be after Start time.'); return { start, end }; }
+        function setWindyAccumulationStatus(message, isError = false) { const el = document.getElementById('windy-radar-accumulation-status'); if (el) { el.style.color = isError ? '#d32f2f' : '#666'; el.innerHTML = message; } }
+        function setWindyAccumulationProgress(percent, text = '') { const wrap = document.getElementById('windy-accum-progress-wrap'), circle = document.getElementById('windy-accum-progress-circle'), pct = document.getElementById('windy-accum-progress-percent'), txt = document.getElementById('windy-accum-progress-text'); const p = Math.max(0, Math.min(100, Number(percent) || 0)); if (wrap) wrap.style.display = 'flex'; if (circle) circle.style.background = `conic-gradient(#2196F3 ${p}%, rgba(33,150,243,.18) ${p}%)`; if (pct) pct.textContent = `${Math.round(p)}%`; if (txt) txt.textContent = text || `Calculating accumulation map… ${Math.round(p)}%`; }
+        function hideWindyAccumulationProgress(delayMs = 1800) { const wrap = document.getElementById('windy-accum-progress-wrap'); if (!wrap) return; if (delayMs > 0) setTimeout(() => { wrap.style.display = 'none'; }, delayMs); else wrap.style.display = 'none'; }
+        function updateWindyAccumulationPlotButtons() { const plotBtn = document.getElementById('plot-windy-accum-map'), unplotBtn = document.getElementById('unplot-windy-accum-map'); if (plotBtn) plotBtn.disabled = !windyRadarAccumulationPending; if (unplotBtn) unplotBtn.disabled = !(windyRadarAccumulationLayer && map.hasLayer(windyRadarAccumulationLayer)); }
+        let windyRadarAccumulationLayer = null, windyRadarAccumulationLegend = null, windyRadarAccumulationRunId = 0, windyRadarAccumulationPending = null, windyRadarLayerHiddenForAccumulation = false;
+        const WINDY_ACCUMULATION_Z_INDEX = 152;
+        const WINDY_ACCUMULATION_COLOUR_STOPS = [[0.05, [0, 0, 0, 0]], [0.5, [170, 210, 255, 150]], [1, [90, 170, 255, 165]], [2, [40, 120, 255, 175]], [5, [0, 190, 120, 185]], [10, [120, 220, 0, 195]], [20, [255, 230, 0, 205]], [30, [255, 165, 0, 215]], [50, [255, 80, 35, 225]], [75, [220, 0, 0, 235]], [100, [175, 0, 160, 240]], [150, [105, 0, 210, 245]], [200, [255, 255, 255, 250]], [999999, [255, 0, 255, 255]]];
+        function colourForWindyAccumulationMm(mm) { for (const [limit, rgba] of WINDY_ACCUMULATION_COLOUR_STOPS) { if (mm < limit) return rgba; } return WINDY_ACCUMULATION_COLOUR_STOPS[WINDY_ACCUMULATION_COLOUR_STOPS.length - 1][1]; }
+        function ensureWindyAccumulationPane() { if (!map.getPane('windyAccumulationPane')) { map.createPane('windyAccumulationPane', map.getPane('overlayPane')); } const pane = map.getPane('windyAccumulationPane'); pane.style.zIndex = String(WINDY_ACCUMULATION_Z_INDEX); pane.style.pointerEvents = 'none'; pane.style.display = 'block'; }
+        function hideCurrentRadarForWindyAccumulation() { try { if (typeof radarLayer !== 'undefined' && radarLayer && map.hasLayer(radarLayer)) { map.removeLayer(radarLayer); windyRadarLayerHiddenForAccumulation = true; } } catch (e) { console.warn('Could not hide current radar for accumulation plot:', e); } }
+        function restoreCurrentRadarAfterWindyAccumulation() { try { const radarToggle = document.getElementById('radarToggle'), radarSelect = document.getElementById('radarLayer'); if (windyRadarLayerHiddenForAccumulation && radarLayer && radarToggle?.checked && radarSelect?.value === 'windy-radar' && !map.hasLayer(radarLayer)) { radarLayer.addTo(map); if (radarLayer.setZIndex) radarLayer.setZIndex(typeof RADAR_Z_INDEX === 'number' ? RADAR_Z_INDEX : 150); if (typeof updateLayerOpacities === 'function') updateLayerOpacities(); } windyRadarLayerHiddenForAccumulation = false; } catch (e) { console.warn('Could not restore radar after accumulation unplot:', e); } }
+        function removeWindyAccumulationOverlayOnly() { if (windyRadarAccumulationLayer && map.hasLayer(windyRadarAccumulationLayer)) map.removeLayer(windyRadarAccumulationLayer); windyRadarAccumulationLayer = null; if (windyRadarAccumulationLegend && map.hasLayer(windyRadarAccumulationLegend)) map.removeControl(windyRadarAccumulationLegend); windyRadarAccumulationLegend = null; updateWindyAccumulationPlotButtons(); }
+        function isWindyAccumulationMapPlotted() { return !!(windyRadarAccumulationLayer && map.hasLayer(windyRadarAccumulationLayer) && windyRadarAccumulationPending); }
+        function unplotWindyRadarAccumulationMap() { removeWindyAccumulationOverlayOnly(); restoreCurrentRadarAfterWindyAccumulation(); setWindyAccumulationStatus(windyRadarAccumulationPending ? 'Accumulation map unplotted. Current radar restored; click Plot to show the accumulation again.' : 'No calculated accumulation map is available to unplot.'); }
+        function clearWindyRadarAccumulationMap() { windyRadarAccumulationRunId++; removeWindyAccumulationOverlayOnly(); restoreCurrentRadarAfterWindyAccumulation(); windyRadarAccumulationPending = null; setWindyAccumulationStatus('Accumulation map cleared.'); setWindyAccumulationProgress(0, 'Ready to generate a new accumulation map…'); hideWindyAccumulationProgress(400); updateWindyAccumulationPlotButtons(); }
+        function addWindyAccumulationLegend(start, end, validFrames, frameCount, missingFrames) {
+            if (windyRadarAccumulationLegend && map.hasLayer(windyRadarAccumulationLegend)) {
+                map.removeControl(windyRadarAccumulationLegend);
+            }
+
+            windyRadarAccumulationLegend = L.control({ position: 'topright' });
+
+            windyRadarAccumulationLegend.onAdd = function () {
+                const div = L.DomUtil.create('div', 'legend windy-accumulation-legend');
+
+                // Stop clicks/scrolls on legend from moving the map
+                L.DomEvent.disableClickPropagation(div);
+                L.DomEvent.disableScrollPropagation(div);
+
+                // Override existing .legend positioning so Leaflet control positioning works correctly
+                div.style.position = 'static';
+                div.style.top = 'auto';
+                div.style.right = 'auto';
+                div.style.bottom = 'auto';
+                div.style.left = 'auto';
+
+                // Keep legend inside screen
+                div.style.maxHeight = 'calc(100vh - 140px)';
+                div.style.overflowY = 'auto';
+                div.style.maxWidth = '220px';
+                div.style.zIndex = '1200';
+
+                const stops = [0.5, 1, 2, 5, 10, 20, 30, 50, 75, 100, 150, 200];
+
+                div.innerHTML =
+                    `<h4 style="margin:0 0 6px;">Estimated rainfall accumulation</h4>` +
+                    stops.map(v => {
+                        const r = colourForWindyAccumulationMm(v + 0.001);
+                        return `
+                    <div class="legend-item">
+                        <span class="color-box"
+                            style="background:rgba(${r[0]},${r[1]},${r[2]},${r[3] / 255});">
+                        </span>
+                        ${v} mm
+                    </div>
+                `;
+                    }).join('') +
+                    `
+                <div style="font-size:10px;margin-top:6px;color:#777;">
+                    ${start.toLocaleString()} – ${end.toLocaleString()}<br>
+                    ${validFrames}/${frameCount} frames sampled${missingFrames ? ` (${missingFrames} missing)` : ''}
+                </div>
+            `;
+
+                return div;
+            };
+
+            windyRadarAccumulationLegend.addTo(map);
+        }
+        function plotWindyRadarAccumulationMap() { if (!windyRadarAccumulationPending) { setWindyAccumulationStatus('No calculated accumulation map yet. Click Generate map first.', true); return; } hideCurrentRadarForWindyAccumulation(); ensureWindyAccumulationPane(); removeWindyAccumulationOverlayOnly(); const p = windyRadarAccumulationPending; windyRadarAccumulationLayer = L.imageOverlay(p.dataUrl, p.bounds, { pane: 'windyAccumulationPane', opacity: .72, interactive: false, zIndex: WINDY_ACCUMULATION_Z_INDEX, attribution: '' }).addTo(map); if (windyRadarAccumulationLayer.setZIndex) windyRadarAccumulationLayer.setZIndex(WINDY_ACCUMULATION_Z_INDEX); if (windyRadarAccumulationLayer.bringToFront) windyRadarAccumulationLayer.bringToFront(); addWindyAccumulationLegend(p.start, p.end, p.validFrames, p.frameCount, p.missingFrames); setWindyAccumulationStatus(`Accumulation map plotted; current radar hidden until Unplot. Click the map for accumulated rainfall totals. ${p.validFrames}/${p.frameCount} frames sampled${p.missingFrames ? ` (${p.missingFrames} missing)` : ''}.`); updateWindyAccumulationPlotButtons(); }
+        function getWindyAccumulationRenderScale() { const size = map.getSize(); return Math.max(1, Math.ceil(Math.max(size.x, size.y) / 900)); }
+        function buildWindyAccumulationFrames(start, end) { const step = 5 * 60 * 1000, first = getWindyRadarFrameTimeGlobal(start), frames = []; for (let t = first.getTime(); t < end.getTime(); t += step) { const fs = Math.max(t, start.getTime()), fe = Math.min(t + step, end.getTime()); if (fe > fs) frames.push({ time: new Date(t), durationHours: (fe - fs) / 3600000 }); } return frames; }
+        function precomputeWindyAccumulationPixels(width, height, scale, z) { const groups = new Map(); for (let y = 0; y < height; y++) { for (let x = 0; x < width; x++) { const ll = map.containerPointToLatLng(L.point((x + .5) * scale, (y + .5) * scale)); const tile = lonLatToWindyTilePixel(ll, z), key = `${tile.xTile}:${tile.yTile}`, idx = y * width + x, rec = { idx, px: tile.px, py: tile.py }; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(rec); } } return groups; }
+        function shouldUseWindyAccumulationArchive(frameTime) { return Date.now() - getWindyRadarFrameTimeGlobal(frameTime).getTime() > 2 * 60 * 60 * 1000; }
+        async function fetchWindyRadarAccumulationCanvas(url) { const cached = windyRadarPointerTileCache.get(url); if (cached) return cached; const response = await fetch(url, { cache: 'force-cache' }); if (!response.ok) throw new Error(`HTTP ${response.status}`); const blob = await response.blob(); const bitmap = await createImageBitmap(blob); const canvas = document.createElement('canvas'); canvas.width = bitmap.width; canvas.height = bitmap.height; const ctx = canvas.getContext('2d', { willReadFrequently: true }); ctx.drawImage(bitmap, 0, 0); const record = { canvas, ctx, url, width: bitmap.width, height: bitmap.height }; windyRadarPointerTileCache.set(url, record); pruneWindyRadarPointerTileCache(); return record; }
+        function formatWindyAccumulationTotalMm(mm) { if (!Number.isFinite(mm) || mm < 0.005) return '0.00 mm'; if (mm < 10) return `${mm.toFixed(2)} mm`; if (mm < 100) return `${mm.toFixed(1)} mm`; return `${Math.round(mm)} mm`; }
+        function sampleWindyAccumulationTotalAtLatLng(latlng) { const p = windyRadarAccumulationPending; if (!p || !p.totals || !p.bounds || !p.bounds.contains(latlng)) return null; const pt = map.latLngToLayerPoint(latlng), nw = map.latLngToLayerPoint(p.bounds.getNorthWest()), se = map.latLngToLayerPoint(p.bounds.getSouthEast()); const xRatio = (pt.x - nw.x) / (se.x - nw.x), yRatio = (pt.y - nw.y) / (se.y - nw.y); const x = Math.max(0, Math.min(p.width - 1, Math.floor(xRatio * p.width))), y = Math.max(0, Math.min(p.height - 1, Math.floor(yRatio * p.height))); const total = p.totals[y * p.width + x] || 0; return { totalMm: total, x, y, start: p.start, end: p.end, validFrames: p.validFrames, frameCount: p.frameCount, missingFrames: p.missingFrames }; }
+        function showWindyAccumulationRainfallPopup(latlng, sample) { if (!sample) { L.popup({ className: 'windy-radar-pointer-popup', closeButton: true, autoPan: true }).setLatLng(latlng).setContent('<div style="font-family:Inter,Arial,sans-serif;font-size:12px;"><strong>Accumulated rainfall</strong><br>No calculated accumulation value at this location.</div>').openOn(map); return; } const totalText = formatWindyAccumulationTotalMm(sample.totalMm); const rgba = colourForWindyAccumulationMm(sample.totalMm); const colour = `rgba(${rgba[0]},${rgba[1]},${rgba[2]},${Math.max(.35, rgba[3] / 255)})`; const html = `<div style="min-width:240px;font-family:Inter,Arial,sans-serif;line-height:1.35;"><div style="font-weight:800;font-size:13px;margin-bottom:6px;color:#1a2a44;">Accumulated rainfall total</div><div style="font-size:24px;font-weight:800;color:${colour};margin-bottom:4px;text-shadow:0 1px 1px rgba(0,0,0,.18);">${totalText}</div><div style="font-size:11px;color:#555;">${sample.start.toLocaleString()} – ${sample.end.toLocaleString()}</div><div style="font-size:10px;color:#777;margin-top:5px;">${sample.validFrames}/${sample.frameCount} frames sampled${sample.missingFrames ? ` (${sample.missingFrames} missing)` : ''}</div><div style="font-size:10px;color:#999;margin-top:4px;">Estimated from radar frames in 5 minutes interval.</div></div>`; L.popup({ className: 'windy-radar-pointer-popup', closeButton: true, autoPan: true }).setLatLng(latlng).setContent(html).openOn(map); }
+        async function calculateWindyRadarAccumulationMap() { if (!isWindyRadarPointerActive()) { setWindyAccumulationStatus('Windy Radar must be toggled on and selected before the accumulation map can be generated.', true); return; } const runId = ++windyRadarAccumulationRunId; try { removeWindyAccumulationOverlayOnly(); restoreCurrentRadarAfterWindyAccumulation(); windyRadarAccumulationPending = null; updateWindyAccumulationPlotButtons(); setDefaultWindyAccumulationTimes(false); const { start, end } = getWindyAccumulationTimeRange(); const frames = buildWindyAccumulationFrames(start, end); if (!frames.length) throw new Error('No 5-minute Windy Radar frames found inside that range.'); const size = map.getSize(), scale = getWindyAccumulationRenderScale(), width = Math.max(1, Math.floor(size.x / scale)), height = Math.max(1, Math.floor(size.y / scale)), z = getWindyRadarPointerNativeZoom(), bounds = map.getBounds(); setWindyAccumulationStatus(`Preparing ${width}×${height} accumulation grid and ${frames.length} frames…`); setWindyAccumulationProgress(0, `Preparing ${width}×${height} accumulation grid and ${frames.length} frames…`); await new Promise(r => setTimeout(r, 0)); const groups = precomputeWindyAccumulationPixels(width, height, scale, z), totals = new Float32Array(width * height); let validFrames = 0, missingFrames = 0; for (let fi = 0; fi < frames.length; fi++) { if (runId !== windyRadarAccumulationRunId) return; const frame = frames[fi], pct = Math.floor((fi / frames.length) * 96); if (fi === 0 || fi === frames.length - 1 || fi % 6 === 0) { const mode = shouldUseWindyAccumulationArchive(frame.time) ? 'archive' : 'live'; const msg = `Calculating rainfall map… frame ${fi + 1}/${frames.length} (${mode}), tiles ${groups.size}, output ${width}×${height}`; setWindyAccumulationStatus(msg); setWindyAccumulationProgress(pct, msg); await new Promise(r => setTimeout(r, 0)); } let frameHadData = false; for (const [key, group] of groups) { const [xTile, yTile] = key.split(':').map(Number); let url = buildWindyRadarTileUrlForTime(frame.time, z, xTile, yTile); if (shouldUseWindyAccumulationArchive(frame.time) && typeof windyRadarArchiveUrl === 'function') url = windyRadarArchiveUrl(url); try { const source = await fetchWindyRadarAccumulationCanvas(url); if (!source || !source.ctx) continue; const data = source.ctx.getImageData(0, 0, source.width, source.height).data; for (const rec of group) { const sx = Math.max(0, Math.min(source.width - 1, Math.floor(rec.px * source.width / 256))), sy = Math.max(0, Math.min(source.height - 1, Math.floor(rec.py * source.height / 256))), off = (sy * source.width + sx) * 4, enc = getWindyRadarEncodedValue(data[off], data[off + 1], data[off + 2]); if (enc !== null) totals[rec.idx] += windyRadarEncodedToMmh(enc) * frame.durationHours; } frameHadData = true; } catch (e) { console.warn('Windy accumulation tile failed:', frame.time.toISOString(), key, e); } } if (frameHadData) validFrames++; else missingFrames++; } if (runId !== windyRadarAccumulationRunId) return; setWindyAccumulationProgress(97, 'Colouring accumulated rainfall grid…'); await new Promise(r => setTimeout(r, 0)); const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height; const ctx = canvas.getContext('2d'), out = ctx.createImageData(width, height); for (let i = 0; i < totals.length; i++) { const rgba = colourForWindyAccumulationMm(totals[i]), o = i * 4; out.data[o] = rgba[0]; out.data[o + 1] = rgba[1]; out.data[o + 2] = rgba[2]; out.data[o + 3] = rgba[3]; } ctx.putImageData(out, 0, 0); setWindyAccumulationProgress(99, 'Finalising overlay, but not plotting yet…'); await new Promise(r => setTimeout(r, 0)); windyRadarAccumulationPending = { dataUrl: canvas.toDataURL('image/png'), bounds, start, end, validFrames, frameCount: frames.length, missingFrames, width, height, totals }; setWindyAccumulationProgress(100, '100% complete — click Plot to show the map.'); setWindyAccumulationStatus(`Accumulation map calculated but not plotted. Click <strong>Plot</strong> to hide current radar and show accumulation. ${validFrames}/${frames.length} frames sampled${missingFrames ? ` (${missingFrames} missing)` : ''}.`); updateWindyAccumulationPlotButtons(); hideWindyAccumulationProgress(3500); } catch (error) { console.warn('Windy Radar accumulation map failed:', error); setWindyAccumulationStatus(error.message || 'Accumulation map generation failed.', true); setWindyAccumulationProgress(0, 'Calculation stopped.'); hideWindyAccumulationProgress(2500); updateWindyAccumulationPlotButtons(); } }
+
         function showWindyRadarRainfallPopup(latlng, sample) {
             const targetLevels = getUkRadarTargetLevels();
             const mmh = sample?.mmh ?? 0;
@@ -8047,8 +8226,12 @@
                 .openOn(map);
         }
         async function handleWindyRadarMapClick(e) {
-            if (!isWindyRadarPointerActive()) return;
+            if (!isWindyRadarPointerActive() && !(typeof isWindyAccumulationMapPlotted === 'function' && isWindyAccumulationMapPlotted())) return;
             if (isDrawingEnabled) return;
+            if (typeof isWindyAccumulationMapPlotted === 'function' && isWindyAccumulationMapPlotted()) {
+                showWindyAccumulationRainfallPopup(e.latlng, sampleWindyAccumulationTotalAtLatLng(e.latlng));
+                return;
+            }
             try {
                 const sample = await sampleWindyRadarRainfallAtLatLng(e.latlng);
                 showWindyRadarRainfallPopup(e.latlng, sample);
@@ -8074,9 +8257,13 @@
             const radarOn = document.getElementById('radarToggle')?.checked !== false;
             const control = document.getElementById('uk-custom-radar-colour-control');
             const editor = document.getElementById('uk-custom-radar-editor');
+            const accumulationPanel = document.getElementById('windy-radar-accumulation-panel');
             // The old Windy Radar on/off colour-scale switch has been removed; keep this guard for older cached DOM.
             if (control) control.style.display = 'none';
             if (editor) editor.style.display = selected && radarOn ? 'block' : 'none';
+            if (accumulationPanel) accumulationPanel.style.display = selected && radarOn ? 'block' : 'none';
+            if (selected && radarOn && typeof setDefaultWindyAccumulationTimes === 'function') setDefaultWindyAccumulationTimes(false);
+            if (typeof updateWindyAccumulationPlotButtons === 'function') updateWindyAccumulationPlotButtons();
         }
         function rebuildUkRadarOnly() {
             const select = document.getElementById('radarLayer');
@@ -12102,6 +12289,15 @@
             const pngZ = expertMode ? parseInt(document.getElementById('png-zindex').value) || 40 : 40;
             const numbersZ = expertMode ? parseInt(document.getElementById('numbers-zindex').value) || 1200 : 1200;
             const nowcastZ = Math.max(kmlZ, pngZ) + 10; // Ensure nowcast is above KML and PNG, but below lightning
+
+            // Keep local nowcast fill visually sandwiched between satellite and radar.
+            // This pane is separate from the expert-mode nowcast outline/layer ordering below.
+            if (map.getPane('nowcastFillPane')) {
+                map.getPane('nowcastFillPane').style.zIndex = 145;
+            }
+            if (map.getPane('nowcastOutlinePane')) {
+                map.getPane('nowcastOutlinePane').style.zIndex = 650;
+            }
 
             // Remove all layers to re-add them in the correct order
             if (nowcastLayer && map.hasLayer(nowcastLayer)) map.removeLayer(nowcastLayer);
