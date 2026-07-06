@@ -2489,7 +2489,8 @@
                         <span class="tooltip">Show coastline on top of weather</span>
                     </div>
                     <div class="toggle-switch">
-                        <input type="checkbox" id="overlay-toggle" onchange="toggleReferenceLayer(this.checked)">
+                        <input type="checkbox" id="overlay-toggle" onchange="toggleReferenceLayer(this.checked)"
+                            checked>
                         <label for="overlay-toggle" class="switch"></label>
                     </div>
                 </div>
@@ -7530,25 +7531,40 @@
         // ==========================================
 
         const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
-            [0.02, [40, 16, 158, 0]],       // 0 dBZ
-            [0.03, [40, 16, 158, 20]],      // 3 dBZ
-            [0.06, [40, 16, 158, 100]],     // 8 dBZ
-            [0.14, [0, 101, 154, 180]],     // 14 dBZ
-            [0.32, [0, 144, 147, 220]],     // 20 dBZ
-            [0.76, [0, 179, 125, 240]],     // 26 dBZ
-            [1.82, [117, 208, 89, 255]],    // 32 dBZ
-            [3.24, [220, 220, 30, 255]],    // 36 dBZ
-            [5.76, [244, 202, 8, 255]],     // 40 dBZ
-            [10.25, [245, 168, 24, 255]],   // 44 dBZ
-            [18.24, [236, 130, 63, 255]],   // 48 dBZ
-            [32.44, [205, 75, 75, 255]],    // 52 dBZ
-            [57.7, [182, 45, 100, 255]],    // 56 dBZ
-            [102.6, [156, 16, 109, 255]],   // 60 dBZ
-            [182.4, [125, 0, 108, 255]],    // 64 dBZ
-            [324.4, [92, 0, 100, 255]],     // 68 dBZ
-            [1000, [0, 0, 0, 255]],         // 100 dBZ
-            [1001, [0, 0, 0, 0]],
-            [9999, [0, 0, 0, 0]]
+            // Light professional 2^n mm/h rainfall colour scale
+            // Thresholds are lower bounds: colour applies from this mm/h until the next threshold.
+            // No dark red / dark purple; high-end uses brighter pink/lavender/violet.
+
+            [0.00000, [0, 0, 0, 0]],           // no rain / transparent
+
+            // Very light rain / drizzle
+            [0.03125, [225, 245, 255, 120]],   // 1/32 mm/h - very pale blue
+            [0.06250, [185, 225, 245, 170]],   // 1/16 mm/h - pale blue
+            [0.12500, [135, 195, 235, 210]],   // 1/8 mm/h - light blue
+            [0.25000, [80, 155, 220, 235]],    // 1/4 mm/h - medium blue
+            [0.50000, [45, 110, 220, 255]],    // 1/2 mm/h - clear blue
+
+            // Light to moderate rain
+            [1.00000, [0, 170, 120, 255]],     // 1 mm/h - teal green
+            [2.00000, [70, 205, 80, 255]],     // 2 mm/h - green
+            [4.00000, [235, 235, 0, 255]],     // 4 mm/h - yellow
+
+            // Heavy rain
+            [8.00000, [255, 185, 0, 255]],     // 8 mm/h - amber
+            [16.00000, [255, 105, 0, 255]],    // 16 mm/h - orange
+            [32.00000, [255, 35, 35, 255]],    // 32 mm/h - bright red
+
+            // Very heavy / extreme rain, lighter high-end colours
+            [64.00000, [255, 95, 95, 255]],    // 64 mm/h - light red
+            [128.00000, [255, 145, 165, 255]], // 128 mm/h - pink
+            [256.00000, [245, 180, 220, 255]], // 256 mm/h - pale magenta-pink
+            [512.00000, [220, 185, 245, 255]], // 512 mm/h - light lavender
+            [1024.00000, [185, 145, 235, 255]],// 1024 mm/h - soft violet
+            [2048.00000, [155, 105, 225, 255]],// 2048 mm/h - medium violet
+            [4096.00000, [255, 255, 255, 255]],// 4096 mm/h - white debug/overflow
+            [8192.00000, [255, 0, 255, 255]],  // 8192+ mm/h - magenta debug/failed calibration
+
+            [99999, [255, 0, 255, 255]]
         ];
 
         const WINDY_RADAR_DBZ_PER_ENCODED_UNIT = 56 / 94; // calibrated from Windy picker: RGB(93,95,26) → 56 dBZ
