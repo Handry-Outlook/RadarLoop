@@ -8688,7 +8688,7 @@ async function calculateWindyRadarAccumulationMap() {
             } else restoreCurrentRadarAfterWindyAccumulation();
 
             if (!isWindyRadarPointerActive()) {
-                setWindyAccumulationStatus('Windy Radar must be toggled on and selected before the accumulation map can be generated.', true);
+                setWindyAccumulationStatus('Radar must be toggled on and selected before the accumulation map can be generated.', true);
                 return;
             }
             windyRadarAccumulationCalculating = true;
@@ -8817,7 +8817,7 @@ async function calculateWindyRadarAccumulationMap() {
                 const sample = await sampleWindyRadarRainfallAtLatLng(e.latlng);
                 showWindyRadarRainfallPopup(e.latlng, sample);
             } catch (error) {
-                console.warn('Failed to sample Windy radar rainfall at clicked location:', error);
+                console.warn('Failed to sample radar rainfall at clicked location:', error);
                 L.popup({ className: 'windy-radar-pointer-popup', closeButton: true, autoPan: true })
                     .setLatLng(e.latlng)
                     .setContent('<div style="font-family:Inter,Arial,sans-serif; font-size:12px;"><strong>Estimated Rainfall Amount</strong><br>Rainfall unavailable for this plotted tile.</div>')
