@@ -2401,13 +2401,27 @@
                     #b83dba, #3e00e9, #2600ff);
         }
 
-        .windy-radar-crisp-tile {
+        .windy-radar-crisp-tile,
+        .leaflet-tile.windy-radar-crisp-tile,
+        canvas.windy-radar-crisp-tile,
+        img.windy-radar-crisp-tile {
+            /* Keep Windy radar crisp on laptops/desktops, especially during Leaflet CSS zoom transforms. */
             image-rendering: pixelated !important;
             image-rendering: crisp-edges !important;
+            image-rendering: -moz-crisp-edges !important;
             image-rendering: -webkit-optimize-contrast !important;
-            transform: translateZ(0);
+            image-rendering: optimize-contrast !important;
+            -ms-interpolation-mode: nearest-neighbor;
+            transform: translate3d(0, 0, 0);
+            transform-origin: top left;
             backface-visibility: hidden;
+            filter: none !important;
             will-change: transform;
+        }
+        .leaflet-zoom-animated .windy-radar-crisp-tile,
+        .leaflet-zoom-anim .windy-radar-crisp-tile {
+            image-rendering: pixelated !important;
+            image-rendering: crisp-edges !important;
         }
 
         .windy-accum-progress-wrap {
@@ -4030,6 +4044,31 @@
         let isFilterApplied = false;
         var polygonNowcastLayer = L.layerGroup();
         setTimeout(initNowcastPerformanceMode, 0);
+
+        // Keep Windy radar sharp on laptop/desktop zooms and when moving between screens with different DPR.
+        // Leaflet temporarily scales tiles with CSS while zooming; this redraws the HiDPI canvases after zoom settles.
+        let lastWindyRadarDevicePixelRatio = window.devicePixelRatio || 1;
+        function refreshWindyRadarCrispTiles(reason = 'refresh') {
+            try {
+                const selectedRadar = document.getElementById('radarLayer')?.value;
+                const radarEnabled = document.getElementById('radarToggle')?.checked;
+                if (selectedRadar === 'windy-radar' && radarEnabled && radarLayer && map && map.hasLayer(radarLayer) && typeof radarLayer.redraw === 'function') {
+                    radarLayer.redraw();
+                    console.info(`Windy Radar crisp redraw: ${reason}`);
+                }
+            } catch (e) {
+                console.warn('Windy Radar crisp redraw skipped:', e);
+            }
+        }
+        map.on('zoomend resize', () => refreshWindyRadarCrispTiles('zoom/resize'));
+        window.addEventListener('resize', () => {
+            const currentDpr = window.devicePixelRatio || 1;
+            if (Math.abs(currentDpr - lastWindyRadarDevicePixelRatio) > 0.01) {
+                lastWindyRadarDevicePixelRatio = currentDpr;
+                refreshWindyRadarCrispTiles('devicePixelRatio changed');
+            }
+        });
+
 
         const currentTime = new Date();
         // Assuming 'map' is globally defined by Leaflet setup
@@ -6649,7 +6688,8 @@
                             ...tileOptions,
                             minNativeZoom: WINDY_RADAR_MAX_NATIVE_ZOOM,
                             maxNativeZoom: WINDY_RADAR_MAX_NATIVE_ZOOM,
-                            applyWindyColourReplacement: true
+                            applyWindyColourReplacement: true,
+                            className: 'seamless-layer windy-radar-crisp-tile'
                         });
 
                     } else {
@@ -7648,7 +7688,13 @@
         // and then replaces those levels with the selected custom template colours.
         // ==========================================
 
-        const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
+        function dbzToWindyMmh(dbz) {
+    // Same Z-R style as your current Windy conversion:
+    // R = (10^(dBZ / 10) * 0.005)^0.625
+    return Math.pow(Math.pow(10, dbz / 10) * 0.005, 0.625);
+}
+
+const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
             // Light professional 2^n mm/h rainfall colour scale
             // Thresholds are lower bounds: colour applies from this mm/h until the next threshold.
             // No dark red / dark purple; high-end uses brighter pink/lavender/violet.
@@ -7968,7 +8014,10 @@
 
                 // Use a HiDPI canvas and nearest-neighbour draw. This cannot invent new Windy detail
                 // above native z7, but it avoids soft browser interpolation on pixel edges.
-                const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
+                // Fractional DPR values such as 1.25/1.5 on Windows laptops can make canvases look soft.
+                // Round the backing store up to the next whole DPR so the browser has enough real pixels.
+                const rawDpr = window.devicePixelRatio || 1;
+                const dpr = Math.max(1, Math.min(Math.ceil(rawDpr), 3));
                 tile.width = Math.round(size.x * dpr);
                 tile.height = Math.round(size.y * dpr);
                 tile.style.width = `${size.x}px`;
@@ -7981,6 +8030,9 @@
                 ctx.webkitImageSmoothingEnabled = false;
                 ctx.mozImageSmoothingEnabled = false;
                 ctx.msImageSmoothingEnabled = false;
+                ctx.imageSmoothingQuality = 'low';
+                tile.setAttribute('data-windy-radar-dpr', String(dpr));
+                tile.setAttribute('data-windy-radar-css-size', `${size.x}x${size.y}`);
 
                 const originalZoom = coords.z;
                 const nativeZoom = Math.min(originalZoom, WINDY_RADAR_MAX_NATIVE_ZOOM);
@@ -7996,10 +8048,13 @@
                     ctx.msImageSmoothingEnabled = false;
 
                     if (nativeZoom < originalZoom) {
-                        const srcX = Math.round((coords.x - nativeCoords.x * scale) * (size.x / scale));
-                        const srcY = Math.round((coords.y - nativeCoords.y * scale) * (size.y / scale));
-                        const srcSize = Math.max(1, Math.round(size.x / scale));
-                        ctx.drawImage(img, srcX, srcY, srcSize, srcSize, 0, 0, size.x, size.y);
+                        const sourceW = img.naturalWidth || img.width || size.x;
+                        const sourceH = img.naturalHeight || img.height || size.y;
+                        const srcX = Math.round((coords.x - nativeCoords.x * scale) * (sourceW / scale));
+                        const srcY = Math.round((coords.y - nativeCoords.y * scale) * (sourceH / scale));
+                        const srcW = Math.max(1, Math.round(sourceW / scale));
+                        const srcH = Math.max(1, Math.round(sourceH / scale));
+                        ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, size.x, size.y);
                     } else {
                         ctx.drawImage(img, 0, 0, size.x, size.y);
                     }
