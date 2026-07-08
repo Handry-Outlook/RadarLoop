@@ -3919,16 +3919,18 @@
         const weatherTileUrlCache = new Map();
         const weatherTileNegativeCache = new Map();
 
-        // ==================== WEATHER TILE PERFORMANCE / KEEP-TILES DRAG BRAKE ====================
-        // This manager throttles RadarLoop's own weather URL validation/probing and layer plotting.
-        // IMPORTANT: it does NOT remove existing plotted weather layers during drag. Existing tiles stay
-        // visible; only new validation/replot work is paused until the map settles.
+        // ==================== WEATHER TILE PERFORMANCE / MOBILE ZOOM SAFE BRAKE ====================
+        // Keeps old plotted weather tiles visible, but pauses RadarLoop's validation/replot work while the
+        // user is moving/zooming. On phones, it also freezes Leaflet weather tile updates during pinch/zoom
+        // so a sudden zoom-out does not request hundreds of new weather tiles at once.
         const WEATHER_PERF = {
             maxProbeConcurrency: 6,
             maxAnimationProbeConcurrency: 3,
+            maxMobileProbeConcurrency: 2,
             updateDebounceMs: 650,
             animationUpdateDebounceMs: 2500,
             interactionSettleMs: 650,
+            mobileZoomSettleMs: 1400,
             minAnimationWeatherGapMs: 2500,
             frameKeys: new Map(),
             queue: [],
@@ -3941,11 +3943,22 @@
             droppedStaleUpdates: 0,
             skippedSameFrameUpdates: 0,
             mapInteracting: false,
+            zooming: false,
+            mobileZoomFreeze: false,
+            zoomStartLevel: null,
             interactionTimer: null,
-            latestInteractionTimestamp: null
+            latestInteractionTimestamp: null,
+            managedGridLayers: new Set()
         };
         let weatherUpdateDebounceTimer = null;
         let pendingDebouncedWeatherTimestamp = null;
+
+        function isMobileWeatherDevice() {
+            const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+            const narrow = Math.min(window.innerWidth || 9999, window.innerHeight || 9999) <= 820;
+            const uaMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+            return coarse || narrow || uaMobile;
+        }
 
         function beginWeatherPerformanceGeneration() {
             WEATHER_PERF.generation++;
@@ -3963,6 +3976,7 @@
         }
 
         function weatherPerfConcurrencyLimit() {
+            if (isMobileWeatherDevice()) return WEATHER_PERF.maxMobileProbeConcurrency;
             return isPlaying ? WEATHER_PERF.maxAnimationProbeConcurrency : WEATHER_PERF.maxProbeConcurrency;
         }
 
@@ -3970,7 +3984,7 @@
             const limit = weatherPerfConcurrencyLimit();
             while (WEATHER_PERF.active < limit && WEATHER_PERF.queue.length) {
                 const item = WEATHER_PERF.queue.shift();
-                if (item.generation !== WEATHER_PERF.generation || WEATHER_PERF.mapInteracting) {
+                if (item.generation !== WEATHER_PERF.generation || WEATHER_PERF.mapInteracting || WEATHER_PERF.mobileZoomFreeze) {
                     WEATHER_PERF.droppedStaleUpdates++;
                     item.reject(new DOMException('Stale/weather-interaction request skipped', 'AbortError'));
                     continue;
@@ -3990,8 +4004,8 @@
         function weatherPerfFetch(url, options = {}) {
             const generation = WEATHER_PERF.generation;
             return new Promise((resolve, reject) => {
-                if (WEATHER_PERF.mapInteracting) {
-                    reject(new DOMException('Weather validation skipped while map is moving', 'AbortError'));
+                if (WEATHER_PERF.mapInteracting || WEATHER_PERF.mobileZoomFreeze) {
+                    reject(new DOMException('Weather validation skipped while map is moving/zooming', 'AbortError'));
                     return;
                 }
                 WEATHER_PERF.queue.push({ url, options, generation, resolve, reject });
@@ -4013,16 +4027,16 @@
                 const bounds = map.getPixelBounds(Math.round(zoom));
                 const tw = 256;
                 return Math.max(1, Math.ceil((bounds.max.x - bounds.min.x) / tw) * Math.ceil((bounds.max.y - bounds.min.y) / tw));
-            } catch (e) {
-                return 1;
-            }
+            } catch (e) { return 1; }
         }
 
         function scheduleWeatherLayerUpdate(timestamp, reason = 'debounced') {
             pendingDebouncedWeatherTimestamp = timestamp;
-            const delay = WEATHER_PERF.mapInteracting
-                ? WEATHER_PERF.interactionSettleMs
-                : (isPlaying ? WEATHER_PERF.animationUpdateDebounceMs : WEATHER_PERF.updateDebounceMs);
+            const delay = WEATHER_PERF.mobileZoomFreeze
+                ? WEATHER_PERF.mobileZoomSettleMs
+                : (WEATHER_PERF.mapInteracting
+                    ? WEATHER_PERF.interactionSettleMs
+                    : (isPlaying ? WEATHER_PERF.animationUpdateDebounceMs : WEATHER_PERF.updateDebounceMs));
             clearTimeout(weatherUpdateDebounceTimer);
             weatherUpdateDebounceTimer = setTimeout(() => {
                 const ts = pendingDebouncedWeatherTimestamp;
@@ -4036,44 +4050,119 @@
             else WEATHER_PERF.frameKeys.clear();
         }
 
-        function pauseWeatherWorkForInteraction() {
-            // Do not remove layers. Keep old plotted tiles visible while stopping stale validation/replot work.
+        function pauseWeatherWorkForInteraction(isZoom = false) {
             WEATHER_PERF.mapInteracting = true;
+            WEATHER_PERF.zooming = !!isZoom;
+            if (isZoom && isMobileWeatherDevice()) WEATHER_PERF.mobileZoomFreeze = true;
             WEATHER_PERF.generation++;
             if (WEATHER_PERF.abortController) {
                 try { WEATHER_PERF.abortController.abort(); } catch (e) { }
             }
             WEATHER_PERF.queue.length = 0;
             clearTimeout(weatherUpdateDebounceTimer);
+            // Cancel partially-loading managed weather tiles but keep already-rendered tiles on screen.
+            for (const layer of WEATHER_PERF.managedGridLayers) {
+                try {
+                    if (layer && typeof layer._abortLoading === 'function') layer._abortLoading();
+                } catch (e) { }
+            }
         }
 
         function resumeWeatherWorkAfterInteraction() {
             clearTimeout(WEATHER_PERF.interactionTimer);
+            const delay = WEATHER_PERF.mobileZoomFreeze ? WEATHER_PERF.mobileZoomSettleMs : WEATHER_PERF.interactionSettleMs;
             WEATHER_PERF.interactionTimer = setTimeout(() => {
                 WEATHER_PERF.mapInteracting = false;
+                WEATHER_PERF.zooming = false;
+                WEATHER_PERF.mobileZoomFreeze = false;
                 processWeatherPerfQueue();
                 const ts = WEATHER_PERF.latestInteractionTimestamp || getCurrentSliderTimestamp();
                 scheduleWeatherLayerUpdate(ts, 'interaction-settled');
-            }, WEATHER_PERF.interactionSettleMs);
+            }, delay);
         }
+
+        function registerWeatherManagedLayer(layer) {
+            if (!layer) return layer;
+            try {
+                if (layer.options) layer.options.weatherManaged = true;
+                if (typeof layer.on === 'function') {
+                    layer.on('remove', () => {
+                        try { WEATHER_PERF.managedGridLayers.delete(layer); } catch (e) { }
+                    });
+                }
+                WEATHER_PERF.managedGridLayers.add(layer);
+            } catch (e) { }
+            return layer;
+        }
+
+        function installWeatherGridLayerFreeze() {
+            if (!window.L || !L.GridLayer || L.GridLayer.prototype._weatherFreezePatched) return;
+            L.GridLayer.prototype._weatherFreezePatched = true;
+            const originalUpdate = L.GridLayer.prototype._update;
+            L.GridLayer.prototype._update = function (center) {
+                if (this.options && this.options.weatherManaged && typeof WEATHER_PERF !== 'undefined' &&
+                    (WEATHER_PERF.mobileZoomFreeze || WEATHER_PERF.mapInteracting)) {
+                    return;
+                }
+                return originalUpdate.call(this, center);
+            };
+            if (L.GridLayer.prototype._addTile) {
+                const originalAddTile = L.GridLayer.prototype._addTile;
+                L.GridLayer.prototype._addTile = function (coords, container) {
+                    if (this.options && this.options.weatherManaged && typeof WEATHER_PERF !== 'undefined' && WEATHER_PERF.mobileZoomFreeze) {
+                        return;
+                    }
+                    return originalAddTile.call(this, coords, container);
+                };
+            }
+        }
+        setTimeout(installWeatherGridLayerFreeze, 0);
+
+        function installWeatherLayerAddToRegisterHook() {
+            if (!window.L || !L.Layer || L.Layer.prototype._weatherAddToRegisterPatched) return;
+            L.Layer.prototype._weatherAddToRegisterPatched = true;
+            const originalAddTo = L.Layer.prototype.addTo;
+            L.Layer.prototype.addTo = function (targetMap) {
+                const result = originalAddTo.call(this, targetMap);
+                try {
+                    if (this.options && this.options.weatherManaged && typeof registerWeatherManagedLayer === 'function') {
+                        registerWeatherManagedLayer(this);
+                    }
+                } catch (e) { }
+                return result;
+            };
+        }
+        setTimeout(installWeatherLayerAddToRegisterHook, 0);
 
         function initialiseWeatherInteractionBrake() {
             if (!map || map._weatherInteractionBrakeAttached) return;
             map._weatherInteractionBrakeAttached = true;
-            map.on('movestart dragstart zoomstart', () => {
+            map.on('movestart dragstart', () => {
                 WEATHER_PERF.latestInteractionTimestamp = getCurrentSliderTimestamp();
-                pauseWeatherWorkForInteraction();
+                pauseWeatherWorkForInteraction(false);
             });
-            map.on('moveend dragend zoomend resize', () => {
+            map.on('zoomstart', () => {
+                WEATHER_PERF.zoomStartLevel = map.getZoom();
                 WEATHER_PERF.latestInteractionTimestamp = getCurrentSliderTimestamp();
+                pauseWeatherWorkForInteraction(true);
+            });
+            map.on('moveend dragend', () => {
+                WEATHER_PERF.latestInteractionTimestamp = getCurrentSliderTimestamp();
+                resumeWeatherWorkAfterInteraction();
+            });
+            map.on('zoomend resize', () => {
+                const z0 = WEATHER_PERF.zoomStartLevel;
+                const z1 = map.getZoom();
+                WEATHER_PERF.latestInteractionTimestamp = getCurrentSliderTimestamp();
+                // If the phone suddenly zoomed out, give the browser extra time before weather reload.
+                if (isMobileWeatherDevice() && z0 !== null && z1 < z0) WEATHER_PERF.mobileZoomFreeze = true;
+                WEATHER_PERF.zoomStartLevel = null;
                 resumeWeatherWorkAfterInteraction();
             });
         }
         setTimeout(initialiseWeatherInteractionBrake, 0);
 
         function canStartHeavyAccumulationWork(frameCount, tileCount, nativeTileMode = false) {
-            // Estimate the real workload, not the raw screen size. Viewport accumulation is downscaled by
-            // getWindyAccumulationRenderScale(), so raw map.getSize().x * map.getSize().y overestimates.
             let samples;
             if (nativeTileMode) {
                 samples = frameCount * tileCount * 256 * 256;
@@ -6505,7 +6594,7 @@
          * @param {string} layerKey - 'satellite', 'radar', 'isobar', or 'wind'.
          */
         async function plotMainLayer(finalUrl, layerType, timestamp, layerKey, windyRadarContext = '') {
-            if (typeof WEATHER_PERF !== 'undefined' && WEATHER_PERF.mapInteracting) {
+            if (typeof WEATHER_PERF !== 'undefined' && (WEATHER_PERF.mapInteracting || WEATHER_PERF.mobileZoomFreeze)) {
                 scheduleWeatherLayerUpdate(timestamp, 'plot-paused-during-map-interaction');
                 return;
             }
@@ -6532,7 +6621,8 @@
                 reuseTiles: true,
                 unloadInvisibleTiles: true,
                 detectRetina: false,
-                className: 'seamless-layer'
+                className: 'seamless-layer',
+                weatherManaged: true
             };
 
             switch (layerKey) {
@@ -6892,7 +6982,8 @@
                         pane: 'overlayPane',
                         attribution: layerOptions.attribution,
                         tileSize: 256,
-                        className: 'seamless-layer'
+                        className: 'seamless-layer',
+                weatherManaged: true
                     });
                 } else if (layerOptions.type === 'raster-tile') {
                     const tileOptions = {
@@ -6903,7 +6994,8 @@
                         tms: layerOptions.tms === true,
                         tileSize: 256,
                         crossOrigin: true,
-                        className: 'seamless-layer'
+                        className: 'seamless-layer',
+                weatherManaged: true
                     };
                     if (layerKey === 'radar' && layerType === 'windy-radar') {
                         newLayer = createWindyRadarArchiveAwareTileLayer(finalUrl, {
@@ -6936,15 +7028,18 @@
                             opacity: currentOpacity,
                             vectorTileLayerStyles: vectorStyles,
                             className: 'seamless-layer',
+                weatherManaged: true,
                             zIndex: zIndex,
                             pane: 'overlayPane',
                             tms: isEuropeForecast // Apply TMS if it's the Europe forecast
                         });
                     } catch (error) {
-                        newLayer = L.tileLayer(finalUrl, { ...efficientTileOptions, opacity: currentOpacity, zIndex: zIndex, pane: 'overlayPane', tms: layerOptions.tms === true, tileSize: 256, className: 'seamless-layer' });
+                        newLayer = L.tileLayer(finalUrl, { ...efficientTileOptions, opacity: currentOpacity, zIndex: zIndex, pane: 'overlayPane', tms: layerOptions.tms === true, tileSize: 256, className: 'seamless-layer',
+                weatherManaged: true });
                     }
                 } else {
-                    newLayer = L.tileLayer(finalUrl, { ...efficientTileOptions, opacity: currentOpacity, zIndex: zIndex, pane: 'overlayPane', tms: true, tileSize: 256, className: 'seamless-layer' });
+                    newLayer = L.tileLayer(finalUrl, { ...efficientTileOptions, opacity: currentOpacity, zIndex: zIndex, pane: 'overlayPane', tms: true, tileSize: 256, className: 'seamless-layer',
+                weatherManaged: true });
                 }
 
                 if (!newLayer) return;
@@ -7110,9 +7205,9 @@
         let activeWeatherLayerPlotCount = 0;
 
         async function updateMapLayers(timestamp) {
-            if (WEATHER_PERF.mapInteracting) {
+            if (WEATHER_PERF.mapInteracting || WEATHER_PERF.mobileZoomFreeze) {
                 pendingWeatherLayerTimestamp = timestamp;
-                scheduleWeatherLayerUpdate(timestamp, 'map-interacting');
+                scheduleWeatherLayerUpdate(timestamp, 'map-interacting-or-mobile-zoom');
                 return;
             }
             const now = Date.now();
@@ -7166,16 +7261,18 @@
                     continue;
                 }
                 jobs.push(async () => {
-                    if (generation !== WEATHER_PERF.generation || WEATHER_PERF.mapInteracting) return;
+                    if (generation !== WEATHER_PERF.generation || WEATHER_PERF.mapInteracting || WEATHER_PERF.mobileZoomFreeze) return;
                     await plotLayerIfNecessary(layerType, def.options, targetTimestamp, def.key);
-                    if (generation === WEATHER_PERF.generation && !WEATHER_PERF.mapInteracting) WEATHER_PERF.frameKeys.set(def.key, frameKey);
+                    if (generation === WEATHER_PERF.generation && !WEATHER_PERF.mapInteracting && !WEATHER_PERF.mobileZoomFreeze) {
+                        WEATHER_PERF.frameKeys.set(def.key, frameKey);
+                    }
                 });
             }
 
             activeWeatherLayerPlotCount = jobs.length;
-            const concurrency = isPlaying ? 1 : (LOW_END_NOWCAST_MODE ? 1 : (jobs.length >= 3 ? 1 : 2));
+            const concurrency = isMobileWeatherDevice() ? 1 : (isPlaying ? 1 : (LOW_END_NOWCAST_MODE ? 1 : (jobs.length >= 3 ? 1 : 2)));
             for (let i = 0; i < jobs.length; i += concurrency) {
-                if (generation !== WEATHER_PERF.generation || WEATHER_PERF.mapInteracting || pendingWeatherLayerTimestamp !== null) break;
+                if (generation !== WEATHER_PERF.generation || WEATHER_PERF.mapInteracting || WEATHER_PERF.mobileZoomFreeze || pendingWeatherLayerTimestamp !== null) break;
                 await Promise.allSettled(jobs.slice(i, i + concurrency).map(job => job()));
             }
 
@@ -7642,7 +7739,7 @@
          * @param {string} layerKey - 'satellite', 'radar', 'isobar', or 'wind'.
          */
         async function plotLayerIfNecessary(layerType, optionsMap, targetTimestamp, layerKey) {
-            if (typeof WEATHER_PERF !== 'undefined' && WEATHER_PERF.mapInteracting) {
+            if (typeof WEATHER_PERF !== 'undefined' && (WEATHER_PERF.mapInteracting || WEATHER_PERF.mobileZoomFreeze)) {
                 scheduleWeatherLayerUpdate(targetTimestamp, 'plotLayer-paused-during-map-interaction');
                 return;
             }
