@@ -3919,19 +3919,22 @@
         const weatherTileUrlCache = new Map();
         const weatherTileNegativeCache = new Map();
 
-        // ==================== WEATHER TILE PERFORMANCE / BALANCED FAST MODE ====================
-        // Keeps the high-resolution Windy accumulation tile logic unchanged.
-        // This only protects normal weather-layer URL validation/replot logic from stale request storms.
-        // Existing Leaflet tile layers are not removed or frozen, so weather tiles still load promptly.
+        // ==================== WEATHER TILE PERFORMANCE / WINDY-LIKE PROGRESSIVE SCHEDULER ====================
+        // Preserves the high-res Windy tiled rainfall accumulation engine.
+        // This replaces hard mobile zoom freezes with a progressive, scheduler-based strategy:
+        // - old weather tiles stay visible,
+        // - fresh weather URLs are validated cache-first / stale-while-revalidate,
+        // - managed weather GridLayer updates are drip-fed across animation frames on mobile,
+        // - no long global tile freeze is used, so the map should not feel stuck.
         const WEATHER_PERF = {
-            maxProbeConcurrency: 8,
+            maxProbeConcurrency: 10,
             maxAnimationProbeConcurrency: 4,
-            maxMobileProbeConcurrency: 4,
-            updateDebounceMs: 250,
-            animationUpdateDebounceMs: 1200,
-            interactionSettleMs: 180,
-            mobileZoomSettleMs: 350,
-            minAnimationWeatherGapMs: 1200,
+            maxMobileProbeConcurrency: 5,
+            updateDebounceMs: 160,
+            animationUpdateDebounceMs: 900,
+            interactionSettleMs: 70,
+            mobileZoomSettleMs: 60,
+            minAnimationWeatherGapMs: 900,
             frameKeys: new Map(),
             queue: [],
             active: 0,
@@ -3945,8 +3948,18 @@
             mapInteracting: false,
             zooming: false,
             zoomStartLevel: null,
+            lastZoomEndAt: 0,
+            lastZoomDirection: 0,
+            mobileTileBurstUntil: 0,
+            mobileTileBatchSize: 2,
+            mobileTileBatchDelayMs: 18,
             interactionTimer: null,
-            latestInteractionTimestamp: null
+            latestInteractionTimestamp: null,
+            lastProgressivePreviewKey: null,
+            lastProgressivePreviewAt: 0,
+            managedGridUpdateQueue: new Map(),
+            managedGridUpdateTimer: null,
+            processingManagedGridLayer: null
         };
         let weatherUpdateDebounceTimer = null;
         let pendingDebouncedWeatherTimestamp = null;
@@ -4016,6 +4029,25 @@
             return `${layerKey}:${layerType}:${roundWeatherTimestampForLayer(timestamp, layerConfig)}`;
         }
 
+        function getBestCachedWeatherUrl(layerKey, layerType) {
+            let best = null;
+            let bestCheckedAt = -1;
+            const prefix = `${layerKey}|${layerType}|`;
+            try {
+                for (const [key, value] of weatherTileUrlCache.entries()) {
+                    if (!key.startsWith(prefix) || !value || !value.url) continue;
+                    if (value.checkedAt > bestCheckedAt) {
+                        bestCheckedAt = value.checkedAt;
+                        best = { url: value.url, checkedAt: value.checkedAt };
+                    }
+                }
+            } catch (e) { }
+            if (!best && layerType !== 'windy-radar' && typeof lastValidTileUrls !== 'undefined' && lastValidTileUrls[layerType]) {
+                best = { url: lastValidTileUrls[layerType], checkedAt: Date.now() - WEATHER_TILE_CACHE_TTL_MS };
+            }
+            return best;
+        }
+
         function scheduleWeatherLayerUpdate(timestamp, reason = 'debounced') {
             pendingDebouncedWeatherTimestamp = timestamp;
             const delay = WEATHER_PERF.zooming && isMobileWeatherDevice()
@@ -4037,7 +4069,7 @@
         }
 
         function pauseWeatherReplotWorkForInteraction(isZoom = false) {
-            // Keep current weather/accumulation layers alive. Only cancel stale validation/replot jobs.
+            // Do not stop existing tile layers. Only cancel stale timestamp validation/replot jobs.
             WEATHER_PERF.mapInteracting = true;
             WEATHER_PERF.zooming = !!isZoom;
             WEATHER_PERF.generation++;
@@ -4046,6 +4078,10 @@
             }
             WEATHER_PERF.queue.length = 0;
             clearTimeout(weatherUpdateDebounceTimer);
+            if (isZoom && isMobileWeatherDevice()) {
+                // Instead of freezing, switch managed weather GridLayers into drip-feed mode briefly.
+                WEATHER_PERF.mobileTileBurstUntil = Date.now() + 420;
+            }
         }
 
         function resumeWeatherReplotWorkAfterInteraction() {
@@ -4062,6 +4098,55 @@
             }, delay);
         }
 
+        function installProgressiveManagedWeatherGridScheduler() {
+            if (!window.L || !L.GridLayer || L.GridLayer.prototype._managedWeatherProgressivePatched) return;
+            L.GridLayer.prototype._managedWeatherProgressivePatched = true;
+            const originalUpdate = L.GridLayer.prototype._update;
+
+            function processManagedGridUpdateQueue() {
+                WEATHER_PERF.managedGridUpdateTimer = null;
+                if (!WEATHER_PERF.managedGridUpdateQueue.size) return;
+                const batch = isMobileWeatherDevice() ? WEATHER_PERF.mobileTileBatchSize : 4;
+                const entries = Array.from(WEATHER_PERF.managedGridUpdateQueue.entries()).slice(0, batch);
+                for (const [layer, center] of entries) {
+                    WEATHER_PERF.managedGridUpdateQueue.delete(layer);
+                    try {
+                        WEATHER_PERF.processingManagedGridLayer = layer;
+                        originalUpdate.call(layer, center);
+                    } catch (e) {
+                        console.warn('Managed weather tile update skipped:', e);
+                    } finally {
+                        WEATHER_PERF.processingManagedGridLayer = null;
+                    }
+                }
+                if (WEATHER_PERF.managedGridUpdateQueue.size) {
+                    WEATHER_PERF.managedGridUpdateTimer = setTimeout(processManagedGridUpdateQueue, WEATHER_PERF.mobileTileBatchDelayMs);
+                }
+            }
+
+            function queueManagedGridUpdate(layer, center) {
+                WEATHER_PERF.managedGridUpdateQueue.set(layer, center);
+                if (!WEATHER_PERF.managedGridUpdateTimer) {
+                    WEATHER_PERF.managedGridUpdateTimer = setTimeout(processManagedGridUpdateQueue, WEATHER_PERF.mobileTileBatchDelayMs);
+                }
+            }
+
+            L.GridLayer.prototype._update = function (center) {
+                if (this.options && this.options.weatherManaged && typeof WEATHER_PERF !== 'undefined' && isMobileWeatherDevice()) {
+                    if (WEATHER_PERF.processingManagedGridLayer === this) {
+                        return originalUpdate.call(this, center);
+                    }
+                    const shouldDripFeed = WEATHER_PERF.mapInteracting || WEATHER_PERF.zooming || Date.now() < WEATHER_PERF.mobileTileBurstUntil;
+                    if (shouldDripFeed) {
+                        queueManagedGridUpdate(this, center);
+                        return;
+                    }
+                }
+                return originalUpdate.call(this, center);
+            };
+        }
+        setTimeout(installProgressiveManagedWeatherGridScheduler, 0);
+
         function initialiseWeatherInteractionBrake() {
             if (!map || map._weatherInteractionBrakeAttached) return;
             map._weatherInteractionBrakeAttached = true;
@@ -4074,9 +4159,25 @@
                 WEATHER_PERF.latestInteractionTimestamp = getCurrentSliderTimestamp();
                 pauseWeatherReplotWorkForInteraction(true);
             });
-            map.on('moveend dragend zoomend resize', () => {
+            map.on('moveend dragend', () => {
                 WEATHER_PERF.latestInteractionTimestamp = getCurrentSliderTimestamp();
+                resumeWeatherReplotWorkAfterInteraction();
+            });
+            map.on('zoomend resize', () => {
+                const z0 = WEATHER_PERF.zoomStartLevel;
+                const z1 = map.getZoom();
+                const direction = z0 === null ? 0 : Math.sign(z1 - z0);
+                const now = Date.now();
+                const reversedQuickly = direction && WEATHER_PERF.lastZoomDirection && direction !== WEATHER_PERF.lastZoomDirection && (now - WEATHER_PERF.lastZoomEndAt) < 700;
+                const bigJump = z0 !== null && Math.abs(z1 - z0) >= 2;
+                if (isMobileWeatherDevice() && (reversedQuickly || bigJump)) {
+                    // No freeze: just extend drip-feed mode for tile-layer updates.
+                    WEATHER_PERF.mobileTileBurstUntil = Date.now() + (reversedQuickly ? 650 : 380);
+                }
+                WEATHER_PERF.lastZoomDirection = direction || WEATHER_PERF.lastZoomDirection;
+                WEATHER_PERF.lastZoomEndAt = now;
                 WEATHER_PERF.zoomStartLevel = null;
+                WEATHER_PERF.latestInteractionTimestamp = getCurrentSliderTimestamp();
                 resumeWeatherReplotWorkAfterInteraction();
             });
         }
@@ -6523,7 +6624,8 @@
                 reuseTiles: true,
                 unloadInvisibleTiles: true,
                 detectRetina: false,
-                className: 'seamless-layer'
+                className: 'seamless-layer',
+                weatherManaged: true
             };
 
             switch (layerKey) {
@@ -6883,7 +6985,8 @@
                         pane: 'overlayPane',
                         attribution: layerOptions.attribution,
                         tileSize: 256,
-                        className: 'seamless-layer'
+                        className: 'seamless-layer',
+                weatherManaged: true
                     });
                 } else if (layerOptions.type === 'raster-tile') {
                     const tileOptions = {
@@ -6894,7 +6997,8 @@
                         tms: layerOptions.tms === true,
                         tileSize: 256,
                         crossOrigin: true,
-                        className: 'seamless-layer'
+                        className: 'seamless-layer',
+                weatherManaged: true
                     };
                     if (layerKey === 'radar' && layerType === 'windy-radar') {
                         newLayer = createWindyRadarArchiveAwareTileLayer(finalUrl, {
@@ -6927,15 +7031,18 @@
                             opacity: currentOpacity,
                             vectorTileLayerStyles: vectorStyles,
                             className: 'seamless-layer',
+                weatherManaged: true,
                             zIndex: zIndex,
                             pane: 'overlayPane',
                             tms: isEuropeForecast // Apply TMS if it's the Europe forecast
                         });
                     } catch (error) {
-                        newLayer = L.tileLayer(finalUrl, { ...efficientTileOptions, opacity: currentOpacity, zIndex: zIndex, pane: 'overlayPane', tms: layerOptions.tms === true, tileSize: 256, className: 'seamless-layer' });
+                        newLayer = L.tileLayer(finalUrl, { ...efficientTileOptions, opacity: currentOpacity, zIndex: zIndex, pane: 'overlayPane', tms: layerOptions.tms === true, tileSize: 256, className: 'seamless-layer',
+                weatherManaged: true });
                     }
                 } else {
-                    newLayer = L.tileLayer(finalUrl, { ...efficientTileOptions, opacity: currentOpacity, zIndex: zIndex, pane: 'overlayPane', tms: true, tileSize: 256, className: 'seamless-layer' });
+                    newLayer = L.tileLayer(finalUrl, { ...efficientTileOptions, opacity: currentOpacity, zIndex: zIndex, pane: 'overlayPane', tms: true, tileSize: 256, className: 'seamless-layer',
+                weatherManaged: true });
                 }
 
                 if (!newLayer) return;
@@ -7729,6 +7836,21 @@
                 // - probe sequentially and stop at first valid timestamp instead of firing many requests
                 const framesToCheck = isPlaying ? 1 : (LOW_END_NOWCAST_MODE ? 1 : (activeWeatherLayerPlotCount >= 4 ? 1 : (activeWeatherLayerPlotCount >= 3 ? 2 : 4)));
                 const cacheNow = Date.now();
+
+                // Cache-first progressive preview: if we already have a recent URL for this layer type,
+                // plot it immediately on mobile so the user sees something while the exact timestamp validates.
+                // This is stale-while-revalidate: the fresh result below still replaces it when ready.
+                const progressivePreviewKey = `${layerKey}|${layerType}|${roundedTimestampMs}`;
+                const progressiveCached = (typeof getBestCachedWeatherUrl === 'function') ? getBestCachedWeatherUrl(layerKey, layerType) : null;
+                if (isMobileWeatherDevice() && progressiveCached && progressiveCached.url && WEATHER_PERF.lastProgressivePreviewKey !== progressivePreviewKey) {
+                    WEATHER_PERF.lastProgressivePreviewKey = progressivePreviewKey;
+                    WEATHER_PERF.lastProgressivePreviewAt = Date.now();
+                    try {
+                        await plotMainLayer(progressiveCached.url, layerType, null, layerKey, currentWindyRadarContext);
+                    } catch (e) {
+                        console.warn('Progressive cached weather preview failed:', e);
+                    }
+                }
 
                 for (let i = 0; i < framesToCheck; i++) {
                     const candidateTs = roundedTimestampMs - i * interval;
