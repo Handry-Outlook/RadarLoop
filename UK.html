@@ -8388,18 +8388,40 @@ const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
         function drawWindyAccumulationContourLabels() {
             clearWindyAccumulationContourLabels();
             const p = windyRadarAccumulationPending;
-            if (!p || !p.totals || !p.bounds || !p.width || !p.height || !isWindyAccumulationMapPlotted()) return;
+            if (!p || !p.bounds || !isWindyAccumulationMapPlotted()) return;
             windyAccumulationContourLayer = L.layerGroup();
             const densityInput = document.getElementById('density-slider');
             const density = Math.max(1, Math.min(160, parseInt(densityInput?.value || '50', 10) || 50));
+            if (p.tiles && p.tiles.size) {
+                const bounds = map.getBounds().pad(0.05);
+                const cols = Math.max(6, Math.min(80, Math.round(density * 0.75)));
+                const rows = Math.max(4, Math.min(55, Math.round(cols * Math.max(0.35, map.getSize().y / Math.max(1, map.getSize().x)))));
+                const west = bounds.getWest(), east = bounds.getEast(), south = bounds.getSouth(), north = bounds.getNorth();
+                let maxSample = null;
+                for (let r = 0; r < rows; r++) {
+                    const lat = north - ((r + 0.5) / rows) * (north - south);
+                    for (let c = 0; c < cols; c++) {
+                        const lng = west + ((c + 0.5) / cols) * (east - west);
+                        const sample = sampleWindyAccumulationTotalAtLatLng(L.latLng(lat, lng));
+                        if (!sample) continue;
+                        if (!maxSample || sample.totalMm > maxSample.totalMm) maxSample = { ...sample, lat, lng };
+                        const label = formatWindyAccumulationContourLabel(sample.totalMm);
+                        if (!label) continue;
+                        const icon = L.divIcon({ html: `<b style="font-size:12px;color:white;-webkit-text-stroke:1px black;text-shadow:0 1px 2px rgba(0,0,0,.95);">${label}</b>`, className: '', iconSize: null, iconAnchor: [8, 8] });
+                        L.marker([lat, lng], { icon, interactive: false, keyboard: false }).addTo(windyAccumulationContourLayer);
+                    }
+                }
+                windyAccumulationContourLayer.addTo(map);
+                updateWindyAccumulationPlotButtons();
+                return;
+            }
+            if (!p.totals || !p.width || !p.height) return;
             const cellStepX = Math.max(1, Math.round(p.width / density));
             const cellStepY = Math.max(1, Math.round(p.height / density));
             const nw = p.bounds.getNorthWest();
             const se = p.bounds.getSouthEast();
             const lngSpan = se.lng - nw.lng;
             const latSpan = nw.lat - se.lat;
-            let maxMm = -Infinity, maxIndex = -1;
-            for (let i = 0; i < p.totals.length; i++) { const v = p.totals[i] || 0; if (v > maxMm) { maxMm = v; maxIndex = i; } }
             for (let y = Math.floor(cellStepY / 2); y < p.height; y += cellStepY) {
                 for (let x = Math.floor(cellStepX / 2); x < p.width; x += cellStepX) {
                     const mm = p.totals[y * p.width + x] || 0;
@@ -8411,16 +8433,10 @@ const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
                     L.marker([lat, lng], { icon, interactive: false, keyboard: false }).addTo(windyAccumulationContourLayer);
                 }
             }
-            if (maxIndex >= 0 && Number.isFinite(maxMm) && maxMm >= 0.05) {
-                const maxY = Math.floor(maxIndex / p.width), maxX = maxIndex % p.width;
-                const maxLat = nw.lat - ((maxY + 0.5) / p.height) * latSpan;
-                const maxLng = nw.lng + ((maxX + 0.5) / p.width) * lngSpan;
-                const maxText = formatWindyAccumulationTotalMm(maxMm);
-                
-            }
             windyAccumulationContourLayer.addTo(map);
             updateWindyAccumulationPlotButtons();
         }
+
         function toggleWindyAccumulationContourLabels() {
             if (!isWindyAccumulationMapPlotted()) {
                 setWindyAccumulationStatus('Plot the accumulation map first, then add contours.', true);
@@ -8460,8 +8476,155 @@ const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
             legendEl.appendChild(section);
             windyRadarAccumulationLegend = section;
         }
-        function plotWindyRadarAccumulationMap() { if (!windyRadarAccumulationPending) { setWindyAccumulationStatus('No calculated accumulation map yet. Click Calculate accumulation first.', true); return; } hideCurrentRadarForWindyAccumulation(); ensureWindyAccumulationPane(); removeWindyAccumulationOverlayOnly(); const p = windyRadarAccumulationPending; windyRadarAccumulationLayer = L.imageOverlay(p.dataUrl, p.bounds, { pane: 'windyAccumulationPane', opacity: .72, interactive: false, zIndex: WINDY_ACCUMULATION_Z_INDEX, attribution: '' }).addTo(map); if (windyRadarAccumulationLayer.setZIndex) windyRadarAccumulationLayer.setZIndex(WINDY_ACCUMULATION_Z_INDEX); if (windyRadarAccumulationLayer.bringToFront) windyRadarAccumulationLayer.bringToFront(); addWindyAccumulationLegend(p.start, p.end, p.validFrames, p.frameCount, p.missingFrames); hideCurrentRadarForWindyAccumulation(); if (windyAccumulationContoursEnabled) drawWindyAccumulationContourLabels(); setWindyAccumulationStatus(`Accumulation map plotted; current radar hidden until Hide Accumulation. Click the map for accumulated rainfall totals. ${p.validFrames}/${p.frameCount} frames sampled${p.missingFrames ? ` (${p.missingFrames} missing)` : ''}.`); updateWindyAccumulationPlotButtons(); }
-        function getWindyAccumulationRenderScale() { const size = map.getSize(); return Math.max(1, Math.ceil(Math.max(size.x, size.y) / 900)); }
+        function plotWindyRadarAccumulationMap() {
+            if (!windyRadarAccumulationPending) {
+                setWindyAccumulationStatus('No calculated accumulation map yet. Click Calculate accumulation first.', true);
+                return;
+            }
+            hideCurrentRadarForWindyAccumulation();
+            ensureWindyAccumulationPane();
+            removeWindyAccumulationOverlayOnly();
+            const p = windyRadarAccumulationPending;
+            if (p.tiles && p.tiles.size && typeof createWindyAccumulationTileLayer === 'function') {
+                windyRadarAccumulationLayer = createWindyAccumulationTileLayer(p).addTo(map);
+            } else {
+                // Backwards-compatible fallback for older, single-image calculations.
+                windyRadarAccumulationLayer = L.imageOverlay(p.dataUrl, p.bounds, {
+                    pane: 'windyAccumulationPane', opacity: .72, interactive: false,
+                    zIndex: WINDY_ACCUMULATION_Z_INDEX, attribution: ''
+                }).addTo(map);
+            }
+            if (windyRadarAccumulationLayer.setZIndex) windyRadarAccumulationLayer.setZIndex(WINDY_ACCUMULATION_Z_INDEX);
+            if (windyRadarAccumulationLayer.bringToFront) windyRadarAccumulationLayer.bringToFront();
+            addWindyAccumulationLegend(p.start, p.end, p.validFrames, p.frameCount, p.missingFrames);
+            hideCurrentRadarForWindyAccumulation();
+            if (windyAccumulationContoursEnabled) drawWindyAccumulationContourLabels();
+            const tileText = p.tiles ? ` Native tiled overlay: ${p.tiles.size} Windy tile${p.tiles.size === 1 ? '' : 's'} at z${p.sourceZoom}.` : '';
+            setWindyAccumulationStatus(`Accumulation map plotted; current radar hidden until Hide Accumulation. Click the map for accumulated rainfall totals. ${p.validFrames}/${p.frameCount} frames sampled${p.missingFrames ? ` (${p.missingFrames} missing)` : ''}.${tileText}`);
+            updateWindyAccumulationPlotButtons();
+        }
+
+        
+        function windyAccumulationTransparentTileDataUrl() {
+            if (windyAccumulationTransparentTileDataUrl.cache) return windyAccumulationTransparentTileDataUrl.cache;
+            const c = document.createElement('canvas');
+            c.width = 256; c.height = 256;
+            windyAccumulationTransparentTileDataUrl.cache = c.toDataURL('image/png');
+            return windyAccumulationTransparentTileDataUrl.cache;
+        }
+        function createWindyAccumulationTileLayer(p) {
+            const sourceZoom = p.sourceZoom || getWindyAccumulationNativeZoom();
+            const AccumTileLayer = L.GridLayer.extend({
+                createTile: function (coords) {
+                    const img = L.DomUtil.create('img', 'windy-radar-crisp-tile');
+                    img.alt = '';
+                    img.width = this.getTileSize().x;
+                    img.height = this.getTileSize().y;
+                    img.style.width = img.width + 'px';
+                    img.style.height = img.height + 'px';
+                    const key = `${coords.z}:${coords.x}:${coords.y}`;
+                    const entry = p.tiles && p.tiles.get(key);
+                    img.src = entry && entry.dataUrl ? entry.dataUrl : windyAccumulationTransparentTileDataUrl();
+                    return img;
+                }
+            });
+            return new AccumTileLayer({
+                pane: 'windyAccumulationPane',
+                opacity: .72,
+                tileSize: 256,
+                minNativeZoom: sourceZoom,
+                maxNativeZoom: sourceZoom,
+                maxZoom: 18,
+                minZoom: 0,
+                bounds: p.bounds,
+                noWrap: true,
+                updateWhenIdle: false,
+                updateWhenZooming: false,
+                keepBuffer: 1,
+                className: 'windy-radar-crisp-tile',
+                attribution: ''
+            });
+        }
+        function getWindyAccumulationVisibleNativeTiles(z) {
+            const bounds = map.getBounds();
+            const nw = map.project(bounds.getNorthWest(), z);
+            const se = map.project(bounds.getSouthEast(), z);
+            const n = 2 ** z;
+            const minX = Math.max(0, Math.floor(Math.min(nw.x, se.x) / 256));
+            const maxX = Math.min(n - 1, Math.floor((Math.max(nw.x, se.x) - 1) / 256));
+            const minY = Math.max(0, Math.floor(Math.min(nw.y, se.y) / 256));
+            const maxY = Math.min(n - 1, Math.floor((Math.max(nw.y, se.y) - 1) / 256));
+            const tiles = [];
+            for (let y = minY; y <= maxY; y++) {
+                for (let x = minX; x <= maxX; x++) tiles.push({ z, x, y, key: `${z}:${x}:${y}` });
+            }
+            return tiles;
+        }
+        function getWindyAccumulationTileBounds(z, x, y) {
+            const nw = map.unproject(L.point(x * 256, y * 256), z);
+            const se = map.unproject(L.point((x + 1) * 256, (y + 1) * 256), z);
+            return L.latLngBounds(se, nw);
+        }
+        async function calculateWindyAccumulationTileSetOnMainThread(runId, tiles, frames, z) {
+            const encodedToMmhLut = getWindyEncodedToMmhHalfStepLut();
+            const tileResults = new Map();
+            for (const tile of tiles) {
+                tileResults.set(tile.key, {
+                    ...tile,
+                    totals: new Float32Array(256 * 256),
+                    bounds: getWindyAccumulationTileBounds(z, tile.x, tile.y)
+                });
+            }
+            let validFrames = 0, missingFrames = 0;
+            for (let fi = 0; fi < frames.length; fi++) {
+                if (runId !== windyRadarAccumulationRunId) return null;
+                const frame = frames[fi];
+                const mode = shouldUseWindyAccumulationArchive(frame.time) ? 'archive' : 'live';
+                const msg = `Calculating tiled rainfall map… frame ${fi + 1}/${frames.length} (${mode}), ${tiles.length} Windy tiles at z${z}, native 256×256 each`;
+                setWindyAccumulationStatus(msg);
+                maybeSetWindyAccumulationProgress(Math.floor((fi / frames.length) * 96), msg, fi === 0);
+                await new Promise(r => setTimeout(r, 0));
+                let frameHadData = false;
+                for (let ti = 0; ti < tiles.length; ti++) {
+                    if (runId !== windyRadarAccumulationRunId) return null;
+                    const tile = tiles[ti];
+                    let url = buildWindyRadarTileUrlForTime(frame.time, z, tile.x, tile.y);
+                    if (shouldUseWindyAccumulationArchive(frame.time) && typeof windyRadarArchiveUrl === 'function') url = windyRadarArchiveUrl(url);
+                    try {
+                        const source = await fetchWindyRadarAccumulationCanvas(url);
+                        if (!source || !source.ctx) continue;
+                        const data = source.ctx.getImageData(0, 0, source.width, source.height).data;
+                        const totals = tileResults.get(tile.key).totals;
+                        for (let py = 0; py < 256; py++) {
+                            const sy = Math.max(0, Math.min(source.height - 1, Math.floor(py * source.height / 256)));
+                            for (let px = 0; px < 256; px++) {
+                                const sx = Math.max(0, Math.min(source.width - 1, Math.floor(px * source.width / 256)));
+                                const off = (sy * source.width + sx) * 4;
+                                const enc = getWindyRadarEncodedValue(data[off], data[off + 1], data[off + 2]);
+                                if (enc !== null) {
+                                    const lutIndex = Math.max(0, Math.min(511, Math.round(enc * 2)));
+                                    totals[py * 256 + px] += encodedToMmhLut[lutIndex] * frame.durationHours;
+                                }
+                            }
+                        }
+                        frameHadData = true;
+                    } catch (e) {
+                        console.warn('Windy tiled accumulation tile failed:', frame.time.toISOString(), tile.key, e);
+                    }
+                }
+                if (frameHadData) validFrames++; else missingFrames++;
+            }
+            return { tiles: tileResults, validFrames, missingFrames };
+        }
+        function renderWindyAccumulationTileSet(tileResults) {
+            let maxTotal = 0;
+            for (const entry of tileResults.values()) {
+                entry.dataUrl = renderWindyAccumulationImageData(256, 256, entry.totals, null);
+                for (let i = 0; i < entry.totals.length; i++) if (entry.totals[i] > maxTotal) maxTotal = entry.totals[i];
+            }
+            return { tiles: tileResults, maxTotal };
+        }
+function getWindyAccumulationRenderScale() { const size = map.getSize(); return Math.max(1, Math.ceil(Math.max(size.x, size.y) / 900)); }
         function buildWindyAccumulationFrames(start, end) { const step = 5 * 60 * 1000, first = getWindyRadarFrameTimeGlobal(start), frames = []; for (let t = first.getTime(); t < end.getTime(); t += step) { const fs = Math.max(t, start.getTime()), fe = Math.min(t + step, end.getTime()); if (fe > fs) frames.push({ time: new Date(t), durationHours: (fe - fs) / 3600000 }); } return frames; }
         function precomputeWindyAccumulationPixels(width, height, scale, z) {
             // Quality is unchanged: every output pixel is still sampled, but the mapping is compacted into typed arrays.
@@ -8527,7 +8690,28 @@ const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
             return record;
         }
         function formatWindyAccumulationTotalMm(mm) { if (!Number.isFinite(mm) || mm < 0.005) return '0.00 mm'; if (mm < 10) return `${mm.toFixed(2)} mm`; if (mm < 100) return `${mm.toFixed(1)} mm`; return `${Math.round(mm)} mm`; }
-        function sampleWindyAccumulationTotalAtLatLng(latlng) { const p = windyRadarAccumulationPending; if (!p || !p.totals || !p.bounds || !p.bounds.contains(latlng)) return null; const pt = map.latLngToLayerPoint(latlng), nw = map.latLngToLayerPoint(p.bounds.getNorthWest()), se = map.latLngToLayerPoint(p.bounds.getSouthEast()); const xRatio = (pt.x - nw.x) / (se.x - nw.x), yRatio = (pt.y - nw.y) / (se.y - nw.y); const x = Math.max(0, Math.min(p.width - 1, Math.floor(xRatio * p.width))), y = Math.max(0, Math.min(p.height - 1, Math.floor(yRatio * p.height))); const total = p.totals[y * p.width + x] || 0; return { totalMm: total, x, y, start: p.start, end: p.end, validFrames: p.validFrames, frameCount: p.frameCount, missingFrames: p.missingFrames }; }
+        function sampleWindyAccumulationTotalAtLatLng(latlng) {
+            const p = windyRadarAccumulationPending;
+            if (!p || !p.bounds || !p.bounds.contains(latlng)) return null;
+            if (p.tiles && p.tiles.size) {
+                const z = p.sourceZoom || getWindyAccumulationNativeZoom();
+                const tile = lonLatToWindyTilePixel(latlng, z);
+                const key = `${z}:${tile.xTile}:${tile.yTile}`;
+                const entry = p.tiles.get(key);
+                if (!entry || !entry.totals) return null;
+                const x = Math.max(0, Math.min(255, tile.px));
+                const y = Math.max(0, Math.min(255, tile.py));
+                const total = entry.totals[y * 256 + x] || 0;
+                return { totalMm: total, x, y, tileKey: key, start: p.start, end: p.end, validFrames: p.validFrames, frameCount: p.frameCount, missingFrames: p.missingFrames };
+            }
+            if (!p.totals || !p.width || !p.height) return null;
+            const pt = map.latLngToLayerPoint(latlng), nw = map.latLngToLayerPoint(p.bounds.getNorthWest()), se = map.latLngToLayerPoint(p.bounds.getSouthEast());
+            const xRatio = (pt.x - nw.x) / (se.x - nw.x), yRatio = (pt.y - nw.y) / (se.y - nw.y);
+            const x = Math.max(0, Math.min(p.width - 1, Math.floor(xRatio * p.width))), y = Math.max(0, Math.min(p.height - 1, Math.floor(yRatio * p.height)));
+            const total = p.totals[y * p.width + x] || 0;
+            return { totalMm: total, x, y, start: p.start, end: p.end, validFrames: p.validFrames, frameCount: p.frameCount, missingFrames: p.missingFrames };
+        }
+
         function showWindyAccumulationRainfallPopup(latlng, sample) { if (!sample) { L.popup({ className: 'windy-radar-pointer-popup', closeButton: true, autoPan: true }).setLatLng(latlng).setContent('<div style="font-family:Inter,Arial,sans-serif;font-size:12px;"><strong>Accumulated rainfall</strong><br>No calculated accumulation value at this location.</div>').openOn(map); return; } const totalText = formatWindyAccumulationTotalMm(sample.totalMm); const rgba = colourForWindyAccumulationMm(sample.totalMm); const colour = `rgba(${rgba[0]},${rgba[1]},${rgba[2]},${Math.max(.35, rgba[3] / 255)})`; const html = `<div style="min-width:240px;font-family:Inter,Arial,sans-serif;line-height:1.35;"><div style="font-weight:800;font-size:13px;margin-bottom:6px;color:#1a2a44;">Accumulated rainfall total</div><div style="font-size:24px;font-weight:800;color:${colour};margin-bottom:4px;text-shadow:0 1px 1px rgba(0,0,0,.18);">${totalText}</div><div style="font-size:11px;color:#555;">${sample.start.toLocaleString()} – ${sample.end.toLocaleString()}</div><div style="font-size:10px;color:#777;margin-top:5px;">${sample.validFrames}/${sample.frameCount} frames sampled${sample.missingFrames ? ` (${sample.missingFrames} missing)` : ''}</div><div style="font-size:10px;color:#999;margin-top:4px;">Estimated from radar frames in 5 minutes interval.</div></div>`; L.popup({ className: 'windy-radar-pointer-popup', closeButton: true, autoPan: true }).setLatLng(latlng).setContent(html).openOn(map); }
         
 
@@ -8815,53 +8999,33 @@ async function calculateWindyRadarAccumulationMap() {
                 const frames = buildWindyAccumulationFrames(start, end);
                 if (!frames.length) throw new Error('No 5-minute Windy Radar frames found inside that range.');
 
-                const size = map.getSize();
-                const scale = getWindyAccumulationRenderScale();
-                const width = Math.max(1, Math.floor(size.x / scale));
-                const height = Math.max(1, Math.floor(size.y / scale));
                 const z = getWindyAccumulationNativeZoom();
                 const bounds = map.getBounds();
+                const nativeTiles = getWindyAccumulationVisibleNativeTiles(z);
+                if (!nativeTiles.length) throw new Error('No Windy radar tiles are visible in the current viewport.');
 
-                const prepMsg = `Preparing ${width}×${height} accumulation grid and ${frames.length} frames…`;
+                const prepMsg = `Preparing native tiled accumulation: ${nativeTiles.length} Windy tile${nativeTiles.length === 1 ? '' : 's'} at z${z}, ${frames.length} frames, 256×256 pixels per tile…`;
                 setWindyAccumulationStatus(prepMsg);
                 maybeSetWindyAccumulationProgress(0, prepMsg, true);
                 await new Promise(r => setTimeout(r, 0));
 
-                const groups = precomputeWindyAccumulationPixels(width, height, scale, z);
-                const engineMsg = canUseWindyAccumulationWorker()
-                    ? `Using ultra-fast background worker (${getWindyAccumulationConcurrency()} parallel tile jobs, LUT decoding) for ${groups.length} tiles per frame…`
-                    : `Using main-thread fallback with LUT decoding for ${groups.length} tiles per frame…`;
-                setWindyAccumulationStatus(engineMsg);
-                maybeSetWindyAccumulationProgress(1, engineMsg, true);
-
-                let result;
-                if (canUseWindyAccumulationWorker()) {
-                    try {
-                        result = await calculateWindyAccumulationInWorker(runId, width, height, frames, groups, z);
-                    } catch (workerError) {
-                        console.warn('Windy accumulation worker failed; falling back to main-thread calculation:', workerError);
-                        const fallbackMsg = 'Background worker failed; continuing with main-thread fallback…';
-                        setWindyAccumulationStatus(fallbackMsg);
-                        maybeSetWindyAccumulationProgress(2, fallbackMsg, true);
-                        result = await calculateWindyAccumulationOnMainThread(runId, width, height, frames, groups, z);
-                    }
-                } else result = await calculateWindyAccumulationOnMainThread(runId, width, height, frames, groups, z);
-
+                const result = await calculateWindyAccumulationTileSetOnMainThread(runId, nativeTiles, frames, z);
                 if (runId !== windyRadarAccumulationRunId || !result) {
                     windyRadarAccumulationCalculating = false;
                     updateWindyAccumulationPlotButtons();
                     return;
                 }
 
-                maybeSetWindyAccumulationProgress(98, 'Rendering accumulated rainfall image…', true);
+                maybeSetWindyAccumulationProgress(98, 'Rendering native tiled accumulated rainfall images…', true);
                 await new Promise(r => setTimeout(r, 0));
-                const dataUrl = renderWindyAccumulationImageData(width, height, result.totals, result.rgba || null);
+                const rendered = renderWindyAccumulationTileSet(result.tiles);
 
                 windyRadarAccumulationPending = {
-                    dataUrl,
-                    totals: result.totals,
-                    width,
-                    height,
+                    tiles: rendered.tiles,
+                    tileCount: rendered.tiles.size,
+                    maxTotal: rendered.maxTotal,
+                    width: 256,
+                    height: 256,
                     bounds,
                     start,
                     end,
@@ -8869,12 +9033,13 @@ async function calculateWindyRadarAccumulationMap() {
                     frameCount: frames.length,
                     missingFrames: result.missingFrames,
                     createdAt: new Date(),
-                    renderScale: scale,
-                    sourceZoom: z
+                    renderScale: 1,
+                    sourceZoom: z,
+                    tiled: true
                 };
-                maybeSetWindyAccumulationProgress(100, 'Accumulation calculation complete. Plotting map…', true);
+                maybeSetWindyAccumulationProgress(100, 'Tiled accumulation calculation complete. Plotting map…', true);
                 plotWindyRadarAccumulationMap();
-                setWindyAccumulationStatus(`Accumulation ready: ${result.validFrames}/${frames.length} frames sampled${result.missingFrames ? ` (${result.missingFrames} missing)` : ''}.`);
+                setWindyAccumulationStatus(`Tiled accumulation ready: ${result.validFrames}/${frames.length} frames sampled${result.missingFrames ? ` (${result.missingFrames} missing)` : ''}; ${nativeTiles.length} Windy tile${nativeTiles.length === 1 ? '' : 's'} rendered at native 256×256 resolution.`);
                 windyRadarAccumulationCalculating = false;
                 updateWindyAccumulationPlotButtons();
                 hideWindyAccumulationProgress(3500);
