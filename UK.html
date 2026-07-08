@@ -2418,7 +2418,6 @@
             filter: none !important;
             will-change: transform;
         }
-
         .leaflet-zoom-animated .windy-radar-crisp-tile,
         .leaflet-zoom-anim .windy-radar-crisp-tile {
             image-rendering: pixelated !important;
@@ -2503,10 +2502,10 @@
             box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
             white-space: nowrap;
         }
-
         body.dark-mode .windy-accum-count-label {
             background: rgba(20, 20, 20, 0.78);
         }
+
     </style>
 </head>
 <!-- Google tag (gtag.js) -->
@@ -2687,11 +2686,10 @@
                     <label class="pretty-input">Start time<input type="datetime-local"
                             id="windy-accum-start-time"></label>
                     <label class="pretty-input">End time<input type="datetime-local" id="windy-accum-end-time"></label>
-                    <div class="button-group"><button type="button" onclick="handleWindyAccumulationMainAction()"
-                            id="windy-accum-main-action">Calculate accumulation</button></div>
-                    <div class="button-group" id="windy-accum-contour-group" style="display:none;"><button type="button"
-                            onclick="toggleWindyAccumulationContourLabels()" id="toggle-windy-accum-contours"
-                            disabled>Add contour</button></div>
+                    <div class="button-group"><button type="button"
+                            onclick="handleWindyAccumulationMainAction()" id="windy-accum-main-action">Calculate accumulation</button></div>
+                    <div class="button-group" id="windy-accum-contour-group" style="display:none;"><button type="button" onclick="toggleWindyAccumulationContourLabels()"
+                            id="toggle-windy-accum-contours" disabled>Add contour</button></div>
                     <div id="windy-radar-accumulation-status"
                         style="font-size:11px;line-height:1.4;color:#666;margin-top:6px;">Generate an accumulation map
                         for the current viewport.</div>
@@ -3921,16 +3919,16 @@
         const weatherTileUrlCache = new Map();
         const weatherTileNegativeCache = new Map();
 
-        // ==================== WEATHER TILE PERFORMANCE MANAGER ====================
-        // Keeps the map responsive by limiting validation fetches, aborting stale weather
-        // updates, de-duplicating identical frame requests and slowing expensive weather
-        // refreshes during animation. Leaflet/browser image tile requests still load normally;
-        // this manager controls the app's own URL validation/probing and plotting cadence.
+        // ==================== WEATHER TILE PERFORMANCE / KEEP-TILES DRAG BRAKE ====================
+        // This manager throttles RadarLoop's own weather URL validation/probing and layer plotting.
+        // IMPORTANT: it does NOT remove existing plotted weather layers during drag. Existing tiles stay
+        // visible; only new validation/replot work is paused until the map settles.
         const WEATHER_PERF = {
             maxProbeConcurrency: 6,
             maxAnimationProbeConcurrency: 3,
             updateDebounceMs: 650,
             animationUpdateDebounceMs: 2500,
+            interactionSettleMs: 650,
             minAnimationWeatherGapMs: 2500,
             frameKeys: new Map(),
             queue: [],
@@ -3941,7 +3939,10 @@
             lastWeatherUpdateFinished: 0,
             lastAnimationWeatherUpdate: 0,
             droppedStaleUpdates: 0,
-            skippedSameFrameUpdates: 0
+            skippedSameFrameUpdates: 0,
+            mapInteracting: false,
+            interactionTimer: null,
+            latestInteractionTimestamp: null
         };
         let weatherUpdateDebounceTimer = null;
         let pendingDebouncedWeatherTimestamp = null;
@@ -3969,9 +3970,9 @@
             const limit = weatherPerfConcurrencyLimit();
             while (WEATHER_PERF.active < limit && WEATHER_PERF.queue.length) {
                 const item = WEATHER_PERF.queue.shift();
-                if (item.generation !== WEATHER_PERF.generation) {
+                if (item.generation !== WEATHER_PERF.generation || WEATHER_PERF.mapInteracting) {
                     WEATHER_PERF.droppedStaleUpdates++;
-                    item.reject(new DOMException('Stale weather request skipped', 'AbortError'));
+                    item.reject(new DOMException('Stale/weather-interaction request skipped', 'AbortError'));
                     continue;
                 }
                 WEATHER_PERF.active++;
@@ -3989,6 +3990,10 @@
         function weatherPerfFetch(url, options = {}) {
             const generation = WEATHER_PERF.generation;
             return new Promise((resolve, reject) => {
+                if (WEATHER_PERF.mapInteracting) {
+                    reject(new DOMException('Weather validation skipped while map is moving', 'AbortError'));
+                    return;
+                }
                 WEATHER_PERF.queue.push({ url, options, generation, resolve, reject });
                 processWeatherPerfQueue();
             });
@@ -4015,7 +4020,9 @@
 
         function scheduleWeatherLayerUpdate(timestamp, reason = 'debounced') {
             pendingDebouncedWeatherTimestamp = timestamp;
-            const delay = isPlaying ? WEATHER_PERF.animationUpdateDebounceMs : WEATHER_PERF.updateDebounceMs;
+            const delay = WEATHER_PERF.mapInteracting
+                ? WEATHER_PERF.interactionSettleMs
+                : (isPlaying ? WEATHER_PERF.animationUpdateDebounceMs : WEATHER_PERF.updateDebounceMs);
             clearTimeout(weatherUpdateDebounceTimer);
             weatherUpdateDebounceTimer = setTimeout(() => {
                 const ts = pendingDebouncedWeatherTimestamp;
@@ -4029,39 +4036,59 @@
             else WEATHER_PERF.frameKeys.clear();
         }
 
-        function canStartHeavyAccumulationWork(frameCount, tileCount, nativeTileMode = false) {
-            // Estimate the real workload, not the raw screen size.
-            // Viewport accumulation is downscaled by getWindyAccumulationRenderScale(),
-            // so using map.getSize().x * map.getSize().y overestimates massively.
-            let samples;
+        function pauseWeatherWorkForInteraction() {
+            // Do not remove layers. Keep old plotted tiles visible while stopping stale validation/replot work.
+            WEATHER_PERF.mapInteracting = true;
+            WEATHER_PERF.generation++;
+            if (WEATHER_PERF.abortController) {
+                try { WEATHER_PERF.abortController.abort(); } catch (e) { }
+            }
+            WEATHER_PERF.queue.length = 0;
+            clearTimeout(weatherUpdateDebounceTimer);
+        }
 
+        function resumeWeatherWorkAfterInteraction() {
+            clearTimeout(WEATHER_PERF.interactionTimer);
+            WEATHER_PERF.interactionTimer = setTimeout(() => {
+                WEATHER_PERF.mapInteracting = false;
+                processWeatherPerfQueue();
+                const ts = WEATHER_PERF.latestInteractionTimestamp || getCurrentSliderTimestamp();
+                scheduleWeatherLayerUpdate(ts, 'interaction-settled');
+            }, WEATHER_PERF.interactionSettleMs);
+        }
+
+        function initialiseWeatherInteractionBrake() {
+            if (!map || map._weatherInteractionBrakeAttached) return;
+            map._weatherInteractionBrakeAttached = true;
+            map.on('movestart dragstart zoomstart', () => {
+                WEATHER_PERF.latestInteractionTimestamp = getCurrentSliderTimestamp();
+                pauseWeatherWorkForInteraction();
+            });
+            map.on('moveend dragend zoomend resize', () => {
+                WEATHER_PERF.latestInteractionTimestamp = getCurrentSliderTimestamp();
+                resumeWeatherWorkAfterInteraction();
+            });
+        }
+        setTimeout(initialiseWeatherInteractionBrake, 0);
+
+        function canStartHeavyAccumulationWork(frameCount, tileCount, nativeTileMode = false) {
+            // Estimate the real workload, not the raw screen size. Viewport accumulation is downscaled by
+            // getWindyAccumulationRenderScale(), so raw map.getSize().x * map.getSize().y overestimates.
+            let samples;
             if (nativeTileMode) {
                 samples = frameCount * tileCount * 256 * 256;
             } else {
                 const size = map.getSize();
-
                 const scale = (typeof getWindyAccumulationRenderScale === 'function')
                     ? getWindyAccumulationRenderScale()
                     : Math.max(1, Math.ceil(Math.max(size.x, size.y) / 900));
-
                 const width = Math.max(1, Math.floor(size.x / scale));
                 const height = Math.max(1, Math.floor(size.y / scale));
-
                 samples = frameCount * width * height;
             }
-
             const validationBusy = WEATHER_PERF.active + WEATHER_PERF.queue.length;
-
-            // Viewport accumulation is much safer than native tiled accumulation,
-            // especially because your original code can use worker/LUT optimisation.
             const maxSamples = nativeTileMode ? 35_000_000 : 160_000_000;
-
-            return {
-                ok: validationBusy <= 4 && samples <= maxSamples,
-                samples,
-                validationBusy,
-                maxSamples
-            };
+            return { ok: validationBusy <= 4 && samples <= maxSamples, samples, validationBusy, maxSamples };
         }
 
         // Performance system. Even 'quality' is now quality-optimised, not unlimited.
@@ -5998,6 +6025,8 @@
             }
         }
         function toggleLayer(layerKey, enabled) {
+            if (typeof resetWeatherFrameKey === 'function') resetWeatherFrameKey(layerKey);
+
             const layer = layerMap[layerKey];
             if (!layer) return;
 
@@ -6476,6 +6505,11 @@
          * @param {string} layerKey - 'satellite', 'radar', 'isobar', or 'wind'.
          */
         async function plotMainLayer(finalUrl, layerType, timestamp, layerKey, windyRadarContext = '') {
+            if (typeof WEATHER_PERF !== 'undefined' && WEATHER_PERF.mapInteracting) {
+                scheduleWeatherLayerUpdate(timestamp, 'plot-paused-during-map-interaction');
+                return;
+            }
+
             if (layerKey === 'radar' && typeof isWindyAccumulationMapPlotted === 'function' && isWindyAccumulationMapPlotted()) {
                 try {
                     if (typeof radarLayer !== 'undefined' && radarLayer && map.hasLayer(radarLayer)) map.removeLayer(radarLayer);
@@ -6493,7 +6527,7 @@
             const efficientTileOptions = {
                 updateWhenIdle: true,
                 updateWhenZooming: false,
-                keepBuffer: LOW_END_NOWCAST_MODE ? 0 : 1,
+                keepBuffer: 1,
                 maxNativeZoom: 12,
                 reuseTiles: true,
                 unloadInvisibleTiles: true,
@@ -7066,7 +7100,7 @@
                 updateLegend();
                 return;
             }
-            scheduleWeatherLayerUpdate(timestamp, 'caller');
+            updateMapLayers(timestamp);
         }, 100);
         /**
          * Main function to coordinate updating the map layers.
@@ -7076,6 +7110,11 @@
         let activeWeatherLayerPlotCount = 0;
 
         async function updateMapLayers(timestamp) {
+            if (WEATHER_PERF.mapInteracting) {
+                pendingWeatherLayerTimestamp = timestamp;
+                scheduleWeatherLayerUpdate(timestamp, 'map-interacting');
+                return;
+            }
             const now = Date.now();
             if (isPlaying && now - WEATHER_PERF.lastAnimationWeatherUpdate < WEATHER_PERF.minAnimationWeatherGapMs) {
                 scheduleWeatherLayerUpdate(timestamp, 'animation-throttle');
@@ -7127,16 +7166,16 @@
                     continue;
                 }
                 jobs.push(async () => {
-                    if (generation !== WEATHER_PERF.generation) return;
+                    if (generation !== WEATHER_PERF.generation || WEATHER_PERF.mapInteracting) return;
                     await plotLayerIfNecessary(layerType, def.options, targetTimestamp, def.key);
-                    if (generation === WEATHER_PERF.generation) WEATHER_PERF.frameKeys.set(def.key, frameKey);
+                    if (generation === WEATHER_PERF.generation && !WEATHER_PERF.mapInteracting) WEATHER_PERF.frameKeys.set(def.key, frameKey);
                 });
             }
 
             activeWeatherLayerPlotCount = jobs.length;
             const concurrency = isPlaying ? 1 : (LOW_END_NOWCAST_MODE ? 1 : (jobs.length >= 3 ? 1 : 2));
             for (let i = 0; i < jobs.length; i += concurrency) {
-                if (generation !== WEATHER_PERF.generation || pendingWeatherLayerTimestamp !== null) break;
+                if (generation !== WEATHER_PERF.generation || WEATHER_PERF.mapInteracting || pendingWeatherLayerTimestamp !== null) break;
                 await Promise.allSettled(jobs.slice(i, i + concurrency).map(job => job()));
             }
 
@@ -7603,6 +7642,11 @@
          * @param {string} layerKey - 'satellite', 'radar', 'isobar', or 'wind'.
          */
         async function plotLayerIfNecessary(layerType, optionsMap, targetTimestamp, layerKey) {
+            if (typeof WEATHER_PERF !== 'undefined' && WEATHER_PERF.mapInteracting) {
+                scheduleWeatherLayerUpdate(targetTimestamp, 'plotLayer-paused-during-map-interaction');
+                return;
+            }
+
             let layerConfig = optionsMap[layerType];
 
             // --- NEW: Switch to nowcast config if radar is selected and time is in future ---
@@ -7911,12 +7955,12 @@
         // ==========================================
 
         function dbzToWindyMmh(dbz) {
-            // Same Z-R style as your current Windy conversion:
-            // R = (10^(dBZ / 10) * 0.005)^0.625
-            return Math.pow(Math.pow(10, dbz / 10) * 0.005, 0.625);
-        }
+    // Same Z-R style as your current Windy conversion:
+    // R = (10^(dBZ / 10) * 0.005)^0.625
+    return Math.pow(Math.pow(10, dbz / 10) * 0.005, 0.625);
+}
 
-        const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
+const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
             // Light professional 2^n mm/h rainfall colour scale
             // Thresholds are lower bounds: colour applies from this mm/h until the next threshold.
             // No dark red / dark purple; high-end uses brighter pink/lavender/violet.
@@ -8584,7 +8628,7 @@
                 const maxLat = nw.lat - ((maxY + 0.5) / p.height) * latSpan;
                 const maxLng = nw.lng + ((maxX + 0.5) / p.width) * lngSpan;
                 const maxText = formatWindyAccumulationTotalMm(maxMm);
-
+                
             }
             windyAccumulationContourLayer.addTo(map);
             updateWindyAccumulationPlotButtons();
@@ -8697,7 +8741,7 @@
         function formatWindyAccumulationTotalMm(mm) { if (!Number.isFinite(mm) || mm < 0.005) return '0.00 mm'; if (mm < 10) return `${mm.toFixed(2)} mm`; if (mm < 100) return `${mm.toFixed(1)} mm`; return `${Math.round(mm)} mm`; }
         function sampleWindyAccumulationTotalAtLatLng(latlng) { const p = windyRadarAccumulationPending; if (!p || !p.totals || !p.bounds || !p.bounds.contains(latlng)) return null; const pt = map.latLngToLayerPoint(latlng), nw = map.latLngToLayerPoint(p.bounds.getNorthWest()), se = map.latLngToLayerPoint(p.bounds.getSouthEast()); const xRatio = (pt.x - nw.x) / (se.x - nw.x), yRatio = (pt.y - nw.y) / (se.y - nw.y); const x = Math.max(0, Math.min(p.width - 1, Math.floor(xRatio * p.width))), y = Math.max(0, Math.min(p.height - 1, Math.floor(yRatio * p.height))); const total = p.totals[y * p.width + x] || 0; return { totalMm: total, x, y, start: p.start, end: p.end, validFrames: p.validFrames, frameCount: p.frameCount, missingFrames: p.missingFrames }; }
         function showWindyAccumulationRainfallPopup(latlng, sample) { if (!sample) { L.popup({ className: 'windy-radar-pointer-popup', closeButton: true, autoPan: true }).setLatLng(latlng).setContent('<div style="font-family:Inter,Arial,sans-serif;font-size:12px;"><strong>Accumulated rainfall</strong><br>No calculated accumulation value at this location.</div>').openOn(map); return; } const totalText = formatWindyAccumulationTotalMm(sample.totalMm); const rgba = colourForWindyAccumulationMm(sample.totalMm); const colour = `rgba(${rgba[0]},${rgba[1]},${rgba[2]},${Math.max(.35, rgba[3] / 255)})`; const html = `<div style="min-width:240px;font-family:Inter,Arial,sans-serif;line-height:1.35;"><div style="font-weight:800;font-size:13px;margin-bottom:6px;color:#1a2a44;">Accumulated rainfall total</div><div style="font-size:24px;font-weight:800;color:${colour};margin-bottom:4px;text-shadow:0 1px 1px rgba(0,0,0,.18);">${totalText}</div><div style="font-size:11px;color:#555;">${sample.start.toLocaleString()} – ${sample.end.toLocaleString()}</div><div style="font-size:10px;color:#777;margin-top:5px;">${sample.validFrames}/${sample.frameCount} frames sampled${sample.missingFrames ? ` (${sample.missingFrames} missing)` : ''}</div><div style="font-size:10px;color:#999;margin-top:4px;">Estimated from radar frames in 5 minutes interval.</div></div>`; L.popup({ className: 'windy-radar-pointer-popup', closeButton: true, autoPan: true }).setLatLng(latlng).setContent(html).openOn(map); }
-
+        
 
         // Half-step lookup table for Windy encoded radar value -> mm/h.
         // Encoded values are (R+G)/2, so possible values are 0, 0.5, 1.0 ... 255.
@@ -8957,7 +9001,7 @@
             ctx.putImageData(out, 0, 0);
             return canvas.toDataURL('image/png');
         }
-        async function calculateWindyRadarAccumulationMap() {
+async function calculateWindyRadarAccumulationMap() {
             if (isWindyAccumulationMapPlotted()) {
                 windyAccumulationContoursEnabled = false;
                 removeWindyAccumulationOverlayOnly(true);
@@ -8985,7 +9029,7 @@
                 const approxTiles = countApproxVisibleTiles(getWindyAccumulationNativeZoom());
                 const accumBudget = canStartHeavyAccumulationWork(frames.length, approxTiles, false);
                 if (!accumBudget.ok) {
-                    throw new Error(`Rainfall accumulation postponed to protect performance. Weather validation busy: ${accumBudget.validationBusy}; estimated work: ${Math.round(accumBudget.samples / 1000000)}M samples. Wait for weather tiles to finish, zoom in, or shorten the time range.`);
+                    throw new Error(`Rainfall accumulation postponed to protect performance. Weather validation busy: ${accumBudget.validationBusy}; estimated work: ${Math.round(accumBudget.samples / 1000000)}M samples, cap: ${Math.round(accumBudget.maxSamples / 1000000)}M. Wait for weather tiles to finish, zoom in, or shorten the time range.`);
                 }
 
                 const size = map.getSize();
@@ -9360,7 +9404,7 @@
         let windyLightningLastRenderedKey = '';
         const windyLightningSourceRanges = new Map();
         const WINDY_LIGHTNING_ARCHIVE_KEY = 'windy-lightning-hot-plus-ims-5mins-v1';
-        const WINDY_LIGHTNING_ARCHIVE_RETENTION_MS = 365 * 24 * 60 * 60 * 1000;
+        const WINDY_LIGHTNING_ARCHIVE_RETENTION_MS = 31 * 24 * 60 * 60 * 1000;
 
         function isWindyLiveLightningSelected() {
             const s = document.getElementById('lightningLayerSelect');
