@@ -2418,6 +2418,7 @@
             filter: none !important;
             will-change: transform;
         }
+
         .leaflet-zoom-animated .windy-radar-crisp-tile,
         .leaflet-zoom-anim .windy-radar-crisp-tile {
             image-rendering: pixelated !important;
@@ -2502,10 +2503,10 @@
             box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
             white-space: nowrap;
         }
+
         body.dark-mode .windy-accum-count-label {
             background: rgba(20, 20, 20, 0.78);
         }
-
     </style>
 </head>
 <!-- Google tag (gtag.js) -->
@@ -2686,10 +2687,11 @@
                     <label class="pretty-input">Start time<input type="datetime-local"
                             id="windy-accum-start-time"></label>
                     <label class="pretty-input">End time<input type="datetime-local" id="windy-accum-end-time"></label>
-                    <div class="button-group"><button type="button"
-                            onclick="handleWindyAccumulationMainAction()" id="windy-accum-main-action">Calculate accumulation</button></div>
-                    <div class="button-group" id="windy-accum-contour-group" style="display:none;"><button type="button" onclick="toggleWindyAccumulationContourLabels()"
-                            id="toggle-windy-accum-contours" disabled>Add contour</button></div>
+                    <div class="button-group"><button type="button" onclick="handleWindyAccumulationMainAction()"
+                            id="windy-accum-main-action">Calculate accumulation</button></div>
+                    <div class="button-group" id="windy-accum-contour-group" style="display:none;"><button type="button"
+                            onclick="toggleWindyAccumulationContourLabels()" id="toggle-windy-accum-contours"
+                            disabled>Add contour</button></div>
                     <div id="windy-radar-accumulation-status"
                         style="font-size:11px;line-height:1.4;color:#666;margin-top:6px;">Generate an accumulation map
                         for the current viewport.</div>
@@ -4028,10 +4030,38 @@
         }
 
         function canStartHeavyAccumulationWork(frameCount, tileCount, nativeTileMode = false) {
-            const samples = nativeTileMode ? frameCount * tileCount * 256 * 256 : frameCount * Math.max(1, map.getSize().x * map.getSize().y);
+            // Estimate the real workload, not the raw screen size.
+            // Viewport accumulation is downscaled by getWindyAccumulationRenderScale(),
+            // so using map.getSize().x * map.getSize().y overestimates massively.
+            let samples;
+
+            if (nativeTileMode) {
+                samples = frameCount * tileCount * 256 * 256;
+            } else {
+                const size = map.getSize();
+
+                const scale = (typeof getWindyAccumulationRenderScale === 'function')
+                    ? getWindyAccumulationRenderScale()
+                    : Math.max(1, Math.ceil(Math.max(size.x, size.y) / 900));
+
+                const width = Math.max(1, Math.floor(size.x / scale));
+                const height = Math.max(1, Math.floor(size.y / scale));
+
+                samples = frameCount * width * height;
+            }
+
             const validationBusy = WEATHER_PERF.active + WEATHER_PERF.queue.length;
-            const maxSamples = nativeTileMode ? 35_000_000 : 80_000_000;
-            return { ok: validationBusy <= 4 && samples <= maxSamples, samples, validationBusy, maxSamples };
+
+            // Viewport accumulation is much safer than native tiled accumulation,
+            // especially because your original code can use worker/LUT optimisation.
+            const maxSamples = nativeTileMode ? 35_000_000 : 160_000_000;
+
+            return {
+                ok: validationBusy <= 4 && samples <= maxSamples,
+                samples,
+                validationBusy,
+                maxSamples
+            };
         }
 
         // Performance system. Even 'quality' is now quality-optimised, not unlimited.
@@ -7881,12 +7911,12 @@
         // ==========================================
 
         function dbzToWindyMmh(dbz) {
-    // Same Z-R style as your current Windy conversion:
-    // R = (10^(dBZ / 10) * 0.005)^0.625
-    return Math.pow(Math.pow(10, dbz / 10) * 0.005, 0.625);
-}
+            // Same Z-R style as your current Windy conversion:
+            // R = (10^(dBZ / 10) * 0.005)^0.625
+            return Math.pow(Math.pow(10, dbz / 10) * 0.005, 0.625);
+        }
 
-const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
+        const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
             // Light professional 2^n mm/h rainfall colour scale
             // Thresholds are lower bounds: colour applies from this mm/h until the next threshold.
             // No dark red / dark purple; high-end uses brighter pink/lavender/violet.
@@ -8554,7 +8584,7 @@ const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
                 const maxLat = nw.lat - ((maxY + 0.5) / p.height) * latSpan;
                 const maxLng = nw.lng + ((maxX + 0.5) / p.width) * lngSpan;
                 const maxText = formatWindyAccumulationTotalMm(maxMm);
-                
+
             }
             windyAccumulationContourLayer.addTo(map);
             updateWindyAccumulationPlotButtons();
@@ -8667,7 +8697,7 @@ const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
         function formatWindyAccumulationTotalMm(mm) { if (!Number.isFinite(mm) || mm < 0.005) return '0.00 mm'; if (mm < 10) return `${mm.toFixed(2)} mm`; if (mm < 100) return `${mm.toFixed(1)} mm`; return `${Math.round(mm)} mm`; }
         function sampleWindyAccumulationTotalAtLatLng(latlng) { const p = windyRadarAccumulationPending; if (!p || !p.totals || !p.bounds || !p.bounds.contains(latlng)) return null; const pt = map.latLngToLayerPoint(latlng), nw = map.latLngToLayerPoint(p.bounds.getNorthWest()), se = map.latLngToLayerPoint(p.bounds.getSouthEast()); const xRatio = (pt.x - nw.x) / (se.x - nw.x), yRatio = (pt.y - nw.y) / (se.y - nw.y); const x = Math.max(0, Math.min(p.width - 1, Math.floor(xRatio * p.width))), y = Math.max(0, Math.min(p.height - 1, Math.floor(yRatio * p.height))); const total = p.totals[y * p.width + x] || 0; return { totalMm: total, x, y, start: p.start, end: p.end, validFrames: p.validFrames, frameCount: p.frameCount, missingFrames: p.missingFrames }; }
         function showWindyAccumulationRainfallPopup(latlng, sample) { if (!sample) { L.popup({ className: 'windy-radar-pointer-popup', closeButton: true, autoPan: true }).setLatLng(latlng).setContent('<div style="font-family:Inter,Arial,sans-serif;font-size:12px;"><strong>Accumulated rainfall</strong><br>No calculated accumulation value at this location.</div>').openOn(map); return; } const totalText = formatWindyAccumulationTotalMm(sample.totalMm); const rgba = colourForWindyAccumulationMm(sample.totalMm); const colour = `rgba(${rgba[0]},${rgba[1]},${rgba[2]},${Math.max(.35, rgba[3] / 255)})`; const html = `<div style="min-width:240px;font-family:Inter,Arial,sans-serif;line-height:1.35;"><div style="font-weight:800;font-size:13px;margin-bottom:6px;color:#1a2a44;">Accumulated rainfall total</div><div style="font-size:24px;font-weight:800;color:${colour};margin-bottom:4px;text-shadow:0 1px 1px rgba(0,0,0,.18);">${totalText}</div><div style="font-size:11px;color:#555;">${sample.start.toLocaleString()} – ${sample.end.toLocaleString()}</div><div style="font-size:10px;color:#777;margin-top:5px;">${sample.validFrames}/${sample.frameCount} frames sampled${sample.missingFrames ? ` (${sample.missingFrames} missing)` : ''}</div><div style="font-size:10px;color:#999;margin-top:4px;">Estimated from radar frames in 5 minutes interval.</div></div>`; L.popup({ className: 'windy-radar-pointer-popup', closeButton: true, autoPan: true }).setLatLng(latlng).setContent(html).openOn(map); }
-        
+
 
         // Half-step lookup table for Windy encoded radar value -> mm/h.
         // Encoded values are (R+G)/2, so possible values are 0, 0.5, 1.0 ... 255.
@@ -8927,7 +8957,7 @@ const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
             ctx.putImageData(out, 0, 0);
             return canvas.toDataURL('image/png');
         }
-async function calculateWindyRadarAccumulationMap() {
+        async function calculateWindyRadarAccumulationMap() {
             if (isWindyAccumulationMapPlotted()) {
                 windyAccumulationContoursEnabled = false;
                 removeWindyAccumulationOverlayOnly(true);
@@ -9330,7 +9360,7 @@ async function calculateWindyRadarAccumulationMap() {
         let windyLightningLastRenderedKey = '';
         const windyLightningSourceRanges = new Map();
         const WINDY_LIGHTNING_ARCHIVE_KEY = 'windy-lightning-hot-plus-ims-5mins-v1';
-        const WINDY_LIGHTNING_ARCHIVE_RETENTION_MS = 31 * 24 * 60 * 60 * 1000;
+        const WINDY_LIGHTNING_ARCHIVE_RETENTION_MS = 365 * 24 * 60 * 60 * 1000;
 
         function isWindyLiveLightningSelected() {
             const s = document.getElementById('lightningLayerSelect');
