@@ -6241,11 +6241,54 @@
             prune(weatherTileInFlight, WEATHER_TILE_INFLIGHT_LIMIT);
         }
 
+
+        // Windy radar uses timestamped directory names and is sensitive to stale tile-url caches.
+        // When a manual time filter is applied, the slider's end time becomes the authoritative
+        // radar timestamp. These helpers keep Windy tile requests tied to that filter/slider state
+        // instead of accidentally reusing the live/current timeline URL.
+        function getWindyRadarTimeContext(timestamp) {
+            const slider = document.getElementById('history-slider');
+            const startMs = customFilterStart instanceof Date && !isNaN(customFilterStart) ? customFilterStart.getTime() : '';
+            const endMs = customFilterEnd instanceof Date && !isNaN(customFilterEnd) ? customFilterEnd.getTime() : '';
+            return [
+                Number(timestamp) || 0,
+                lastFilterMode || 'slider',
+                startMs,
+                endMs,
+                slider ? slider.value : '',
+                slider ? slider.max : ''
+            ].join('|');
+        }
+
+        function clearWindyRadarRuntimeState(reason = 'time-context-change') {
+            try {
+                for (const key of Array.from(weatherTileUrlCache.keys())) {
+                    if (String(key).includes('windy-radar')) weatherTileUrlCache.delete(key);
+                }
+                for (const key of Array.from(weatherTileNegativeCache.keys())) {
+                    if (String(key).includes('windy-radar')) weatherTileNegativeCache.delete(key);
+                }
+                for (const key of Array.from(weatherTileInFlight.keys())) {
+                    if (String(key).includes('windy-radar')) weatherTileInFlight.delete(key);
+                }
+                delete lastValidTileUrls['windy-radar'];
+                if (lastRadarType === 'windy-radar') {
+                    lastRadarTimestamp = null;
+                    lastRequestedRadarTimestamp = null;
+                    isRadarAnimating = false;
+                }
+                console.info(`Windy Radar runtime state cleared: ${reason}`);
+            } catch (e) {
+                console.warn('Unable to clear Windy Radar runtime state:', e);
+            }
+        }
+
         async function fetchTileUrl(timestamp, layerConfig) {
             if (!layerConfig) return null;
             const layerKey = resolveLayerConfigKey(layerConfig);
             const roundedTimestamp = Number(timestamp) || 0;
-            const requestKey = `${layerKey}|${roundedTimestamp}|${layerConfig.type || ''}|${layerConfig.url || ''}`;
+            const windyRadarContext = layerKey === 'windy-radar' ? getWindyRadarTimeContext(roundedTimestamp) : '';
+            const requestKey = `${layerKey}|${roundedTimestamp}|${windyRadarContext}|${layerConfig.type || ''}|${layerConfig.url || ''}`;
             const nowMs = Date.now();
 
             const cached = weatherTileUrlCache.get(requestKey);
@@ -6287,7 +6330,7 @@
          * @param {number|null} timestamp - The rounded timestamp of the plotted data.
          * @param {string} layerKey - 'satellite', 'radar', 'isobar', or 'wind'.
          */
-        async function plotMainLayer(finalUrl, layerType, timestamp, layerKey) {
+        async function plotMainLayer(finalUrl, layerType, timestamp, layerKey, windyRadarContext = '') {
             if (layerKey === 'radar' && typeof isWindyAccumulationMapPlotted === 'function' && isWindyAccumulationMapPlotted()) {
                 try {
                     if (typeof radarLayer !== 'undefined' && radarLayer && map.hasLayer(radarLayer)) map.removeLayer(radarLayer);
@@ -6726,6 +6769,11 @@
                 }
 
                 if (!newLayer) return;
+                if (layerType === 'windy-radar') {
+                    newLayer._windyRadarTimeContext = windyRadarContext || getWindyRadarTimeContext(timestamp);
+                    newLayer._windyRadarRequestedTimestamp = timestamp;
+                    newLayer._windyRadarTileUrl = finalUrl;
+                }
                 newLayer.addTo(map);
 
                 const layerLoadedPromise = new Promise(resolve => {
@@ -7441,8 +7489,13 @@
                 case 'warning': lastTimestamp = lastWarningTimestamp; lastType = lastWarningType; isAnimating = isWarningAnimating; break;
                 default: return;
             }
-            // Prevent unnecessary re-plotting only when BOTH timestamp AND layer type are unchanged
-            if (lastTimestamp === roundedTimestampMs && lastType === layerType) {
+            // Prevent unnecessary re-plotting only when BOTH timestamp AND layer type are unchanged.
+            // Exception: Windy radar also depends on the active filter/slider context, so it must
+            // re-resolve if the user applied a different time filter even when the rounded 5-min
+            // timestamp coincides with the previous render.
+            const currentWindyRadarContext = layerType === 'windy-radar' ? getWindyRadarTimeContext(roundedTimestampMs) : '';
+            const lastWindyRadarContext = radarLayer && radarLayer._windyRadarTimeContext ? radarLayer._windyRadarTimeContext : '';
+            if (lastTimestamp === roundedTimestampMs && lastType === layerType && currentWindyRadarContext === lastWindyRadarContext) {
                 return; // Nothing changed — safe to skip
             }
             // Prevent concurrent animations
@@ -7474,7 +7527,8 @@
 
                 for (let i = 0; i < framesToCheck; i++) {
                     const candidateTs = roundedTimestampMs - i * interval;
-                    const cacheKey = `${layerKey}|${layerType}|${candidateTs}`;
+                    const windyCandidateContext = layerType === 'windy-radar' ? getWindyRadarTimeContext(candidateTs) : '';
+                    const cacheKey = `${layerKey}|${layerType}|${candidateTs}|${windyCandidateContext}`;
                     const cached = weatherTileUrlCache.get(cacheKey);
                     if (cached && (cacheNow - cached.checkedAt) < WEATHER_TILE_CACHE_TTL_MS) {
                         finalUrl = cached.url;
@@ -7512,7 +7566,7 @@
                 }
 
                 if (finalUrl) {
-                    await plotMainLayer(finalUrl, layerType, finalTimestamp, layerKey);
+                    await plotMainLayer(finalUrl, layerType, finalTimestamp, layerKey, currentWindyRadarContext);
                 } else {
                     // --- FIX: Ensure Layer Removal and State Reset on URL Failure ---
                     let currentLayer;
@@ -7930,7 +7984,7 @@ const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
             return String(url).replace('/radar2/composite/', '/radar2/archive/composite/');
         }
         const WINDY_RADAR_LIVE_ONLY_WINDOW_MS = 2 * 60 * 60 * 1000;
-        const WINDY_RADAR_ARCHIVE_LOOKBACK_MS = 31 * 24 * 60 * 60 * 1000;
+        const WINDY_RADAR_ARCHIVE_LOOKBACK_MS = 365 * 24 * 60 * 60 * 1000;
 
         function normaliseWindyRadarLiveUrl(url) {
             return String(url).replace('/radar2/archive/composite/', '/radar2/composite/');
@@ -12645,6 +12699,9 @@ async function calculateWindyRadarAccumulationMap() {
             document.getElementById('history-label').innerText = formatTimeAgo(0);
             document.getElementById('history-time').innerText = `${start.toLocaleString()} - ${end.toLocaleString()}`;
             document.getElementById('remove-filter').style.display = 'block';
+            // Force Windy radar to fetch the frame matching the newly applied filter end time.
+            clearWindyRadarRuntimeState('manual-time-filter-applied');
+            currentFilterTimestamp = end.getTime();
             updateZIndex();
             updateLegend();
             triggerMapUpdate(end.getTime(), true);
