@@ -3287,7 +3287,7 @@
 
             <label class="pretty-input">
                 Slider Max History
-                <input type="number" id="max-history-hours" value="4" min="1" step="1"
+                <input type="number" id="max-history-hours" value="6" min="1" step="1"
                     onchange="updateHistorySliderMax()">
                 <span class="unit">hours</span>
                 <span class="tooltip">Max hours back for time slider</span>
@@ -3476,7 +3476,7 @@
         <div class="slider-controls" style="display: flex; align-items: center; gap: 10px;">
             <button onclick="stepSlider(-1)">❮❮❮❮❮</button>
 
-            <input type="range" id="history-slider" class="slider" min="0" step="5" max="240" value="240"
+            <input type="range" id="history-slider" class="slider" min="0" step="5" max="360" value="360"
                 oninput="updateHistory()">
 
             <button onclick="stepSlider(1)">❯❯❯❯❯</button>
@@ -7158,13 +7158,8 @@
         // ==========================================
         function updateHistorySliderMax() {
             const maxHours = parseInt(document.getElementById('max-history-hours').value) || 6;
-            let maxMinutes = maxHours * 60;
-            const radarToggle = document.getElementById('radarToggle');
+            const maxMinutes = maxHours * 60;
             const slider = document.getElementById('history-slider');
-
-            if (radarToggle && radarToggle.checked) {
-                maxMinutes += 120; // Add 3 hours for nowcast
-            }
 
             const oldValue = parseInt(slider.value);
             slider.max = maxMinutes;
@@ -12184,7 +12179,7 @@ async function calculateWindyRadarAccumulationMap() {
             const isRadarActive = radarSelect && !radarSelect.disabled && radarSelect.value !== 'none';
 
             // Add 180 minutes (3 hours) if radar is on
-            const futureMinutes = isRadarActive ? 120 : 0;
+            const futureMinutes = isRadarActive ? 0 : 0;
 
             if (lastFilterMode === 'inputs' && customFilterStart && customFilterEnd) {
                 const filterStart = new Date(customFilterStart);
