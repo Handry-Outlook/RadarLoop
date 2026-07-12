@@ -2712,9 +2712,10 @@
                         <span class="tooltip">Select satellite data layer</span>
                     </div>
                     <div class="toggle-switch">
-                        <input type="checkbox" id="satelliteToggle" onchange="toggleLayer('satellite');">
+                        <input type="checkbox" id="satelliteToggle" onchange="toggleLayer('satellite', this.checked);">
                         <label for="satelliteToggle" class="switch"></label>
                     </div>
+                    
                 </div>
                 <select id="satelliteLayerSelect" onchange="satelliteLayerTypeHandler();">
                     <option value="eumetsat-geocolor">EUMETSAT MTG GeoColour (Full Disc)</option>
