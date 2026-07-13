@@ -4,6 +4,7 @@
 <head>
     <meta charset="utf-8">
     <title>RadarLoop</title>
+    <meta name="radarloop-build" content="2026.07-stability-refactor">
     <link rel="icon" type="image/png"
         href="https://raw.githubusercontent.com/Handry-Outlook/Convective-Outlook/main/Handry_outlook_icon_pride_small.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,7 +14,7 @@
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css" rel="stylesheet" />
     <link href="https://cdn.aerisapi.com/sdk/js/mapsgl/latest/aerisweather.mapsgl.css" rel="stylesheet" />
     <script src="https://cdn.aerisapi.com/sdk/js/mapsgl/latest/aerisweather.mapsgl.js"></script>
-    <script src="https://unpkg.com/leaflet@1.8.0/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <script src="https://unpkg.com/leaflet.vectorgrid@1.3.0/dist/Leaflet.VectorGrid.min.js"></script>
@@ -27,7 +28,6 @@
         }
         console.log("L.vectorGrid type:", typeof L.vectorGrid);
     </script>
-
     <style>
         /* Remove the default Leaflet popup styling to show ONLY our custom box */
         .met-office-popup .leaflet-popup-content-wrapper {
@@ -2400,13 +2400,125 @@
                     #fff200, #ffb327, #ff7f27, #ff5227, #ec1c24,
                     #b83dba, #3e00e9, #2600ff);
         }
-        .windy-radar-crisp-tile {
+
+        .windy-radar-crisp-tile,
+        .leaflet-tile.windy-radar-crisp-tile,
+        canvas.windy-radar-crisp-tile,
+        img.windy-radar-crisp-tile {
+            /* Keep Windy radar crisp on laptops/desktops, especially during Leaflet CSS zoom transforms. */
             image-rendering: pixelated !important;
             image-rendering: crisp-edges !important;
+            image-rendering: -moz-crisp-edges !important;
             image-rendering: -webkit-optimize-contrast !important;
-            transform: translateZ(0);
+            image-rendering: optimize-contrast !important;
+            -ms-interpolation-mode: nearest-neighbor;
+            transform: translate3d(0, 0, 0);
+            transform-origin: top left;
             backface-visibility: hidden;
+            filter: none !important;
             will-change: transform;
+        }
+        .leaflet-zoom-animated .windy-radar-crisp-tile,
+        .leaflet-zoom-anim .windy-radar-crisp-tile {
+            image-rendering: pixelated !important;
+            image-rendering: crisp-edges !important;
+        }
+
+        .windy-accum-progress-wrap {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+            padding: 9px;
+            border-radius: 10px;
+            background: rgba(33, 150, 243, .08);
+            border: 1px solid rgba(33, 150, 243, .18)
+        }
+
+        body.dark-mode .windy-accum-progress-wrap {
+            background: rgba(75, 155, 255, .10);
+            border-color: rgba(75, 155, 255, .25)
+        }
+
+        .windy-accum-progress-circle {
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            background: conic-gradient(#2196F3 0%, rgba(33, 150, 243, .18) 0%);
+            position: relative;
+            flex: 0 0 auto;
+            transition: background .2s linear
+        }
+
+        .windy-accum-progress-circle:after {
+            content: "";
+            position: absolute;
+            inset: 6px;
+            border-radius: 50%;
+            background: #fff
+        }
+
+        body.dark-mode .windy-accum-progress-circle:after {
+            background: #2a2a2a
+        }
+
+        .windy-accum-progress-percent {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 800;
+            color: #1a2a44;
+            z-index: 1
+        }
+
+        body.dark-mode .windy-accum-progress-percent {
+            color: #e0e0e0
+        }
+
+        .windy-accum-progress-text {
+            font-size: 11px;
+            line-height: 1.35;
+            color: #555
+        }
+
+        body.dark-mode .windy-accum-progress-text {
+            color: #bbb
+        }
+
+        .windy-accum-count-label {
+            pointer-events: none;
+            color: #ffffff;
+            background: rgba(0, 0, 0, 0.72);
+            border: 1px solid rgba(255, 255, 255, 0.75);
+            border-radius: 999px;
+            padding: 2px 6px;
+            font-size: 11px;
+            font-weight: 800;
+            line-height: 1.15;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+            white-space: nowrap;
+        }
+        body.dark-mode .windy-accum-count-label {
+            background: rgba(20, 20, 20, 0.78);
+        }
+
+    
+        /* RadarLoop 2026 stability refactor: layout and interaction containment */
+        .section { content-visibility: auto; contain-intrinsic-size: 1px 520px; contain: layout style paint; }
+        #control-panel { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+        #map, #map-3d { contain: strict; }
+        body.rl-interacting .leaflet-tile-pane, body.rl-interacting canvas { pointer-events: none; }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+        }
+        @media (max-width: 768px) {
+            .section { contain-intrinsic-size: 1px 440px; }
+            .tooltip { display: none !important; }
+            .leaflet-fade-anim .leaflet-tile { transition: none !important; }
         }
     </style>
 </head>
@@ -2456,16 +2568,17 @@
                 </div>
 
                 <select id="map-style" onchange="switchBaseMap(this.value)">
+                    <option value="mapbox-traffic-night">Mapbox Traffic Night</option>
                     <option value="mapbox-traffic-day">Mapbox Traffic Day</option>
                     <option value="mapbox-dark">Mapbox Dark</option>
                     <option value="mapbox-light">Mapbox Light</option>
                     <option value="opentopo">OpenTopoMap</option>
-                    <option value="mapbox-traffic-night">Mapbox Traffic Night</option>
+                    
 
                     <option value="mapbox-streets-satellite">Mapbox Streets-Satellite</option>
                     <option value="mapbox-navigation">Mapbox Navigation</option>
                     <option value="mapbox-navigation-night">Mapbox Navigation Night</option>
-                    <option value="mapbox-traffic-night">Mapbox Traffic Night</option>
+                    
 
                     <option value="custom">Mapbox Classic</option>
                     <option value="mapbox-satellite">Mapbox Satellite</option>
@@ -2488,8 +2601,8 @@
                         <span class="tooltip">Show coastline on top of weather</span>
                     </div>
                     <div class="toggle-switch">
-                        <input type="checkbox" id="overlay-toggle"
-                            onchange="toggleReferenceLayer(this.checked)">
+                        <input type="checkbox" id="overlay-toggle" onchange="toggleReferenceLayer(this.checked)"
+                            checked>
                         <label for="overlay-toggle" class="switch"></label>
                     </div>
                 </div>
@@ -2507,7 +2620,8 @@
                     </div>
                     <div class="toggle-switch">
                         <input type="checkbox" id="radarToggle"
-                            onchange="toggleLayer('radar', this.checked); updateUkCustomRadarColorScaleControlVisibility();" checked>
+                            onchange="toggleLayer('radar', this.checked); updateUkCustomRadarColorScaleControlVisibility();"
+                            checked>
                         <label for="radarToggle" class="switch"></label>
                     </div>
                 </div>
@@ -2515,8 +2629,10 @@
                     onchange="radarLayerTypeHandler(); updateUkCustomRadarColorScaleControlVisibility();">
                     <option value="placeholder" disabled>High Resolution Global Data ↓
                     </option>
+
+                    <option value="windy-radar">Global High Resolution Rainfall Radar Composite</option>
+
                     <option value="uk-precip-intensity">UK High Resolution Rainfall Intensity (Smoothed)</option>
-                    <option value="windy-radar">Windy Radar</option>
                     <option value="uk-precip-type">UK High Resolution Precipitation Type</option>
 
                     <option value="uk-precip-intensity-pixelated">UK High Resolution Rainfall Intensity (Pixelated)
@@ -2571,30 +2687,38 @@
                         oninput="updateLayerOpacities()">
 
                 </div>
-                <div class="switch-control uk-custom-radar-colour-control glow-off" id="uk-custom-radar-colour-control"
-                    style="display: none;">
-                    <div class="label-group">
-                        <span class="label-text">Customise your own colour scale</span>
-                        <span class="tooltip">Only recolours UK High Resolution Rainfall Intensity PNG tiles</span>
-                    </div>
-                    <div class="toggle-switch">
-                        <input type="checkbox" id="uk-custom-radar-colour-toggle"
-                            onchange="toggleUkCustomRadarColorScale(this.checked); updateSwitchGlow(this, 'uk-custom-radar-colour-control')">
-                        <label for="uk-custom-radar-colour-toggle" class="switch"></label>
-                    </div>
-                </div>
                 <div class="uk-custom-radar-editor" id="uk-custom-radar-editor" style="display: none;">
-                    <div class="uk-custom-radar-editor-title">UK rainfall intensity semantic colour replacement</div>
-                    <div class="uk-custom-radar-editor-help">DTN PNG lightest rain starts in the green family. This
-                        mapper treats the source green scale as low rainfall: light green → lowest custom levels, green
-                        → heavier low/moderate levels, then yellow/orange/red/purple upward.</div>
+                    <div class="uk-custom-radar-editor-title">Global Radar mm/h colour scale</div>
                     <div id="uk-custom-radar-colour-inputs" class="uk-custom-radar-colour-inputs"></div>
                     <button type="button" class="uk-custom-radar-reset" onclick="resetUkCustomRadarColorScale()">Reset
                         custom colours</button>
                 </div>
+                <div class="uk-custom-radar-editor" id="windy-radar-accumulation-panel" style="display:none;">
+                    <div class="uk-custom-radar-editor-title">Estimated radar rainfall accumulation map</div>
+                    <div class="uk-custom-radar-editor-help">Calculate an accumulated rainfall raster for the current
+                        view. Plot hides the current radar until Unplot is pressed. While plotted, clicking the map
+                        shows the accumulated total for this timeframe.</div>
+                    <label class="pretty-input">Start time<input type="datetime-local"
+                            id="windy-accum-start-time"></label>
+                    <label class="pretty-input">End time<input type="datetime-local" id="windy-accum-end-time"></label>
+                    <div class="button-group"><button type="button"
+                            onclick="handleWindyAccumulationMainAction()" id="windy-accum-main-action">Calculate accumulation</button></div>
+                    <div class="button-group" id="windy-accum-contour-group" style="display:none;"><button type="button" onclick="toggleWindyAccumulationContourLabels()"
+                            id="toggle-windy-accum-contours" disabled>Add contour</button></div>
+                    <div id="windy-radar-accumulation-status"
+                        style="font-size:11px;line-height:1.4;color:#666;margin-top:6px;">Generate an accumulation map
+                        for the current viewport.</div>
+                    <div id="windy-accum-progress-wrap" class="windy-accum-progress-wrap">
+                        <div id="windy-accum-progress-circle" class="windy-accum-progress-circle">
+                            <div id="windy-accum-progress-percent" class="windy-accum-progress-percent">0%</div>
+                        </div>
+                        <div id="windy-accum-progress-text" class="windy-accum-progress-text">Preparing accumulation
+                            map…</div>
+                    </div>
+                </div>
             </div>
 
-            <!-- Satellite Layer - ON -->
+            <!-- Satellite Layer - On -->
             <div class="layer-control" id="satellite-control">
                 <div class="top-row">
                     <div class="label-group">
@@ -2602,10 +2726,10 @@
                         <span class="tooltip">Select satellite data layer</span>
                     </div>
                     <div class="toggle-switch">
-                        <input type="checkbox" id="satelliteToggle"
-                            onchange="toggleLayer('satellite', this.checked);" checked>
+                        <input type="checkbox" id="satelliteToggle" onchange="toggleLayer('satellite', this.checked);" checked>
                         <label for="satelliteToggle" class="switch"></label>
                     </div>
+                    
                 </div>
                 <select id="satelliteLayerSelect" onchange="satelliteLayerTypeHandler();">
                     <option value="eumetsat-geocolor">EUMETSAT MTG GeoColour (Full Disc)</option>
@@ -2648,8 +2772,7 @@
                         <span class="tooltip">Select isobar data layer</span>
                     </div>
                     <div class="toggle-switch">
-                        <input type="checkbox" id="isobarToggle"
-                            onchange="toggleLayer('isobar', this.checked);">
+                        <input type="checkbox" id="isobarToggle" onchange="toggleLayer('isobar', this.checked);">
                         <label for="isobarToggle" class="switch"></label>
                     </div>
                 </div>
@@ -2733,7 +2856,7 @@
                     </div>
                 </div>
                 <select id="lightningLayerSelect" onchange="lightningLayerTypeHandler();">
-                    <option value="windy-live-lightning">Windy Live Global Lightning</option>
+                    <option value="windy-live-lightning">Live + past 24 hours Global Lightning</option>
                     <option value="lightning-all-tile">Lightning All (Tile)</option>
                     <option value="xweather-lightning">Global Live Strikes</option>
                     <option value="sevwx-lightning-global-plot">Global Lightning</option>
@@ -2977,7 +3100,8 @@
                     </div>
                     <div class="toggle-switch">
                         <input type="checkbox" id="lightning-layer-toggle"
-                            onchange="toggleLightningLayer(); updateSwitchGlow(this, 'lightning-layer-control')" checked>
+                            onchange="toggleLightningLayer(); updateSwitchGlow(this, 'lightning-layer-control')"
+                            checked>
                         <label for="lightning-layer-toggle" class="switch"></label>
                     </div>
                 </div>
@@ -3178,7 +3302,7 @@
 
             <label class="pretty-input">
                 Slider Max History
-                <input type="number" id="max-history-hours" value="4" min="1" step="1"
+                <input type="number" id="max-history-hours" value="6" min="1" step="1"
                     onchange="updateHistorySliderMax()">
                 <span class="unit">hours</span>
                 <span class="tooltip">Max hours back for time slider</span>
@@ -3367,7 +3491,7 @@
         <div class="slider-controls" style="display: flex; align-items: center; gap: 10px;">
             <button onclick="stepSlider(-1)">❮❮❮❮❮</button>
 
-            <input type="range" id="history-slider" class="slider" min="0" step="5" max="240" value="240"
+            <input type="range" id="history-slider" class="slider" min="0" step="5" max="360" value="360"
                 oninput="updateHistory()">
 
             <button onclick="stepSlider(1)">❯❯❯❯❯</button>
@@ -3532,21 +3656,41 @@
             </a>
         </div>
     </div>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/esri-leaflet@3.0.12/dist/esri-leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/leaflet.heat/dist/leaflet-heat.js"></script>
     <script src="https://unpkg.com/togeojson@0.16.0"></script>
     <script src="https://cdn.maptiler.com/maptiler-sdk-js/v3.0.1/maptiler-sdk.umd.min.js"></script>
     <script src="https://cdn.maptiler.com/leaflet-maptilersdk/v4.0.2/leaflet-maptilersdk.umd.min.js"></script>
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js"></script>
-    <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
-    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.4.3/mapbox-gl-draw.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+    
+    <script>
+    (() => {
+        'use strict';
+        const coarse = matchMedia('(pointer: coarse)').matches;
+        const mobile = coarse || /iPhone|iPad|iPod|Android|Mobile/i.test(navigator.userAgent) || Math.min(innerWidth, innerHeight) <= 820;
+        const lowMemory = Number(navigator.deviceMemory || 4) <= 4 || Number(navigator.hardwareConcurrency || 4) <= 4;
+        window.RADARLOOP_DEVICE_PROFILE = Object.freeze({ mobile, lowMemory, reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches });
+        if (window.L) {
+            L.Map.mergeOptions({
+                preferCanvas: true,
+                zoomAnimation: !mobile,
+                fadeAnimation: !mobile,
+                markerZoomAnimation: !mobile
+            });
+            L.GridLayer.mergeOptions({
+                updateWhenIdle: mobile,
+                updateWhenZooming: !mobile,
+                keepBuffer: mobile ? 1 : 2
+            });
+        }
+    })();
+    </script>
     <script>
         const mapboxAccessToken = 'pk.eyJ1IjoibWV0ZW9ncm91cC1tYXBib3giLCJhIjoiY2pudWJyMWVhMDQ0bjNxdXFsNWJ5M2ZtbSJ9.ANOKYyv5s0VFVbnesnGGUQ';
         const maptilerApiKey = 'd6FiSbcpDtzJ4g4e0oD4';
@@ -3675,7 +3819,7 @@
 
         // 1. Initialize the Leaflet Map
         map = L.map('map', {
-            layers: [baseLayers['mapbox-traffic-day']],
+            layers: [baseLayers['mapbox-traffic-night']],
             zoomControl: false
         }).setView([53.5, -4.5], 5);
         // --- 1. SETUP HIGH Z-INDEX PANE (Run this after initializing 'map') ---
@@ -3704,17 +3848,26 @@
         map.getPane('warningPane').style.zIndex = 550; // Ensure it sits above tiles but below markers
         map.getPane('warningPane').style.pointerEvents = 'none'; // Allow clicks to pass through empty areas
 
-        // Local nowcast is rendered with Canvas instead of SVG to reduce DOM/path overhead.
-        // Fill stays below the radar pane; outline stays above weather/label layers.
-        if (!map.getPane('nowcastFillPane')) {
-            map.createPane('nowcastFillPane');
-            map.getPane('nowcastFillPane').style.zIndex = 145; // below radar (150), above satellite (140)
-            map.getPane('nowcastFillPane').style.pointerEvents = 'none';
+        // UK lightning stays above all normal weather layers.
+        if (!map.getPane('lightningPane')) {
+            map.createPane('lightningPane');
         }
+        map.getPane('lightningPane').style.zIndex = 1000;
+
+        // The nowcast polygon fill must interleave with weather tiles:
+        // satellite (140) < polygon fill (145) < radar (150) < lightning.
+        // Creating it inside overlayPane allows those local z-index values to interleave.
+        if (!map.getPane('nowcastFillPane')) {
+            map.createPane('nowcastFillPane', map.getPane('overlayPane'));
+        }
+        map.getPane('nowcastFillPane').style.zIndex = 145;
+        map.getPane('nowcastFillPane').style.pointerEvents = 'none';
+
+        // The outline is deliberately separated from the fill and kept above all map overlays.
         if (!map.getPane('nowcastOutlinePane')) {
             map.createPane('nowcastOutlinePane');
-            map.getPane('nowcastOutlinePane').style.zIndex = 650; // above warnings/labels
         }
+        map.getPane('nowcastOutlinePane').style.zIndex = 2001;
         const nowcastFillRenderer = L.canvas({ pane: 'nowcastFillPane', padding: 0.35 });
         const nowcastOutlineRenderer = L.canvas({ pane: 'nowcastOutlinePane', padding: 0.35 });
 
@@ -3735,21 +3888,7 @@
         } catch (e) {
             console.error("MapsGL initialization failed:", e);
         }
-
-        // 4. Add the Data Inspector
-        // Check if controller exists before adding controls
-        if (mapsglController) {
-            const inspectorControl = mapsglController.addDataInspectorControl({
-                eventType: 'click', // Only show data when clicking the map
-                stream: true
-            });
-
-            // Optional: Format the data display for specific layers
-            inspectorControl.setEvaluator('lightning-density', {
-                title: 'Strike Density',
-                fn: (value) => `${value.toFixed(2)} strikes / km²`
-            });
-        }
+        // MapsGL click data inspector disabled. Windy Radar rainfall click popups are handled separately below.
         map3D = new mapboxgl.Map({
             container: 'map-3d',
             style: 'mapbox://styles/handry-outlook/cm9457ty1009d01sk37353ux2',
@@ -3820,6 +3959,270 @@
         const WEATHER_TILE_NEGATIVE_CACHE_TTL_MS = 90 * 1000;
         const weatherTileUrlCache = new Map();
         const weatherTileNegativeCache = new Map();
+
+        // ==================== WEATHER TILE PERFORMANCE / WINDY-LIKE PROGRESSIVE SCHEDULER ====================
+        // Preserves the high-res Windy tiled rainfall accumulation engine.
+        // This replaces hard mobile zoom freezes with a progressive, scheduler-based strategy:
+        // - old weather tiles stay visible,
+        // - fresh weather URLs are validated cache-first / stale-while-revalidate,
+        // - managed weather GridLayer updates are drip-fed across animation frames on mobile,
+        // - no long global tile freeze is used, so the map should not feel stuck.
+        const WEATHER_PERF = {
+            maxProbeConcurrency: 10,
+            maxAnimationProbeConcurrency: 4,
+            maxMobileProbeConcurrency: 5,
+            updateDebounceMs: 160,
+            animationUpdateDebounceMs: 900,
+            interactionSettleMs: 70,
+            mobileZoomSettleMs: 60,
+            minAnimationWeatherGapMs: 900,
+            frameKeys: new Map(),
+            queue: [],
+            active: 0,
+            generation: 0,
+            abortController: null,
+            lastWeatherUpdateStarted: 0,
+            lastWeatherUpdateFinished: 0,
+            lastAnimationWeatherUpdate: 0,
+            droppedStaleUpdates: 0,
+            skippedSameFrameUpdates: 0,
+            mapInteracting: false,
+            zooming: false,
+            zoomStartLevel: null,
+            lastZoomEndAt: 0,
+            lastZoomDirection: 0,
+            mobileTileBurstUntil: 0,
+            mobileTileBatchSize: 2,
+            mobileTileBatchDelayMs: 18,
+            interactionTimer: null,
+            latestInteractionTimestamp: null,
+            lastProgressivePreviewKey: null,
+            lastProgressivePreviewAt: 0,
+            managedGridUpdateQueue: new Map(),
+            managedGridUpdateTimer: null,
+            processingManagedGridLayer: null
+        };
+        let weatherUpdateDebounceTimer = null;
+        let pendingDebouncedWeatherTimestamp = null;
+
+        function isMobileWeatherDevice() {
+            const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+            const narrow = Math.min(window.innerWidth || 9999, window.innerHeight || 9999) <= 820;
+            const uaMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+            return coarse || narrow || uaMobile;
+        }
+
+        function beginWeatherPerformanceGeneration() {
+            WEATHER_PERF.generation++;
+            if (WEATHER_PERF.abortController) {
+                try { WEATHER_PERF.abortController.abort(); } catch (e) { }
+            }
+            WEATHER_PERF.abortController = new AbortController();
+            WEATHER_PERF.lastWeatherUpdateStarted = Date.now();
+            return WEATHER_PERF.generation;
+        }
+
+        function getWeatherPerformanceSignal() {
+            if (!WEATHER_PERF.abortController) WEATHER_PERF.abortController = new AbortController();
+            return WEATHER_PERF.abortController.signal;
+        }
+
+        function weatherPerfConcurrencyLimit() {
+            if (isMobileWeatherDevice()) return WEATHER_PERF.maxMobileProbeConcurrency;
+            return isPlaying ? WEATHER_PERF.maxAnimationProbeConcurrency : WEATHER_PERF.maxProbeConcurrency;
+        }
+
+        function processWeatherPerfQueue() {
+            const limit = weatherPerfConcurrencyLimit();
+            while (WEATHER_PERF.active < limit && WEATHER_PERF.queue.length) {
+                const item = WEATHER_PERF.queue.shift();
+                if (item.generation !== WEATHER_PERF.generation) {
+                    WEATHER_PERF.droppedStaleUpdates++;
+                    item.reject(new DOMException('Stale weather validation skipped', 'AbortError'));
+                    continue;
+                }
+                WEATHER_PERF.active++;
+                const signal = getWeatherPerformanceSignal();
+                fetch(item.url, { ...item.options, signal })
+                    .then(item.resolve)
+                    .catch(item.reject)
+                    .finally(() => {
+                        WEATHER_PERF.active--;
+                        processWeatherPerfQueue();
+                    });
+            }
+        }
+
+        function weatherPerfFetch(url, options = {}) {
+            const generation = WEATHER_PERF.generation;
+            return new Promise((resolve, reject) => {
+                WEATHER_PERF.queue.push({ url, options, generation, resolve, reject });
+                processWeatherPerfQueue();
+            });
+        }
+
+        function roundWeatherTimestampForLayer(timestamp, layerConfig) {
+            const interval = Math.max(60 * 1000, Number(layerConfig?.interval) || 5 * 60 * 1000);
+            return Math.floor(Number(timestamp) / interval) * interval;
+        }
+
+        function getWeatherLayerFrameKey(layerKey, layerType, layerConfig, timestamp) {
+            return `${layerKey}:${layerType}:${roundWeatherTimestampForLayer(timestamp, layerConfig)}`;
+        }
+
+        function getBestCachedWeatherUrl(layerKey, layerType) {
+            let best = null;
+            let bestCheckedAt = -1;
+            const prefix = `${layerKey}|${layerType}|`;
+            try {
+                for (const [key, value] of weatherTileUrlCache.entries()) {
+                    if (!key.startsWith(prefix) || !value || !value.url) continue;
+                    if (value.checkedAt > bestCheckedAt) {
+                        bestCheckedAt = value.checkedAt;
+                        best = { url: value.url, checkedAt: value.checkedAt };
+                    }
+                }
+            } catch (e) { }
+            if (!best && layerType !== 'windy-radar' && typeof lastValidTileUrls !== 'undefined' && lastValidTileUrls[layerType]) {
+                best = { url: lastValidTileUrls[layerType], checkedAt: Date.now() - WEATHER_TILE_CACHE_TTL_MS };
+            }
+            return best;
+        }
+
+        function scheduleWeatherLayerUpdate(timestamp, reason = 'debounced') {
+            pendingDebouncedWeatherTimestamp = timestamp;
+            const delay = WEATHER_PERF.zooming && isMobileWeatherDevice()
+                ? WEATHER_PERF.mobileZoomSettleMs
+                : (WEATHER_PERF.mapInteracting
+                    ? WEATHER_PERF.interactionSettleMs
+                    : (isPlaying ? WEATHER_PERF.animationUpdateDebounceMs : WEATHER_PERF.updateDebounceMs));
+            clearTimeout(weatherUpdateDebounceTimer);
+            weatherUpdateDebounceTimer = setTimeout(() => {
+                const ts = pendingDebouncedWeatherTimestamp;
+                pendingDebouncedWeatherTimestamp = null;
+                updateMapLayers(ts);
+            }, delay);
+        }
+
+        function resetWeatherFrameKey(layerKey) {
+            if (layerKey) WEATHER_PERF.frameKeys.delete(layerKey);
+            else WEATHER_PERF.frameKeys.clear();
+        }
+
+        function pauseWeatherReplotWorkForInteraction(isZoom = false) {
+            // Do not stop existing tile layers. Only cancel stale timestamp validation/replot jobs.
+            WEATHER_PERF.mapInteracting = true;
+            WEATHER_PERF.zooming = !!isZoom;
+            WEATHER_PERF.generation++;
+            if (WEATHER_PERF.abortController) {
+                try { WEATHER_PERF.abortController.abort(); } catch (e) { }
+            }
+            WEATHER_PERF.queue.length = 0;
+            clearTimeout(weatherUpdateDebounceTimer);
+            if (isZoom && isMobileWeatherDevice()) {
+                // Instead of freezing, switch managed weather GridLayers into drip-feed mode briefly.
+                WEATHER_PERF.mobileTileBurstUntil = Date.now() + 420;
+            }
+        }
+
+        function resumeWeatherReplotWorkAfterInteraction() {
+            clearTimeout(WEATHER_PERF.interactionTimer);
+            const delay = WEATHER_PERF.zooming && isMobileWeatherDevice()
+                ? WEATHER_PERF.mobileZoomSettleMs
+                : WEATHER_PERF.interactionSettleMs;
+            WEATHER_PERF.interactionTimer = setTimeout(() => {
+                WEATHER_PERF.mapInteracting = false;
+                WEATHER_PERF.zooming = false;
+                processWeatherPerfQueue();
+                const ts = WEATHER_PERF.latestInteractionTimestamp || getCurrentSliderTimestamp();
+                scheduleWeatherLayerUpdate(ts, 'interaction-settled');
+            }, delay);
+        }
+
+        function installProgressiveManagedWeatherGridScheduler() {
+            if (!window.L || !L.GridLayer || L.GridLayer.prototype._managedWeatherProgressivePatched) return;
+            L.GridLayer.prototype._managedWeatherProgressivePatched = true;
+            const originalUpdate = L.GridLayer.prototype._update;
+
+            function processManagedGridUpdateQueue() {
+                WEATHER_PERF.managedGridUpdateTimer = null;
+                if (!WEATHER_PERF.managedGridUpdateQueue.size) return;
+                const batch = isMobileWeatherDevice() ? WEATHER_PERF.mobileTileBatchSize : 4;
+                const entries = Array.from(WEATHER_PERF.managedGridUpdateQueue.entries()).slice(0, batch);
+                for (const [layer, center] of entries) {
+                    WEATHER_PERF.managedGridUpdateQueue.delete(layer);
+                    try {
+                        WEATHER_PERF.processingManagedGridLayer = layer;
+                        originalUpdate.call(layer, center);
+                    } catch (e) {
+                        console.warn('Managed weather tile update skipped:', e);
+                    } finally {
+                        WEATHER_PERF.processingManagedGridLayer = null;
+                    }
+                }
+                if (WEATHER_PERF.managedGridUpdateQueue.size) {
+                    WEATHER_PERF.managedGridUpdateTimer = setTimeout(processManagedGridUpdateQueue, WEATHER_PERF.mobileTileBatchDelayMs);
+                }
+            }
+
+            function queueManagedGridUpdate(layer, center) {
+                WEATHER_PERF.managedGridUpdateQueue.set(layer, center);
+                if (!WEATHER_PERF.managedGridUpdateTimer) {
+                    WEATHER_PERF.managedGridUpdateTimer = setTimeout(processManagedGridUpdateQueue, WEATHER_PERF.mobileTileBatchDelayMs);
+                }
+            }
+
+            L.GridLayer.prototype._update = function (center) {
+                if (this.options && this.options.weatherManaged && typeof WEATHER_PERF !== 'undefined' && isMobileWeatherDevice()) {
+                    if (WEATHER_PERF.processingManagedGridLayer === this) {
+                        return originalUpdate.call(this, center);
+                    }
+                    const shouldDripFeed = WEATHER_PERF.mapInteracting || WEATHER_PERF.zooming || Date.now() < WEATHER_PERF.mobileTileBurstUntil;
+                    if (shouldDripFeed) {
+                        queueManagedGridUpdate(this, center);
+                        return;
+                    }
+                }
+                return originalUpdate.call(this, center);
+            };
+        }
+        setTimeout(installProgressiveManagedWeatherGridScheduler, 0);
+
+        function initialiseWeatherInteractionBrake() {
+            if (!map || map._weatherInteractionBrakeAttached) return;
+            map._weatherInteractionBrakeAttached = true;
+            map.on('movestart dragstart', () => {
+                WEATHER_PERF.latestInteractionTimestamp = getCurrentSliderTimestamp();
+                pauseWeatherReplotWorkForInteraction(false);
+            });
+            map.on('zoomstart', () => {
+                WEATHER_PERF.zoomStartLevel = map.getZoom();
+                WEATHER_PERF.latestInteractionTimestamp = getCurrentSliderTimestamp();
+                pauseWeatherReplotWorkForInteraction(true);
+            });
+            map.on('moveend dragend', () => {
+                WEATHER_PERF.latestInteractionTimestamp = getCurrentSliderTimestamp();
+                resumeWeatherReplotWorkAfterInteraction();
+            });
+            map.on('zoomend resize', () => {
+                const z0 = WEATHER_PERF.zoomStartLevel;
+                const z1 = map.getZoom();
+                const direction = z0 === null ? 0 : Math.sign(z1 - z0);
+                const now = Date.now();
+                const reversedQuickly = direction && WEATHER_PERF.lastZoomDirection && direction !== WEATHER_PERF.lastZoomDirection && (now - WEATHER_PERF.lastZoomEndAt) < 700;
+                const bigJump = z0 !== null && Math.abs(z1 - z0) >= 2;
+                if (isMobileWeatherDevice() && (reversedQuickly || bigJump)) {
+                    // No freeze: just extend drip-feed mode for tile-layer updates.
+                    WEATHER_PERF.mobileTileBurstUntil = Date.now() + (reversedQuickly ? 650 : 380);
+                }
+                WEATHER_PERF.lastZoomDirection = direction || WEATHER_PERF.lastZoomDirection;
+                WEATHER_PERF.lastZoomEndAt = now;
+                WEATHER_PERF.zoomStartLevel = null;
+                WEATHER_PERF.latestInteractionTimestamp = getCurrentSliderTimestamp();
+                resumeWeatherReplotWorkAfterInteraction();
+            });
+        }
+        setTimeout(initialiseWeatherInteractionBrake, 0);
 
         // Performance system. Even 'quality' is now quality-optimised, not unlimited.
         let nowcastPerformanceMode = 'auto';
@@ -3947,6 +4350,31 @@
         var polygonNowcastLayer = L.layerGroup();
         setTimeout(initNowcastPerformanceMode, 0);
 
+        // Keep Windy radar sharp on laptop/desktop zooms and when moving between screens with different DPR.
+        // Leaflet temporarily scales tiles with CSS while zooming; this redraws the HiDPI canvases after zoom settles.
+        let lastWindyRadarDevicePixelRatio = window.devicePixelRatio || 1;
+        function refreshWindyRadarCrispTiles(reason = 'refresh') {
+            try {
+                const selectedRadar = document.getElementById('radarLayer')?.value;
+                const radarEnabled = document.getElementById('radarToggle')?.checked;
+                if (selectedRadar === 'windy-radar' && radarEnabled && radarLayer && map && map.hasLayer(radarLayer) && typeof radarLayer.redraw === 'function') {
+                    radarLayer.redraw();
+                    console.info(`Windy Radar crisp redraw: ${reason}`);
+                }
+            } catch (e) {
+                console.warn('Windy Radar crisp redraw skipped:', e);
+            }
+        }
+        map.on('zoomend resize', () => refreshWindyRadarCrispTiles('zoom/resize'));
+        window.addEventListener('resize', () => {
+            const currentDpr = window.devicePixelRatio || 1;
+            if (Math.abs(currentDpr - lastWindyRadarDevicePixelRatio) > 0.01) {
+                lastWindyRadarDevicePixelRatio = currentDpr;
+                refreshWindyRadarCrispTiles('devicePixelRatio changed');
+            }
+        });
+
+
         const currentTime = new Date();
         // Assuming 'map' is globally defined by Leaflet setup
 
@@ -3972,7 +4400,7 @@
             },
             'uk-precip-intensity': {
                 // PNG is used deliberately: the DTN PBF gives no useful rainfall-value metadata.
-                // The custom scale maps DTN's source colour semantics, where light rain begins in the green family.
+                // This layer is displayed with the provider's native colours; colour customisation is no longer supported for uk-precip-intensity.
                 url: 'https://tiles.meteoguard.dtn.com/tiles/radar-precip-intensity-uk-contours/${iso}/${iso}/{z}/{x}/{y}.png',
                 interval: 5 * 60 * 1000,
                 type: 'raster-tile',
@@ -5730,6 +6158,8 @@
             }
         }
         function toggleLayer(layerKey, enabled) {
+            if (typeof resetWeatherFrameKey === 'function') resetWeatherFrameKey(layerKey);
+
             const layer = layerMap[layerKey];
             if (!layer) return;
 
@@ -5952,7 +6382,7 @@
                             .replace(/\{-y\}/g, '23')
                             .replace(/z=\{z\}&x=\{x\}&y=\{y\}/g, 'z=6&x=31&y=23');
 
-                        const response = await fetch(checkUrl);
+                        const response = await weatherPerfFetch(checkUrl, { method: 'GET', cache: 'force-cache' });
 
                         if (response.ok) {
                             console.log(`Nowcast Success! Issue: ${iso_now} | Target: ${iso_future}`);
@@ -6065,7 +6495,7 @@
 
                     for (let retry = 0; retry < 2; retry++) {
                         try {
-                            const response = await fetch(checkUrl, { method: 'GET' });
+                            const response = await weatherPerfFetch(checkUrl, { method: 'GET', cache: 'force-cache' });
                             if (response.ok) {
                                 return tileUrl;
                             }
@@ -6118,11 +6548,54 @@
             prune(weatherTileInFlight, WEATHER_TILE_INFLIGHT_LIMIT);
         }
 
+
+        // Windy radar uses timestamped directory names and is sensitive to stale tile-url caches.
+        // When a manual time filter is applied, the slider's end time becomes the authoritative
+        // radar timestamp. These helpers keep Windy tile requests tied to that filter/slider state
+        // instead of accidentally reusing the live/current timeline URL.
+        function getWindyRadarTimeContext(timestamp) {
+            const slider = document.getElementById('history-slider');
+            const startMs = customFilterStart instanceof Date && !isNaN(customFilterStart) ? customFilterStart.getTime() : '';
+            const endMs = customFilterEnd instanceof Date && !isNaN(customFilterEnd) ? customFilterEnd.getTime() : '';
+            return [
+                Number(timestamp) || 0,
+                lastFilterMode || 'slider',
+                startMs,
+                endMs,
+                slider ? slider.value : '',
+                slider ? slider.max : ''
+            ].join('|');
+        }
+
+        function clearWindyRadarRuntimeState(reason = 'time-context-change') {
+            try {
+                for (const key of Array.from(weatherTileUrlCache.keys())) {
+                    if (String(key).includes('windy-radar')) weatherTileUrlCache.delete(key);
+                }
+                for (const key of Array.from(weatherTileNegativeCache.keys())) {
+                    if (String(key).includes('windy-radar')) weatherTileNegativeCache.delete(key);
+                }
+                for (const key of Array.from(weatherTileInFlight.keys())) {
+                    if (String(key).includes('windy-radar')) weatherTileInFlight.delete(key);
+                }
+                delete lastValidTileUrls['windy-radar'];
+                if (lastRadarType === 'windy-radar') {
+                    lastRadarTimestamp = null;
+                    lastRequestedRadarTimestamp = null;
+                    isRadarAnimating = false;
+                }
+                console.info(`Windy Radar runtime state cleared: ${reason}`);
+            } catch (e) {
+                console.warn('Unable to clear Windy Radar runtime state:', e);
+            }
+        }
+
         async function fetchTileUrl(timestamp, layerConfig) {
             if (!layerConfig) return null;
             const layerKey = resolveLayerConfigKey(layerConfig);
             const roundedTimestamp = Number(timestamp) || 0;
-            const requestKey = `${layerKey}|${roundedTimestamp}|${layerConfig.type || ''}|${layerConfig.url || ''}`;
+            const windyRadarContext = layerKey === 'windy-radar' ? getWindyRadarTimeContext(roundedTimestamp) : '';
+            const requestKey = `${layerKey}|${roundedTimestamp}|${windyRadarContext}|${layerConfig.type || ''}|${layerConfig.url || ''}`;
             const nowMs = Date.now();
 
             const cached = weatherTileUrlCache.get(requestKey);
@@ -6164,7 +6637,19 @@
          * @param {number|null} timestamp - The rounded timestamp of the plotted data.
          * @param {string} layerKey - 'satellite', 'radar', 'isobar', or 'wind'.
          */
-        async function plotMainLayer(finalUrl, layerType, timestamp, layerKey) {
+        async function plotMainLayer(finalUrl, layerType, timestamp, layerKey, windyRadarContext = '') {
+            if (typeof WEATHER_PERF !== 'undefined' && WEATHER_PERF.mapInteracting) {
+                scheduleWeatherLayerUpdate(timestamp, 'plot-paused-during-map-interaction');
+                return;
+            }
+
+            if (layerKey === 'radar' && typeof isWindyAccumulationMapPlotted === 'function' && isWindyAccumulationMapPlotted()) {
+                try {
+                    if (typeof radarLayer !== 'undefined' && radarLayer && map.hasLayer(radarLayer)) map.removeLayer(radarLayer);
+                    if (typeof windyRadarLayerHiddenForAccumulation !== 'undefined') windyRadarLayerHiddenForAccumulation = true;
+                } catch (e) { console.warn('Radar redraw suppressed while Windy accumulation is plotted:', e); }
+                return;
+            }
             let layerOptions, zIndex, currentLayerRef, lastTimestampRef, lastTypeRef, isAnimatingRef;
 
             // 1. Determine correct opacity slider ID based on the layerKey
@@ -6173,14 +6658,15 @@
             const sliderElement = document.getElementById(opacitySliderId);
             const currentOpacity = sliderElement ? parseFloat(sliderElement.value) : 0.8;
             const efficientTileOptions = {
-                updateWhenIdle: true,
+                updateWhenIdle: false,
                 updateWhenZooming: false,
-                keepBuffer: LOW_END_NOWCAST_MODE ? 0 : 1,
+                keepBuffer: isMobileWeatherDevice() ? 0 : 1,
                 maxNativeZoom: 12,
                 reuseTiles: true,
                 unloadInvisibleTiles: true,
                 detectRetina: false,
-                className: 'seamless-layer'
+                className: 'seamless-layer',
+                weatherManaged: true
             };
 
             switch (layerKey) {
@@ -6540,7 +7026,8 @@
                         pane: 'overlayPane',
                         attribution: layerOptions.attribution,
                         tileSize: 256,
-                        className: 'seamless-layer'
+                        className: 'seamless-layer',
+                weatherManaged: true
                     });
                 } else if (layerOptions.type === 'raster-tile') {
                     const tileOptions = {
@@ -6551,15 +7038,18 @@
                         tms: layerOptions.tms === true,
                         tileSize: 256,
                         crossOrigin: true,
-                        className: 'seamless-layer'
+                        className: 'seamless-layer',
+                weatherManaged: true
                     };
                     if (layerKey === 'radar' && layerType === 'windy-radar') {
                         newLayer = createWindyRadarArchiveAwareTileLayer(finalUrl, {
                             ...tileOptions,
-                            applyWindyColourReplacement: isUkCustomRadarActiveForCurrentSelection()
+                            minNativeZoom: WINDY_RADAR_MAX_NATIVE_ZOOM,
+                            maxNativeZoom: WINDY_RADAR_MAX_NATIVE_ZOOM,
+                            applyWindyColourReplacement: true,
+                            className: 'seamless-layer windy-radar-crisp-tile'
                         });
-                    } else if (layerKey === 'radar' && layerType === 'uk-precip-intensity' && isUkCustomRadarActiveForCurrentSelection()) {
-                        newLayer = createUkRadarDtnSemanticMappedTileLayer(finalUrl, tileOptions);
+
                     } else {
                         newLayer = L.tileLayer(finalUrl, tileOptions);
                     }
@@ -6582,18 +7072,26 @@
                             opacity: currentOpacity,
                             vectorTileLayerStyles: vectorStyles,
                             className: 'seamless-layer',
+                weatherManaged: true,
                             zIndex: zIndex,
                             pane: 'overlayPane',
                             tms: isEuropeForecast // Apply TMS if it's the Europe forecast
                         });
                     } catch (error) {
-                        newLayer = L.tileLayer(finalUrl, { ...efficientTileOptions, opacity: currentOpacity, zIndex: zIndex, pane: 'overlayPane', tms: layerOptions.tms === true, tileSize: 256, className: 'seamless-layer' });
+                        newLayer = L.tileLayer(finalUrl, { ...efficientTileOptions, opacity: currentOpacity, zIndex: zIndex, pane: 'overlayPane', tms: layerOptions.tms === true, tileSize: 256, className: 'seamless-layer',
+                weatherManaged: true });
                     }
                 } else {
-                    newLayer = L.tileLayer(finalUrl, { ...efficientTileOptions, opacity: currentOpacity, zIndex: zIndex, pane: 'overlayPane', tms: true, tileSize: 256, className: 'seamless-layer' });
+                    newLayer = L.tileLayer(finalUrl, { ...efficientTileOptions, opacity: currentOpacity, zIndex: zIndex, pane: 'overlayPane', tms: true, tileSize: 256, className: 'seamless-layer',
+                weatherManaged: true });
                 }
 
                 if (!newLayer) return;
+                if (layerType === 'windy-radar') {
+                    newLayer._windyRadarTimeContext = windyRadarContext || getWindyRadarTimeContext(timestamp);
+                    newLayer._windyRadarRequestedTimestamp = timestamp;
+                    newLayer._windyRadarTileUrl = finalUrl;
+                }
                 newLayer.addTo(map);
 
                 const layerLoadedPromise = new Promise(resolve => {
@@ -6701,13 +7199,8 @@
         // ==========================================
         function updateHistorySliderMax() {
             const maxHours = parseInt(document.getElementById('max-history-hours').value) || 6;
-            let maxMinutes = maxHours * 60;
-            const radarToggle = document.getElementById('radarToggle');
+            const maxMinutes = maxHours * 60;
             const slider = document.getElementById('history-slider');
-
-            if (radarToggle && radarToggle.checked) {
-                maxMinutes += 120; // Add 3 hours for nowcast
-            }
 
             const oldValue = parseInt(slider.value);
             slider.max = maxMinutes;
@@ -6751,10 +7244,22 @@
         let activeWeatherLayerPlotCount = 0;
 
         async function updateMapLayers(timestamp) {
+            if (WEATHER_PERF.mapInteracting) {
+                pendingWeatherLayerTimestamp = timestamp;
+                scheduleWeatherLayerUpdate(timestamp, 'map-interacting');
+                return;
+            }
+            const now = Date.now();
+            if (isPlaying && now - WEATHER_PERF.lastAnimationWeatherUpdate < WEATHER_PERF.minAnimationWeatherGapMs) {
+                scheduleWeatherLayerUpdate(timestamp, 'animation-throttle');
+                return;
+            }
             if (isPlotting) {
                 pendingWeatherLayerTimestamp = timestamp;
                 return;
             }
+            const generation = beginWeatherPerformanceGeneration();
+            if (isPlaying) WEATHER_PERF.lastAnimationWeatherUpdate = now;
             isPlotting = true;
             const PROCESSING_DELAY_MS = 5 * 60 * 1000;
             let targetTimestamp = timestamp;
@@ -6778,28 +7283,46 @@
                 { key: 'warning', select: 'warningLayerSelect', toggle: 'warningToggle', options: warningOptions }
             ];
 
-            const jobs = layerDefs
-                .filter(def => {
-                    const select = document.getElementById(def.select);
-                    const toggle = document.getElementById(def.toggle);
-                    return select && !select.disabled && (!toggle || toggle.checked) && select.value && select.value !== 'none' && select.value !== 'placeholder';
-                })
-                .map(def => () => plotLayerIfNecessary(document.getElementById(def.select).value, def.options, targetTimestamp, def.key));
+            const jobs = [];
+            for (const def of layerDefs) {
+                const select = document.getElementById(def.select);
+                const toggle = document.getElementById(def.toggle);
+                if (!select || select.disabled || (toggle && !toggle.checked) || !select.value || select.value === 'none' || select.value === 'placeholder') {
+                    WEATHER_PERF.frameKeys.delete(def.key);
+                    continue;
+                }
+                const layerType = select.value;
+                const layerConfig = def.options[layerType];
+                if (!layerConfig) continue;
+                const frameKey = getWeatherLayerFrameKey(def.key, layerType, layerConfig, targetTimestamp);
+                if (WEATHER_PERF.frameKeys.get(def.key) === frameKey) {
+                    WEATHER_PERF.skippedSameFrameUpdates++;
+                    continue;
+                }
+                jobs.push(async () => {
+                    if (generation !== WEATHER_PERF.generation || WEATHER_PERF.mapInteracting) return;
+                    await plotLayerIfNecessary(layerType, def.options, targetTimestamp, def.key);
+                    if (generation === WEATHER_PERF.generation && !WEATHER_PERF.mapInteracting) {
+                        WEATHER_PERF.frameKeys.set(def.key, frameKey);
+                    }
+                });
+            }
 
             activeWeatherLayerPlotCount = jobs.length;
-            const concurrency = isPlaying ? 1 : (LOW_END_NOWCAST_MODE ? 1 : (jobs.length >= 4 ? 1 : (jobs.length >= 3 ? 2 : 3)));
+            const concurrency = isMobileWeatherDevice() ? 2 : (isPlaying ? 1 : (LOW_END_NOWCAST_MODE ? 1 : (jobs.length >= 4 ? 2 : 3)));
             for (let i = 0; i < jobs.length; i += concurrency) {
-                if (pendingWeatherLayerTimestamp !== null) break;
+                if (generation !== WEATHER_PERF.generation || WEATHER_PERF.mapInteracting || pendingWeatherLayerTimestamp !== null) break;
                 await Promise.allSettled(jobs.slice(i, i + concurrency).map(job => job()));
             }
 
+            if (generation === WEATHER_PERF.generation) WEATHER_PERF.lastWeatherUpdateFinished = Date.now();
             isPlotting = false;
             activeWeatherLayerPlotCount = 0;
             updateLegend();
             if (pendingWeatherLayerTimestamp !== null) {
                 const nextTimestamp = pendingWeatherLayerTimestamp;
                 pendingWeatherLayerTimestamp = null;
-                setTimeout(() => updateMapLayers(nextTimestamp), 0);
+                scheduleWeatherLayerUpdate(nextTimestamp, 'pending-after-plot');
             }
         }
         window.toggleWeatherDetails = function (headerElement) {
@@ -7255,6 +7778,11 @@
          * @param {string} layerKey - 'satellite', 'radar', 'isobar', or 'wind'.
          */
         async function plotLayerIfNecessary(layerType, optionsMap, targetTimestamp, layerKey) {
+            if (typeof WEATHER_PERF !== 'undefined' && WEATHER_PERF.mapInteracting) {
+                scheduleWeatherLayerUpdate(targetTimestamp, 'plotLayer-paused-during-map-interaction');
+                return;
+            }
+
             let layerConfig = optionsMap[layerType];
 
             // --- NEW: Switch to nowcast config if radar is selected and time is in future ---
@@ -7309,8 +7837,13 @@
                 case 'warning': lastTimestamp = lastWarningTimestamp; lastType = lastWarningType; isAnimating = isWarningAnimating; break;
                 default: return;
             }
-            // Prevent unnecessary re-plotting only when BOTH timestamp AND layer type are unchanged
-            if (lastTimestamp === roundedTimestampMs && lastType === layerType) {
+            // Prevent unnecessary re-plotting only when BOTH timestamp AND layer type are unchanged.
+            // Exception: Windy radar also depends on the active filter/slider context, so it must
+            // re-resolve if the user applied a different time filter even when the rounded 5-min
+            // timestamp coincides with the previous render.
+            const currentWindyRadarContext = layerType === 'windy-radar' ? getWindyRadarTimeContext(roundedTimestampMs) : '';
+            const lastWindyRadarContext = radarLayer && radarLayer._windyRadarTimeContext ? radarLayer._windyRadarTimeContext : '';
+            if (lastTimestamp === roundedTimestampMs && lastType === layerType && currentWindyRadarContext === lastWindyRadarContext) {
                 return; // Nothing changed — safe to skip
             }
             // Prevent concurrent animations
@@ -7340,9 +7873,25 @@
                 const framesToCheck = isPlaying ? 1 : (LOW_END_NOWCAST_MODE ? 1 : (activeWeatherLayerPlotCount >= 4 ? 1 : (activeWeatherLayerPlotCount >= 3 ? 2 : 4)));
                 const cacheNow = Date.now();
 
+                // Cache-first progressive preview: if we already have a recent URL for this layer type,
+                // plot it immediately on mobile so the user sees something while the exact timestamp validates.
+                // This is stale-while-revalidate: the fresh result below still replaces it when ready.
+                const progressivePreviewKey = `${layerKey}|${layerType}|${roundedTimestampMs}`;
+                const progressiveCached = (typeof getBestCachedWeatherUrl === 'function') ? getBestCachedWeatherUrl(layerKey, layerType) : null;
+                if (isMobileWeatherDevice() && progressiveCached && progressiveCached.url && WEATHER_PERF.lastProgressivePreviewKey !== progressivePreviewKey) {
+                    WEATHER_PERF.lastProgressivePreviewKey = progressivePreviewKey;
+                    WEATHER_PERF.lastProgressivePreviewAt = Date.now();
+                    try {
+                        await plotMainLayer(progressiveCached.url, layerType, null, layerKey, currentWindyRadarContext);
+                    } catch (e) {
+                        console.warn('Progressive cached weather preview failed:', e);
+                    }
+                }
+
                 for (let i = 0; i < framesToCheck; i++) {
                     const candidateTs = roundedTimestampMs - i * interval;
-                    const cacheKey = `${layerKey}|${layerType}|${candidateTs}`;
+                    const windyCandidateContext = layerType === 'windy-radar' ? getWindyRadarTimeContext(candidateTs) : '';
+                    const cacheKey = `${layerKey}|${layerType}|${candidateTs}|${windyCandidateContext}`;
                     const cached = weatherTileUrlCache.get(cacheKey);
                     if (cached && (cacheNow - cached.checkedAt) < WEATHER_TILE_CACHE_TTL_MS) {
                         finalUrl = cached.url;
@@ -7380,7 +7929,7 @@
                 }
 
                 if (finalUrl) {
-                    await plotMainLayer(finalUrl, layerType, finalTimestamp, layerKey);
+                    await plotMainLayer(finalUrl, layerType, finalTimestamp, layerKey, currentWindyRadarContext);
                 } else {
                     // --- FIX: Ensure Layer Removal and State Reset on URL Failure ---
                     let currentLayer;
@@ -7548,39 +8097,78 @@
             if (typeof updateLegend === 'function') updateLegend();
         }
         // ==========================================
-        // UK HIGH-RES RADAR PNG CUSTOM COLOUR SCALE — DTN SOURCE-SEMANTIC MAPPER
-        // Applies ONLY to radarOptions['uk-precip-intensity'].
-        // DTN PNG does not expose rainfall values. The important observed fact is that DTN's lightest rain
-        // starts in the green family, not the blue family. This function therefore interprets SOURCE colour
-        // families in DTN order: light green -> green -> dark green -> yellow -> orange -> red -> purple,
-        // and then replaces those levels with the selected custom template colours.
+        // RADAR CUSTOM COLOUR SCALE — MM/H-BASED WINDY RADAR MAPPER
+        // Shared quantitative palette used only by Windy Radar and its accumulation tools.
+        // Every non-Windy radar provider keeps its native colour rendering.
         // ==========================================
 
-        const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
-            // [Threshold, [R, G, B, Alpha]]
-            [1, [174, 212, 242, 255]], // 2. Light Blue
-            [2, [88, 75, 226, 255]], // 4. Dark Blue / Indigo
-            [3, [0, 223, 104, 255]], // 6. Emerald Green
-            [4, [153, 250, 179, 255]], // 8. Pale Mint Green
-            [5, [255, 255, 0, 255]], // 9. Bright Yellow
-            [6, [255, 206, 0, 255]], // 10. Gold / Warm Yellow
-            [7, [255, 155, 0, 255]], // 11. Light Orange
-            [8, [255, 100, 0, 255]], // 12. Dark Orange
-            [9, [255, 0, 0, 255]], // 13. Bright Red
-            [13, [213, 0, 0, 255]], // 14. Medium Red
-            [14, [166, 0, 0, 255]], // 15. Dark Red
-            [15, [121, 0, 0, 255]], // 16. Maroon / Deep Red
-            [16, [163, 56, 93, 255]], // 17. Deep Wine / Dark Magenta
-            [17, [212, 116, 135, 255]], // 18. Rose Pink
-            [18, [244, 179, 200, 255]], // 19. Soft Pink
-            [19, [253, 226, 235, 255]], // 20. Very Light Pink
-            [20, [236, 209, 250, 255]], // 21. Pale Violet / Lavender
-            [21, [207, 160, 235, 255]], // 22. Light Purple
-            [22, [166, 99, 206, 255]], // 23. Medium Purple
-            [23, [130, 48, 178, 255]]  // 24. Deep Purple
+        function dbzToWindyMmh(dbz) {
+    // Same Z-R style as your current Windy conversion:
+    // R = (10^(dBZ / 10) * 0.005)^0.625
+    return Math.pow(Math.pow(10, dbz / 10) * 0.005, 0.625);
+}
+
+const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
+            // Light professional 2^n mm/h rainfall colour scale
+            // Thresholds are lower bounds: colour applies from this mm/h until the next threshold.
+            // No dark red / dark purple; high-end uses brighter pink/lavender/violet.
+
+            [0.00000, [0, 0, 0, 0]],           // no rain / transparent
+
+            // Very light rain / drizzle
+            [0.03125, [225, 245, 255, 120]],   // 1/32 mm/h - very pale blue
+            [0.06250, [185, 225, 245, 170]],   // 1/16 mm/h - pale blue
+            [0.12500, [135, 195, 235, 210]],   // 1/8 mm/h - light blue
+            [0.25000, [80, 155, 220, 235]],    // 1/4 mm/h - medium blue
+            [0.50000, [45, 110, 220, 255]],    // 1/2 mm/h - clear blue
+
+            // Light to moderate rain
+            [1.00000, [0, 170, 120, 255]],     // 1 mm/h - teal green
+            [2.00000, [70, 205, 80, 255]],     // 2 mm/h - green
+            [4.00000, [235, 235, 0, 255]],     // 4 mm/h - yellow
+
+            // Heavy rain
+            [8.00000, [255, 185, 0, 255]],     // 8 mm/h - amber
+            [16.00000, [255, 105, 0, 255]],    // 16 mm/h - orange
+            [32.00000, [255, 35, 35, 255]],    // 32 mm/h - bright red
+
+            // Very heavy / extreme rain, lighter high-end colours
+            [64.00000, [255, 95, 95, 255]],    // 64 mm/h - light red
+            [128.00000, [255, 145, 165, 255]], // 128 mm/h - pink
+            [256.00000, [245, 180, 220, 255]], // 256 mm/h - pale magenta-pink
+            [512.00000, [220, 185, 245, 255]], // 512 mm/h - light lavender
+            [1024.00000, [185, 145, 235, 255]],// 1024 mm/h - soft violet
+            [2048.00000, [155, 105, 225, 255]],// 2048 mm/h - medium violet
+            [4096.00000, [255, 255, 255, 255]],// 4096 mm/h - white debug/overflow
+            [8192.00000, [255, 0, 255, 255]],  // 8192+ mm/h - magenta debug/failed calibration
+
+            [99999, [255, 0, 255, 255]]
         ];
 
-        let ukCustomRadarColorScaleEnabled = false;
+        const WINDY_RADAR_DBZ_PER_ENCODED_UNIT = 56 / 94; // calibrated from Windy picker: RGB(93,95,26) → 56 dBZ
+        const WINDY_RADAR_MIN_VISIBLE_MMH = 0.03;
+        const WINDY_RADAR_MMH_NERF = 0.3;
+        function windyDbzToMmh(dbz) {
+            const rawMmh = Math.pow(Math.pow(10, dbz / 10) * 0.005, 0.625);
+            return rawMmh * WINDY_RADAR_MMH_NERF;
+        }
+        function windyRadarEncodedToDbz(encoded) {
+            return Math.max(0, encoded * WINDY_RADAR_DBZ_PER_ENCODED_UNIT);
+        }
+        function windyRadarEncodedToMmh(encoded) {
+            return windyDbzToMmh(windyRadarEncodedToDbz(encoded));
+        }
+        function getWindyRadarFrameTimeGlobal(d) { const r = new Date(d); r.setUTCMinutes(Math.floor(r.getUTCMinutes() / 5) * 5, 0, 0); return r; }
+        function padWindyRadarGlobal(n) { return String(n).padStart(2, '0'); }
+        function formatWindyRadarMaxtGlobal(d) { const m = new Date(getWindyRadarFrameTimeGlobal(d).getTime() + (4 * 60 + 51) * 1000); return String(m.getUTCFullYear()) + padWindyRadarGlobal(m.getUTCMonth() + 1) + padWindyRadarGlobal(m.getUTCDate()) + padWindyRadarGlobal(m.getUTCHours()) + padWindyRadarGlobal(m.getUTCMinutes()) + padWindyRadarGlobal(m.getUTCSeconds()); }
+        function buildWindyRadarTileUrlForTime(date, z, x, y) { const f = getWindyRadarFrameTimeGlobal(date); const yyyy = String(f.getUTCFullYear()), mm = padWindyRadarGlobal(f.getUTCMonth() + 1), dd = padWindyRadarGlobal(f.getUTCDate()), hhmm = padWindyRadarGlobal(f.getUTCHours()) + padWindyRadarGlobal(f.getUTCMinutes()), maxt = formatWindyRadarMaxtGlobal(f); return `https://rdr.windy.com/radar2/composite/${yyyy}/${mm}/${dd}/${hhmm}/${z}/${x}/${y}/reflectivity.webp?multichannel=true&maxt=${maxt}`; }
+        function formatRadarMmhLabel(value, index, total) {
+            if (index === 0) return `<${value} mm/h`;
+            if (index === total - 1) return `≥${value} mm/h`;
+            return `${value} mm/h`;
+        }
+
+        let ukCustomRadarColorScaleEnabled = true;
         let ukCustomRadarLevelOverrides = {};
         function clampRadarByte(v) { return Math.max(0, Math.min(255, Math.round(Number(v) || 0))); }
         function radarRgbaToHex(rgba) {
@@ -7612,119 +8200,15 @@
                 return { ...level, rgba: override ? radarHexToRgba(override, level.rgba[3]) : level.rgba, index };
             });
         }
-        function rgbToHsvForDtnSource(r, g, b) {
-            r /= 255; g /= 255; b /= 255;
-            const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
-            let h = 0;
-            if (d !== 0) {
-                if (max === r) h = ((g - b) / d) % 6;
-                else if (max === g) h = (b - r) / d + 2;
-                else h = (r - g) / d + 4;
-                h *= 60;
-                if (h < 0) h += 360;
-            }
-            return { h, s: max === 0 ? 0 : d / max, v: max };
+        function getUkRadarTemplateLabel(level, index, total) {
+            return formatRadarMmhLabel(level.value, index, total);
         }
-        function classifyDtnSourcePixelToTemplateIndex(r, g, b) {
-            const { h, s, v } = rgbToHsvForDtnSource(r, g, b);
-            // Very low saturation anti-aliased pixels. Keep bright greys low, darker greys mid/high.
-            if (s < 0.10) {
-                if (v > 0.72) return 0;
-                if (v > 0.48) return 2;
-                return 7;
-            }
-            // DTN source semantics observed by user: lightest rain is light green, then green is heavier.
-            // Green/lime family is therefore deliberately mapped to LOWER custom template levels, not to
-            // nearest yellow/green target colours.
-            if (h >= 75 && h < 165) {
-                // lime / light green -> lowest two template steps
-                if (v >= 0.84) return 0;          // lightest green = lightest rain
-                if (v >= 0.68) return 1;
-                if (v >= 0.52) return 2;          // green = slightly heavier
-                return 3;                         // darker green = heavier low/moderate
-            }
-            // Yellow is above the green family.
-            if (h >= 45 && h < 75) {
-                if (v >= 0.82) return 4;
-                return 5;
-            }
-            // Orange family.
-            if (h >= 15 && h < 45) {
-                if (v >= 0.76) return 6;
-                return 7;
-            }
-            // Red family.
-            if (h >= 345 || h < 15) {
-                if (v >= 0.58) return 8;
-                return 9;
-            }
-            // Purple / magenta family.
-            if (h >= 260 && h < 345) {
-                if (v >= 0.55) return 10;
-                return 11;
-            }
-            // Cyan/blue if present: keep as lower rainfall, because they are not high-end colours.
-            if (h >= 165 && h < 260) {
-                if (v >= 0.75) return 1;
-                return 2;
-            }
-            return 0;
-        }
-        function recolourUkRadarImageDataDtnSemantic(imageData) {
-            const targetLevels = getUkRadarTargetLevels();
-            const data = imageData.data;
-            const localRgbToLevelCache = new Map();
-            for (let i = 0; i < data.length; i += 4) {
-                const originalAlpha = data[i + 3];
-                if (originalAlpha < 2) continue;
-                const key = (data[i] << 16) | (data[i + 1] << 8) | data[i + 2];
-                let levelIndex = localRgbToLevelCache.get(key);
-                if (levelIndex === undefined) {
-                    levelIndex = classifyDtnSourcePixelToTemplateIndex(data[i], data[i + 1], data[i + 2]);
-                    localRgbToLevelCache.set(key, levelIndex);
-                }
-                const target = targetLevels[Math.min(levelIndex, targetLevels.length - 1)].rgba;
-                data[i] = target[0];
-                data[i + 1] = target[1];
-                data[i + 2] = target[2];
-                data[i + 3] = Math.round(originalAlpha * (target[3] / 255));
-            }
-            return imageData;
-        }
-        const UkRadarDtnSemanticMappedTileLayer = L.TileLayer.extend({
-            createTile: function (coords, done) {
-                const tile = document.createElement('canvas');
-                const size = this.getTileSize();
-                tile.width = size.x;
-                tile.height = size.y;
-                const img = new Image();
-                img.crossOrigin = 'anonymous';
-                img.onload = () => {
-                    try {
-                        const ctx = tile.getContext('2d', { willReadFrequently: true });
-                        ctx.clearRect(0, 0, size.x, size.y);
-                        ctx.drawImage(img, 0, 0, size.x, size.y);
-                        const imageData = ctx.getImageData(0, 0, size.x, size.y);
-                        ctx.putImageData(recolourUkRadarImageDataDtnSemantic(imageData), 0, 0);
-                        done(null, tile);
-                    } catch (error) {
-                        console.warn('UK radar DTN semantic colour mapping failed for this tile; showing original PNG tile instead.', error);
-                        const fallbackCtx = tile.getContext('2d');
-                        fallbackCtx.clearRect(0, 0, size.x, size.y);
-                        fallbackCtx.drawImage(img, 0, 0, size.x, size.y);
-                        done(null, tile);
-                    }
-                };
-                img.onerror = () => done(new Error('Failed to load UK radar PNG tile'), tile);
-                img.src = this.getTileUrl(coords);
-                return tile;
-            }
-        });
-        function createUkRadarDtnSemanticMappedTileLayer(url, options) {
-            return new UkRadarDtnSemanticMappedTileLayer(url, { ...options, crossOrigin: true });
-        }
+
+        // Non-Windy radar providers are rendered with their native colours.
+        // Per-pixel replacement is intentionally retained only for Windy Radar below.
+
         // ==========================================
-        // WINDY RADAR CUSTOM COLOUR SCALE — YELLOW-ONLY, GRADUAL + Z7 + ARCHIVE FALLBACK
+        // WINDY RADAR CUSTOM COLOUR SCALE — MM/H BINNED + Z7 + ARCHIVE FALLBACK
         // Normal endpoint: /radar2/composite/... ; archive fallback: /radar2/archive/composite/...
         // If a normal tile fails for frame T, store T in localStorage and use archive first for any frame <= T.
         // ==========================================
@@ -7752,7 +8236,7 @@
             return String(url).replace('/radar2/composite/', '/radar2/archive/composite/');
         }
         const WINDY_RADAR_LIVE_ONLY_WINDOW_MS = 2 * 60 * 60 * 1000;
-        const WINDY_RADAR_ARCHIVE_LOOKBACK_MS = 31 * 24 * 60 * 60 * 1000;
+        const WINDY_RADAR_ARCHIVE_LOOKBACK_MS = 365 * 24 * 60 * 60 * 1000;
 
         function normaliseWindyRadarLiveUrl(url) {
             return String(url).replace('/radar2/archive/composite/', '/radar2/composite/');
@@ -7771,81 +8255,43 @@
             const cutoff = getWindyRadarArchiveCutoffMs();
             return Number.isFinite(cutoff) && frameMs <= cutoff;
         }
-        function getWindyYellowRampPosition(r, g, b) {
-            const hsv = rgbToHsvForDtnSource(r, g, b);
-            const max = Math.max(r, g, b);
-            const min = Math.min(r, g, b);
-            const avgRG = (r + g) / 2;
-            const yellowDominance = avgRG - b;
-            const rgDelta = Math.abs(r - g);
-            const rgMax = Math.max(r, g, 1);
-            const rgBalance = 1 - (rgDelta / rgMax);
-            const chroma = max - min;
-
-            // Ultra-sensitive yellow-only detection: any credible faint yellow tint is rain.
-            if (max < 6) return null;
-            if (r < b && g < b) return null;
-            if (g > r + 40 && g > b + 40) return null;
-            if (r > g + 95 && r > b + 40) return null;
-
-            const hsvYellow = hsv.h >= 28 && hsv.h <= 92 && hsv.s >= 0.025 && hsv.v >= 0.025 && yellowDominance >= 0.75 && rgBalance >= 0.22;
-            const ultraFaintYellow = avgRG >= 7 && yellowDominance >= 0.35 && r >= b && g >= b && rgDelta <= Math.max(42, avgRG * 0.72) && rgBalance >= 0.16;
-            const beigeYellowEdge = avgRG >= 12 && yellowDominance >= 0.15 && r >= b - 1 && g >= b - 1 && rgDelta <= Math.max(34, avgRG * 0.55) && chroma <= 70 && hsv.h >= 25 && hsv.h <= 105;
-            if (!hsvYellow && !ultraFaintYellow && !beigeYellowEdge) return null;
-
-            // Slightly nerfed upper response: red/purple remain reachable, but yellow/orange does not jump to red too quickly.
-            const hueCentre = 56;
-            const hueDistance = Math.abs(hsv.h - hueCentre);
-            const hueCloseness = Math.max(0, 1 - (hueDistance / 43));
-            const dominanceNorm = Math.max(0, Math.min(1, yellowDominance / 118));
-            const satNorm = Math.max(0, Math.min(1, hsv.s / 0.92));
-            const valueNorm = Math.max(0, Math.min(1, (hsv.v - 0.025) / 1.02));
-            const balanceNorm = Math.max(0, Math.min(1, (rgBalance - 0.16) / 0.84));
-
-            let raw = (hueCloseness * 0.135) + (dominanceNorm * 0.43) + (satNorm * 0.17) + (valueNorm * 0.14) + (balanceNorm * 0.125);
-            raw = Math.max(0, Math.min(1, raw));
-
-            let t = Math.pow(raw, 1.92) * 0.78;
-
-            if (raw < 0.31) {
-                t *= 0.59;
-            } else if (raw < 0.49) {
-                const f = (raw - 0.31) / 0.18;
-                const release = f * f * (3 - 2 * f);
-                t *= 0.59 + (0.41 * release);
-            }
-
-            // Nerfed boost compared with the red-heavy version.
-            if (raw > 0.50) {
-                const f = Math.max(0, Math.min(1, (raw - 0.50) / 0.50));
-                const boost = f * f * (3 - 2 * f);
-                t += 0.16 * boost;
-            }
-            if (raw > 0.66) {
-                const f = Math.max(0, Math.min(1, (raw - 0.66) / 0.34));
-                const boost = f * f * (3 - 2 * f);
-                t += 0.10 * boost;
-            }
-
-            if (beigeYellowEdge && !hsvYellow) t = Math.min(0.032, Math.max(0.005, t));
-            if (ultraFaintYellow && !hsvYellow) t = Math.min(0.055, Math.max(0.009, t));
-            if (hsvYellow && hsv.s < 0.12 && yellowDominance < 12) t = Math.min(0.085, Math.max(0.016, t));
-            if (yellowDominance < 20 && hsv.s < 0.17) t = Math.min(t, 0.135);
-            if (yellowDominance < 32 && hsv.s < 0.24) t = Math.min(t, 0.235);
-
-            t = Math.max(0.005, Math.min(1, t));
-            return t * t * (3 - 2 * t);
+        function getWindyRadarEncodedValue(r, g, b) {
+            // Current Windy Radar2 multichannel tiles are data textures, not final display colours.
+            // R and G encode the reflectivity field very closely; B is normally small and is ignored for intensity.
+            // A pure/near-pure blue pixel such as 0,0,255 is treated as no-data/mask.
+            if (b > 200 && r < 8 && g < 8) return null;
+            const encoded = (Math.max(0, r) + Math.max(0, g)) / 2;
+            return encoded > 0.5 ? encoded : null;
         }
-        function interpolateWindyTargetColour(t, targetLevels) {
-            if (!targetLevels.length) return [0, 0, 0, 0];
-            if (targetLevels.length === 1) return targetLevels[0].rgba;
-            const scaled = t * (targetLevels.length - 1);
-            const lo = Math.floor(scaled), hi = Math.ceil(scaled), f = scaled - lo;
-            const a = targetLevels[Math.max(0, Math.min(targetLevels.length - 1, lo))].rgba;
-            const b = targetLevels[Math.max(0, Math.min(targetLevels.length - 1, hi))].rgba;
-            return [Math.round(a[0] + (b[0] - a[0]) * f), Math.round(a[1] + (b[1] - a[1]) * f), Math.round(a[2] + (b[2] - a[2]) * f), Math.round(a[3] + (b[3] - a[3]) * f)];
+        function getWindyRadarMmhFromPixel(r, g, b) {
+            const encoded = getWindyRadarEncodedValue(r, g, b);
+            if (encoded === null) return null;
+            const mmh = windyRadarEncodedToMmh(encoded);
+            return mmh >= WINDY_RADAR_MIN_VISIBLE_MMH ? mmh : null;
+        }
+        function getRadarPaletteIndexForMmh(mmh, targetLevels) {
+            if (!targetLevels.length) return -1;
+            for (let i = 0; i < targetLevels.length; i++) {
+                if (mmh < Number(targetLevels[i].value)) return i;
+            }
+            return targetLevels.length - 1;
+        }
+        function colourForRadarMmh(mmh, targetLevels) {
+            const index = getRadarPaletteIndexForMmh(mmh, targetLevels);
+            return index < 0 ? null : targetLevels[index].rgba;
+        }
+        function radarRgbaCss(rgba, fallback = '#0b62d6') {
+            if (!rgba || rgba.length < 3) return fallback;
+            return `rgb(${clampRadarByte(rgba[0])}, ${clampRadarByte(rgba[1])}, ${clampRadarByte(rgba[2])})`;
+        }
+        function getRadarScaleLabelForMmh(mmh, targetLevels) {
+            if (!Number.isFinite(mmh) || mmh < WINDY_RADAR_MIN_VISIBLE_MMH) return 'No measurable rainfall';
+            const index = getRadarPaletteIndexForMmh(mmh, targetLevels);
+            if (index < 0) return 'No measurable rainfall';
+            return getUkRadarTemplateLabel(targetLevels[index], index, targetLevels.length);
         }
         function recolourWindyRadarImageDataYellowOnly(imageData) {
+            // Quantitative Windy Radar2 recolour. No HSV/yellow-ramp smoothing.
             const targetLevels = getUkRadarTargetLevels();
             const data = imageData.data;
             const cache = new Map();
@@ -7855,18 +8301,14 @@
                 const key = (data[i] << 16) | (data[i + 1] << 8) | data[i + 2];
                 let target = cache.get(key);
                 if (target === undefined) {
-                    const t = getWindyYellowRampPosition(data[i], data[i + 1], data[i + 2]);
-                    target = t === null ? false : interpolateWindyTargetColour(t, targetLevels);
+                    const mmh = getWindyRadarMmhFromPixel(data[i], data[i + 1], data[i + 2]);
+                    target = mmh === null ? false : colourForRadarMmh(mmh, targetLevels);
                     cache.set(key, target);
                 }
-                if (target === false) { data[i + 3] = 0; continue; }
+                if (target === false || !target) { data[i + 3] = 0; continue; }
                 data[i] = target[0];
                 data[i + 1] = target[1];
                 data[i + 2] = target[2];
-
-                // Sharpen pixel edges: Windy/WebP source tiles often have semi-transparent antialias pixels.
-                // At high map zoom those alpha edges look blurry, so snap detected rain pixels to the target alpha.
-                // Very faint edge pixels still survive detection, but render as crisp pixels instead of soft halos.
                 data[i + 3] = target[3];
             }
             return imageData;
@@ -7878,7 +8320,10 @@
 
                 // Use a HiDPI canvas and nearest-neighbour draw. This cannot invent new Windy detail
                 // above native z7, but it avoids soft browser interpolation on pixel edges.
-                const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
+                // Fractional DPR values such as 1.25/1.5 on Windows laptops can make canvases look soft.
+                // Round the backing store up to the next whole DPR so the browser has enough real pixels.
+                const rawDpr = window.devicePixelRatio || 1;
+                const dpr = Math.max(1, Math.min(Math.ceil(rawDpr), 3));
                 tile.width = Math.round(size.x * dpr);
                 tile.height = Math.round(size.y * dpr);
                 tile.style.width = `${size.x}px`;
@@ -7891,12 +8336,15 @@
                 ctx.webkitImageSmoothingEnabled = false;
                 ctx.mozImageSmoothingEnabled = false;
                 ctx.msImageSmoothingEnabled = false;
+                ctx.imageSmoothingQuality = 'low';
+                tile.setAttribute('data-windy-radar-dpr', String(dpr));
+                tile.setAttribute('data-windy-radar-css-size', `${size.x}x${size.y}`);
 
                 const originalZoom = coords.z;
                 const nativeZoom = Math.min(originalZoom, WINDY_RADAR_MAX_NATIVE_ZOOM);
                 const scale = Math.pow(2, originalZoom - nativeZoom);
                 const nativeCoords = { x: Math.floor(coords.x / scale), y: Math.floor(coords.y / scale), z: nativeZoom };
-                if (originalZoom > WINDY_RADAR_MAX_NATIVE_ZOOM) console.info(`Windy Radar: requested zoom ${originalZoom} is above native max ${WINDY_RADAR_MAX_NATIVE_ZOOM}; using ${nativeZoom}/${nativeCoords.x}/${nativeCoords.y} and crisp nearest-neighbour scaling/cropping it.`);
+                if (originalZoom > WINDY_RADAR_MAX_NATIVE_ZOOM) console.info(`W Radar: requested zoom ${originalZoom} is above native max ${WINDY_RADAR_MAX_NATIVE_ZOOM}; using ${nativeZoom}/${nativeCoords.x}/${nativeCoords.y} and crisp nearest-neighbour scaling/cropping it.`);
 
                 const drawImage = (img) => {
                     ctx.clearRect(0, 0, size.x, size.y);
@@ -7906,10 +8354,13 @@
                     ctx.msImageSmoothingEnabled = false;
 
                     if (nativeZoom < originalZoom) {
-                        const srcX = Math.round((coords.x - nativeCoords.x * scale) * (size.x / scale));
-                        const srcY = Math.round((coords.y - nativeCoords.y * scale) * (size.y / scale));
-                        const srcSize = Math.max(1, Math.round(size.x / scale));
-                        ctx.drawImage(img, srcX, srcY, srcSize, srcSize, 0, 0, size.x, size.y);
+                        const sourceW = img.naturalWidth || img.width || size.x;
+                        const sourceH = img.naturalHeight || img.height || size.y;
+                        const srcX = Math.round((coords.x - nativeCoords.x * scale) * (sourceW / scale));
+                        const srcY = Math.round((coords.y - nativeCoords.y * scale) * (sourceH / scale));
+                        const srcW = Math.max(1, Math.round(sourceW / scale));
+                        const srcH = Math.max(1, Math.round(sourceH / scale));
+                        ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, size.x, size.y);
                     } else {
                         ctx.drawImage(img, 0, 0, size.x, size.y);
                     }
@@ -7928,8 +8379,8 @@
                 const archiveFirst = archiveOnlyByAge || shouldUseWindyRadarArchiveFirst(normalUrl);
                 const archiveUrl = windyRadarArchiveUrl(normalUrl);
                 const firstUrl = archiveFirst ? archiveUrl : normalUrl;
-                if (archiveOnlyByAge) console.info(`Windy Radar: selected frame ${new Date(frameMs).toISOString()} is >= 2 hours older than real browser now ${new Date().toISOString()}, forcing archive endpoint first:`, archiveUrl);
-                else if (archiveFirst) console.info(`Windy Radar: selected frame ${new Date(frameMs).toISOString()} is at/before learned archive cutoff, using archive endpoint first:`, archiveUrl);
+                if (archiveOnlyByAge) console.info(`W Radar: selected frame ${new Date(frameMs).toISOString()} is >= 2 hours older than real browser now ${new Date().toISOString()}, forcing archive endpoint first:`, archiveUrl);
+                else if (archiveFirst) console.info(`W Radar: selected frame ${new Date(frameMs).toISOString()} is at/before learned archive cutoff, using archive endpoint first:`, archiveUrl);
 
                 const loadUrl = (url, isArchiveAttempt) => {
                     const img = new Image(); img.crossOrigin = 'anonymous';
@@ -7937,11 +8388,11 @@
                     img.onerror = () => {
                         if (!isArchiveAttempt) {
                             rememberWindyRadarArchiveCutoff(frameMs);
-                            console.info('Windy Radar: live tile failed; retrying archive tile:', archiveUrl);
+                            console.info('W Radar: live tile failed; retrying archive tile:', archiveUrl);
                             loadUrl(archiveUrl, true);
                         } else {
-                            console.warn('Windy Radar: archive tile failed:', url);
-                            done(new Error('Failed to load Windy radar archive tile'), tile);
+                            console.warn('W Radar: archive tile failed:', url);
+                            done(new Error('Failed to load W radar archive tile'), tile);
                         }
                     };
                     img.src = url;
@@ -7951,32 +8402,988 @@
             }
         });
         function createWindyRadarArchiveAwareTileLayer(url, options) {
-            return new WindyRadarArchiveAwareTileLayer(url, { ...options, crossOrigin: true, maxNativeZoom: WINDY_RADAR_MAX_NATIVE_ZOOM });
+            return new WindyRadarArchiveAwareTileLayer(url, {
+                ...options,
+                crossOrigin: true,
+                // Always request Windy's highest native radar tiles, even when the map is zoomed out.
+                minNativeZoom: WINDY_RADAR_MAX_NATIVE_ZOOM,
+                maxNativeZoom: WINDY_RADAR_MAX_NATIVE_ZOOM
+            });
         }
+        const windyRadarPointerTileCache = new Map();
+        const WINDY_RADAR_POINTER_CACHE_MAX = 80;
+        function pruneWindyRadarPointerTileCache() {
+            while (windyRadarPointerTileCache.size > WINDY_RADAR_POINTER_CACHE_MAX) {
+                const firstKey = windyRadarPointerTileCache.keys().next().value;
+                windyRadarPointerTileCache.delete(firstKey);
+            }
+        }
+        function getWindyRadarPointerFrameLabelFromUrl(url) {
+            const m = String(url || '').match(/radar2\/(?:archive\/)?composite\/(\d{4})\/(\d{2})\/(\d{2})\/(\d{4})\//);
+            if (!m) return 'Current plotted frame';
+            const [, yyyy, mm, dd, hhmm] = m;
+            return `${yyyy}-${mm}-${dd} ${hhmm.slice(0, 2)}:${hhmm.slice(2, 4)} UTC`;
+        }
+        function getWindyRadarPointerNativeZoom() {
+            const cap = Number(radarLayer?.options?.maxNativeZoom) ||
+                (typeof WINDY_RADAR_MAX_NATIVE_ZOOM === 'number' ? WINDY_RADAR_MAX_NATIVE_ZOOM : 7);
+            // Always sample Windy radar at the highest native tile zoom available.
+            return cap;
+        }
+        function getWindyAccumulationNativeZoom() {
+            return getWindyRadarPointerNativeZoom();
+        }
+        function getWindyRadarTileUrlForPointer(z, x, y) {
+            if (radarLayer && typeof radarLayer.getTileUrl === 'function') {
+                let url = radarLayer.getTileUrl({ z, x, y });
+                if (typeof normaliseWindyRadarLiveUrl === 'function') url = normaliseWindyRadarLiveUrl(url);
+                if (typeof isWindyRadarFrameArchiveOnly === 'function' && typeof windyRadarArchiveUrl === 'function' && isWindyRadarFrameArchiveOnly(url)) {
+                    url = windyRadarArchiveUrl(url);
+                }
+                return url;
+            }
+            return null;
+        }
+        function lonLatToWindyTilePixel(latlng, z) {
+            const lat = Math.max(-85.05112878, Math.min(85.05112878, latlng.lat));
+            const lon = ((latlng.lng + 180) % 360 + 360) % 360 - 180;
+            const n = 2 ** z;
+            const xFloat = ((lon + 180) / 360) * n;
+            const latRad = lat * Math.PI / 180;
+            const yFloat = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n;
+            const xTile = Math.floor(xFloat);
+            const yTile = Math.floor(yFloat);
+            const px = Math.max(0, Math.min(255, Math.floor((xFloat - xTile) * 256)));
+            const py = Math.max(0, Math.min(255, Math.floor((yFloat - yTile) * 256)));
+            return { xTile, yTile, px, py };
+        }
+        async function fetchWindyRadarPointerCanvas(url) {
+            const cached = windyRadarPointerTileCache.get(url);
+            if (cached) return cached;
+            let finalUrl = url;
+            let blob;
+            try {
+                const response = await fetch(finalUrl, { cache: 'force-cache' });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                blob = await response.blob();
+            } catch (firstError) {
+                if (typeof windyRadarArchiveUrl === 'function') {
+                    finalUrl = windyRadarArchiveUrl(url);
+                    const response = await fetch(finalUrl, { cache: 'force-cache' });
+                    if (!response.ok) throw firstError;
+                    blob = await response.blob();
+                } else {
+                    throw firstError;
+                }
+            }
+            const bitmap = await createImageBitmap(blob);
+            const canvas = document.createElement('canvas');
+            canvas.width = bitmap.width;
+            canvas.height = bitmap.height;
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            ctx.drawImage(bitmap, 0, 0);
+            const record = { canvas, ctx, url: finalUrl, width: bitmap.width, height: bitmap.height };
+            windyRadarPointerTileCache.set(url, record);
+            pruneWindyRadarPointerTileCache();
+            return record;
+        }
+        function formatWindyRadarPointerMmh(mmh) {
+            if (mmh === null || !Number.isFinite(mmh) || mmh < WINDY_RADAR_MIN_VISIBLE_MMH) return '0 mm/h';
+            if (mmh < 1) return `${mmh.toFixed(2)} mm/h`;
+            if (mmh < 10) return `${mmh.toFixed(1)} mm/h`;
+            return `${Math.round(mmh)} mm/h`;
+        }
+        function isWindyRadarPointerActive() {
+            const radarToggle = document.getElementById('radarToggle');
+            const radarSelect = document.getElementById('radarLayer');
+            return !!(radarToggle?.checked && radarSelect?.value === 'windy-radar' && radarLayer && map.hasLayer(radarLayer));
+        }
+        async function sampleWindyRadarRainfallAtLatLng(latlng) {
+            const z = getWindyRadarPointerNativeZoom();
+            const tile = lonLatToWindyTilePixel(latlng, z);
+            const url = getWindyRadarTileUrlForPointer(z, tile.xTile, tile.yTile);
+            if (!url) return null;
+            const source = await fetchWindyRadarPointerCanvas(url);
+            if (!source || !source.ctx) return null;
+            const d = source.ctx.getImageData(tile.px, tile.py, 1, 1).data;
+            const encoded = getWindyRadarEncodedValue(d[0], d[1], d[2]);
+            const frameLabel = getWindyRadarPointerFrameLabelFromUrl(source.url || url);
+            if (encoded === null) {
+                return { mmh: 0, dbz: 0, encoded: 0, rgba: [d[0], d[1], d[2], d[3]], tile, url: source.url, frameLabel, sourceZoom: z };
+            }
+            const dbz = windyRadarEncodedToDbz(encoded);
+            const mmh = windyDbzToMmh(dbz);
+            return { mmh, dbz, encoded, rgba: [d[0], d[1], d[2], d[3]], tile, url: source.url, frameLabel, sourceZoom: z };
+        }
+
+        function formatWindyAccumDateTimeLocal(date) { const p = n => String(n).padStart(2, '0'); return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}T${p(date.getHours())}:${p(date.getMinutes())}`; }
+        function setDefaultWindyAccumulationTimes(force = false) { const s = document.getElementById('windy-accum-start-time'), e = document.getElementById('windy-accum-end-time'); if (!s || !e) return; if (!force && s.value && e.value) return; const end = new Date(typeof getCurrentSliderTimestamp === 'function' ? getCurrentSliderTimestamp() : Date.now()); const start = new Date(end.getTime() - 60 * 60 * 1000); s.value = formatWindyAccumDateTimeLocal(start); e.value = formatWindyAccumDateTimeLocal(end); }
+        function getWindyAccumulationTimeRange() { const sv = document.getElementById('windy-accum-start-time')?.value, ev = document.getElementById('windy-accum-end-time')?.value; const start = sv ? new Date(sv) : null, end = ev ? new Date(ev) : null; if (!start || !end || !Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) throw new Error('Please enter a valid start and end time.'); if (end <= start) throw new Error('End time must be after Start time.'); return { start, end }; }
+        function setWindyAccumulationStatus(message, isError = false) { const el = document.getElementById('windy-radar-accumulation-status'); if (el) { el.style.color = isError ? '#d32f2f' : '#666'; el.innerHTML = message; } }
+        function setWindyAccumulationProgress(percent, text = '') { const wrap = document.getElementById('windy-accum-progress-wrap'), circle = document.getElementById('windy-accum-progress-circle'), pct = document.getElementById('windy-accum-progress-percent'), txt = document.getElementById('windy-accum-progress-text'); const p = Math.max(0, Math.min(100, Number(percent) || 0)); if (wrap) wrap.style.display = 'flex'; if (circle) circle.style.background = `conic-gradient(#2196F3 ${p}%, rgba(33,150,243,.18) ${p}%)`; if (pct) pct.textContent = `${Math.round(p)}%`; if (txt) txt.textContent = text || `Calculating accumulation map… ${Math.round(p)}%`; }
+        function hideWindyAccumulationProgress(delayMs = 1800) { const wrap = document.getElementById('windy-accum-progress-wrap'); if (!wrap) return; if (delayMs > 0) setTimeout(() => { wrap.style.display = 'none'; }, delayMs); else wrap.style.display = 'none'; }
+        function areWindyAccumulationInputsDifferentFromPending() {
+            if (!windyRadarAccumulationPending) return false;
+            const startInput = document.getElementById('windy-accum-start-time')?.value || '';
+            const endInput = document.getElementById('windy-accum-end-time')?.value || '';
+            const pendingStart = formatWindyAccumDateTimeLocal(windyRadarAccumulationPending.start);
+            const pendingEnd = formatWindyAccumDateTimeLocal(windyRadarAccumulationPending.end);
+            return startInput !== pendingStart || endInput !== pendingEnd;
+        }
+        function updateWindyAccumulationPlotButtons() {
+            const mainBtn = document.getElementById('windy-accum-main-action');
+            const contourGroup = document.getElementById('windy-accum-contour-group');
+            const contourBtn = document.getElementById('toggle-windy-accum-contours');
+            const plotted = isWindyAccumulationMapPlotted();
+            const timeframeDirty = areWindyAccumulationInputsDifferentFromPending();
+            if (mainBtn) {
+                if (windyRadarAccumulationCalculating) {
+                    mainBtn.disabled = true;
+                    mainBtn.textContent = 'Calculating..';
+                    mainBtn.title = 'Accumulation calculation is running';
+                } else {
+                    mainBtn.disabled = false;
+                    mainBtn.textContent = timeframeDirty ? 'Recalculate' : (plotted ? 'Hide Accumulation' : (windyRadarAccumulationPending ? 'Plot accumulation' : 'Calculate accumulation'));
+                    mainBtn.title = timeframeDirty
+                        ? 'The start/end time has changed. Recalculate the accumulation map for the new timeframe.'
+                        : (plotted
+                            ? 'Hide the plotted accumulation map and contour labels'
+                            : (windyRadarAccumulationPending ? 'Plot the calculated accumulation map' : 'Calculate a new accumulation map for the current view and time range'));
+                }
+            }
+            if (contourGroup) contourGroup.style.display = plotted && !timeframeDirty ? 'flex' : 'none';
+            if (contourBtn) {
+                contourBtn.disabled = !plotted || timeframeDirty || windyRadarAccumulationCalculating;
+                contourBtn.textContent = windyAccumulationContoursEnabled ? 'Hide contour' : 'Add contour';
+                contourBtn.title = windyAccumulationContoursEnabled ? 'Hide accumulation number contours' : 'Plot accumulation number contours';
+            }
+        }
+        function handleWindyAccumulationMainAction() {
+            if (windyRadarAccumulationCalculating) return;
+            if (areWindyAccumulationInputsDifferentFromPending()) {
+                if (isWindyAccumulationMapPlotted()) {
+                    unplotWindyRadarAccumulationMap();
+                } else {
+                    restoreCurrentRadarAfterWindyAccumulation();
+                }
+                calculateWindyRadarAccumulationMap();
+            } else if (isWindyAccumulationMapPlotted()) {
+                unplotWindyRadarAccumulationMap();
+            } else if (windyRadarAccumulationPending) {
+                plotWindyRadarAccumulationMap();
+            } else {
+                calculateWindyRadarAccumulationMap();
+            }
+        }
+        function initialiseWindyAccumulationTimeframeChangeWatcher() {
+            ['windy-accum-start-time', 'windy-accum-end-time'].forEach(id => {
+                const input = document.getElementById(id);
+                if (!input || input.dataset.windyAccumDirtyWatcher === '1') return;
+                input.dataset.windyAccumDirtyWatcher = '1';
+                const notifyChange = () => {
+                    if (areWindyAccumulationInputsDifferentFromPending()) {
+                        windyAccumulationContoursEnabled = false;
+                        clearWindyAccumulationContourLabels();
+                    }
+                    updateWindyAccumulationPlotButtons();
+                };
+                input.addEventListener('input', notifyChange);
+                input.addEventListener('change', notifyChange);
+            });
+        }
+        setTimeout(initialiseWindyAccumulationTimeframeChangeWatcher, 0);
+        function initialiseWindyAccumulationDensityWatcher() {
+            const slider = document.getElementById('density-slider');
+            if (!slider || slider.dataset.windyAccumDensityWatcher === '1') return;
+            slider.dataset.windyAccumDensityWatcher = '1';
+            slider.addEventListener('input', () => {
+                if (windyAccumulationContoursEnabled && isWindyAccumulationMapPlotted() && !areWindyAccumulationInputsDifferentFromPending()) {
+                    drawWindyAccumulationContourLabels();
+                }
+            });
+        }
+        setTimeout(initialiseWindyAccumulationDensityWatcher, 0);
+        let windyRadarAccumulationLayer = null, windyRadarAccumulationLegend = null, windyRadarAccumulationLegendWasAutoShown = false, windyRadarAccumulationLegendPreviousDisplay = null, windyRadarAccumulationLegendPreviousVisible = null, windyRadarAccumulationRunId = 0, windyRadarAccumulationPending = null, windyRadarAccumulationCalculating = false, windyRadarLayerHiddenForAccumulation = false, windyAccumulationContourLayer = null, windyAccumulationContoursEnabled = false;
+        const WINDY_ACCUMULATION_Z_INDEX = 152;
+        const WINDY_ACCUMULATION_COLOUR_STOPS = [[0.05, [0, 0, 0, 0]], [0.5, [170, 210, 255, 150]], [1, [90, 170, 255, 165]], [2, [40, 120, 255, 175]], [5, [0, 190, 120, 185]], [10, [120, 220, 0, 195]], [20, [255, 230, 0, 205]], [30, [255, 165, 0, 215]], [50, [255, 80, 35, 225]], [75, [220, 0, 0, 235]], [100, [175, 0, 160, 240]], [150, [105, 0, 210, 245]], [200, [255, 255, 255, 250]], [999999, [255, 0, 255, 255]]];
+        function colourForWindyAccumulationMm(mm) { for (const [limit, rgba] of WINDY_ACCUMULATION_COLOUR_STOPS) { if (mm < limit) return rgba; } return WINDY_ACCUMULATION_COLOUR_STOPS[WINDY_ACCUMULATION_COLOUR_STOPS.length - 1][1]; }
+        function ensureWindyAccumulationPane() { if (!map.getPane('windyAccumulationPane')) { map.createPane('windyAccumulationPane', map.getPane('overlayPane')); } const pane = map.getPane('windyAccumulationPane'); pane.style.zIndex = String(WINDY_ACCUMULATION_Z_INDEX); pane.style.pointerEvents = 'none'; pane.style.display = 'block'; }
+        function hideCurrentRadarForWindyAccumulation() { try { if (typeof radarLayer !== 'undefined' && radarLayer && map.hasLayer(radarLayer)) { map.removeLayer(radarLayer); windyRadarLayerHiddenForAccumulation = true; } } catch (e) { console.warn('Could not hide current radar for accumulation plot:', e); } }
+        function restoreCurrentRadarAfterWindyAccumulation() { try { const radarToggle = document.getElementById('radarToggle'), radarSelect = document.getElementById('radarLayer'); if (windyRadarLayerHiddenForAccumulation && radarLayer && radarToggle?.checked && radarSelect?.value === 'windy-radar' && !map.hasLayer(radarLayer)) { radarLayer.addTo(map); if (radarLayer.setZIndex) radarLayer.setZIndex(typeof RADAR_Z_INDEX === 'number' ? RADAR_Z_INDEX : 150); if (typeof updateLayerOpacities === 'function') updateLayerOpacities(); } windyRadarLayerHiddenForAccumulation = false; } catch (e) { console.warn('Could not restore radar after accumulation unplot:', e); } }
+        function removeWindyAccumulationLegend() {
+            if (windyRadarAccumulationLegend && windyRadarAccumulationLegend.parentNode) {
+                windyRadarAccumulationLegend.parentNode.removeChild(windyRadarAccumulationLegend);
+            }
+            windyRadarAccumulationLegend = null;
+            const legendEl = getMainWindyAccumulationLegendElement();
+            if (legendEl && windyRadarAccumulationLegendWasAutoShown) {
+                legendEl.style.display = windyRadarAccumulationLegendPreviousDisplay ?? 'none';
+                isLegendVisible = !!windyRadarAccumulationLegendPreviousVisible;
+            }
+            windyRadarAccumulationLegendWasAutoShown = false;
+            windyRadarAccumulationLegendPreviousDisplay = null;
+            windyRadarAccumulationLegendPreviousVisible = null;
+        }
+        function removeWindyAccumulationOverlayOnly(resetContours = false) { if (resetContours) windyAccumulationContoursEnabled = false; clearWindyAccumulationContourLabels(); if (windyRadarAccumulationLayer && map.hasLayer(windyRadarAccumulationLayer)) map.removeLayer(windyRadarAccumulationLayer); windyRadarAccumulationLayer = null; removeWindyAccumulationLegend(); updateWindyAccumulationPlotButtons(); }
+        function isWindyAccumulationMapPlotted() { return !!(windyRadarAccumulationLayer && map.hasLayer(windyRadarAccumulationLayer) && windyRadarAccumulationPending); }
+        function clearWindyAccumulationContourLabels() {
+            if (windyAccumulationContourLayer && map.hasLayer(windyAccumulationContourLayer)) map.removeLayer(windyAccumulationContourLayer);
+            windyAccumulationContourLayer = null;
+            updateWindyAccumulationPlotButtons();
+        }
+        function formatWindyAccumulationContourLabel(mm) {
+            if (!Number.isFinite(mm) || mm < 0.05) return '';
+            if (mm >= 100) return String(Math.round(mm));
+            if (mm >= 10) return String(Math.round(mm));
+            return mm.toFixed(1).replace(/\.0$/, '');
+        }
+        function drawWindyAccumulationContourLabels() {
+            clearWindyAccumulationContourLabels();
+            const p = windyRadarAccumulationPending;
+            if (!p || !p.bounds || !isWindyAccumulationMapPlotted()) return;
+            windyAccumulationContourLayer = L.layerGroup();
+            const densityInput = document.getElementById('density-slider');
+            const density = Math.max(1, Math.min(160, parseInt(densityInput?.value || '50', 10) || 50));
+            if (p.tiles && p.tiles.size) {
+                const bounds = map.getBounds().pad(0.05);
+                const cols = Math.max(6, Math.min(80, Math.round(density * 0.75)));
+                const rows = Math.max(4, Math.min(55, Math.round(cols * Math.max(0.35, map.getSize().y / Math.max(1, map.getSize().x)))));
+                const west = bounds.getWest(), east = bounds.getEast(), south = bounds.getSouth(), north = bounds.getNorth();
+                let maxSample = null;
+                for (let r = 0; r < rows; r++) {
+                    const lat = north - ((r + 0.5) / rows) * (north - south);
+                    for (let c = 0; c < cols; c++) {
+                        const lng = west + ((c + 0.5) / cols) * (east - west);
+                        const sample = sampleWindyAccumulationTotalAtLatLng(L.latLng(lat, lng));
+                        if (!sample) continue;
+                        if (!maxSample || sample.totalMm > maxSample.totalMm) maxSample = { ...sample, lat, lng };
+                        const label = formatWindyAccumulationContourLabel(sample.totalMm);
+                        if (!label) continue;
+                        const icon = L.divIcon({ html: `<b style="font-size:12px;color:white;-webkit-text-stroke:1px black;text-shadow:0 1px 2px rgba(0,0,0,.95);">${label}</b>`, className: '', iconSize: null, iconAnchor: [8, 8] });
+                        L.marker([lat, lng], { icon, interactive: false, keyboard: false }).addTo(windyAccumulationContourLayer);
+                    }
+                }
+                windyAccumulationContourLayer.addTo(map);
+                updateWindyAccumulationPlotButtons();
+                return;
+            }
+            if (!p.totals || !p.width || !p.height) return;
+            const cellStepX = Math.max(1, Math.round(p.width / density));
+            const cellStepY = Math.max(1, Math.round(p.height / density));
+            const nw = p.bounds.getNorthWest();
+            const se = p.bounds.getSouthEast();
+            const lngSpan = se.lng - nw.lng;
+            const latSpan = nw.lat - se.lat;
+            for (let y = Math.floor(cellStepY / 2); y < p.height; y += cellStepY) {
+                for (let x = Math.floor(cellStepX / 2); x < p.width; x += cellStepX) {
+                    const mm = p.totals[y * p.width + x] || 0;
+                    const label = formatWindyAccumulationContourLabel(mm);
+                    if (!label) continue;
+                    const lat = nw.lat - ((y + 0.5) / p.height) * latSpan;
+                    const lng = nw.lng + ((x + 0.5) / p.width) * lngSpan;
+                    const icon = L.divIcon({ html: `<b style="font-size:12px;color:white;-webkit-text-stroke:1px black;text-shadow:0 1px 2px rgba(0,0,0,.95);">${label}</b>`, className: '', iconSize: null, iconAnchor: [8, 8] });
+                    L.marker([lat, lng], { icon, interactive: false, keyboard: false }).addTo(windyAccumulationContourLayer);
+                }
+            }
+            windyAccumulationContourLayer.addTo(map);
+            updateWindyAccumulationPlotButtons();
+        }
+
+        function toggleWindyAccumulationContourLabels() {
+            if (!isWindyAccumulationMapPlotted()) {
+                setWindyAccumulationStatus('Plot the accumulation map first, then add contours.', true);
+                return;
+            }
+            windyAccumulationContoursEnabled = !windyAccumulationContoursEnabled;
+            if (windyAccumulationContoursEnabled) drawWindyAccumulationContourLabels();
+            else clearWindyAccumulationContourLabels();
+            setWindyAccumulationStatus(windyAccumulationContoursEnabled ? 'Accumulation number contours added.' : 'Accumulation number contours hidden.');
+            updateWindyAccumulationPlotButtons();
+        }
+        function unplotWindyRadarAccumulationMap() { windyAccumulationContoursEnabled = false; removeWindyAccumulationOverlayOnly(true); restoreCurrentRadarAfterWindyAccumulation(); setWindyAccumulationStatus(windyRadarAccumulationPending ? 'Accumulation map hidden. Current radar restored; click Plot accumulation to show it again.' : 'No calculated accumulation map is available to hide.'); updateWindyAccumulationPlotButtons(); }
+        function clearWindyRadarAccumulationMap() { windyRadarAccumulationRunId++; windyAccumulationContoursEnabled = false; removeWindyAccumulationOverlayOnly(true); restoreCurrentRadarAfterWindyAccumulation(); windyRadarAccumulationPending = null; setWindyAccumulationStatus('Accumulation map cleared.'); setWindyAccumulationProgress(0, 'Ready to generate a new accumulation map…'); hideWindyAccumulationProgress(400); updateWindyAccumulationPlotButtons(); }
+        function getMainWindyAccumulationLegendElement() {
+            const legends = Array.from(document.querySelectorAll('.legend'));
+            return legends.find(el => !el.classList.contains('windy-accumulation-legend')) || null;
+        }
+        function addWindyAccumulationLegend(start, end, validFrames, frameCount, missingFrames) {
+            removeWindyAccumulationLegend();
+            const legendEl = getMainWindyAccumulationLegendElement();
+            if (!legendEl) return;
+            windyRadarAccumulationLegendPreviousDisplay = legendEl.style.display || '';
+            windyRadarAccumulationLegendPreviousVisible = isLegendVisible;
+            if (legendEl.style.display === 'none' || getComputedStyle(legendEl).display === 'none') {
+                legendEl.style.display = 'block';
+                isLegendVisible = true;
+                windyRadarAccumulationLegendWasAutoShown = true;
+            }
+            const stops = [0.5, 1, 2, 5, 10, 20, 30, 50, 75, 100, 150, 200];
+            const section = document.createElement('div');
+            section.id = 'windy-accumulation-legend-section';
+            section.className = 'windy-accumulation-legend-section';
+            section.style.borderTop = '1px solid rgba(255,255,255,0.18)';
+            section.style.marginTop = '8px';
+            section.style.paddingTop = '8px';
+            section.innerHTML = `<h4 style="margin:0 0 6px;">Estimated rainfall accumulation</h4>` + stops.map(v => { const r = colourForWindyAccumulationMm(v + 0.001); return `<div class="legend-item"><span class="color-box" style="background:rgba(${r[0]},${r[1]},${r[2]},${r[3] / 255});"></span>${v} mm</div>`; }).join('') + `<div style="font-size:10px;margin-top:6px;color:#777;">${start.toLocaleString()} – ${end.toLocaleString()}<br>${validFrames}/${frameCount} frames sampled${missingFrames ? ` (${missingFrames} missing)` : ''}</div>`;
+            legendEl.appendChild(section);
+            windyRadarAccumulationLegend = section;
+        }
+        function plotWindyRadarAccumulationMap() {
+            if (!windyRadarAccumulationPending) {
+                setWindyAccumulationStatus('No calculated accumulation map yet. Click Calculate accumulation first.', true);
+                return;
+            }
+            hideCurrentRadarForWindyAccumulation();
+            ensureWindyAccumulationPane();
+            removeWindyAccumulationOverlayOnly();
+            const p = windyRadarAccumulationPending;
+            if (p.tiles && p.tiles.size && typeof createWindyAccumulationTileLayer === 'function') {
+                windyRadarAccumulationLayer = createWindyAccumulationTileLayer(p).addTo(map);
+            } else {
+                // Backwards-compatible fallback for older, single-image calculations.
+                windyRadarAccumulationLayer = L.imageOverlay(p.dataUrl, p.bounds, {
+                    pane: 'windyAccumulationPane', opacity: .72, interactive: false,
+                    zIndex: WINDY_ACCUMULATION_Z_INDEX, attribution: ''
+                }).addTo(map);
+            }
+            if (windyRadarAccumulationLayer.setZIndex) windyRadarAccumulationLayer.setZIndex(WINDY_ACCUMULATION_Z_INDEX);
+            if (windyRadarAccumulationLayer.bringToFront) windyRadarAccumulationLayer.bringToFront();
+            addWindyAccumulationLegend(p.start, p.end, p.validFrames, p.frameCount, p.missingFrames);
+            hideCurrentRadarForWindyAccumulation();
+            if (windyAccumulationContoursEnabled) drawWindyAccumulationContourLabels();
+            const tileText = p.tiles ? ` Native tiled overlay: ${p.tiles.size} Windy tile${p.tiles.size === 1 ? '' : 's'} at z${p.sourceZoom}.` : '';
+            setWindyAccumulationStatus(`Accumulation map plotted; current radar hidden until Hide Accumulation. Click the map for accumulated rainfall totals. ${p.validFrames}/${p.frameCount} frames sampled${p.missingFrames ? ` (${p.missingFrames} missing)` : ''}.${tileText}`);
+            updateWindyAccumulationPlotButtons();
+        }
+
+        
+        function windyAccumulationTransparentTileDataUrl() {
+            if (windyAccumulationTransparentTileDataUrl.cache) return windyAccumulationTransparentTileDataUrl.cache;
+            const c = document.createElement('canvas');
+            c.width = 256; c.height = 256;
+            windyAccumulationTransparentTileDataUrl.cache = c.toDataURL('image/png');
+            return windyAccumulationTransparentTileDataUrl.cache;
+        }
+        function createWindyAccumulationTileLayer(p) {
+            const sourceZoom = p.sourceZoom || getWindyAccumulationNativeZoom();
+            const AccumTileLayer = L.GridLayer.extend({
+                createTile: function (coords) {
+                    const img = L.DomUtil.create('img', 'windy-radar-crisp-tile');
+                    img.alt = '';
+                    img.width = this.getTileSize().x;
+                    img.height = this.getTileSize().y;
+                    img.style.width = img.width + 'px';
+                    img.style.height = img.height + 'px';
+                    const key = `${coords.z}:${coords.x}:${coords.y}`;
+                    const entry = p.tiles && p.tiles.get(key);
+                    img.src = entry && entry.dataUrl ? entry.dataUrl : windyAccumulationTransparentTileDataUrl();
+                    return img;
+                }
+            });
+            return new AccumTileLayer({
+                pane: 'windyAccumulationPane',
+                opacity: .72,
+                tileSize: 256,
+                minNativeZoom: sourceZoom,
+                maxNativeZoom: sourceZoom,
+                maxZoom: 18,
+                minZoom: 0,
+                bounds: p.bounds,
+                noWrap: true,
+                updateWhenIdle: false,
+                updateWhenZooming: false,
+                keepBuffer: 1,
+                className: 'windy-radar-crisp-tile',
+                attribution: ''
+            });
+        }
+        function getWindyAccumulationVisibleNativeTiles(z) {
+            const bounds = map.getBounds();
+            const nw = map.project(bounds.getNorthWest(), z);
+            const se = map.project(bounds.getSouthEast(), z);
+            const n = 2 ** z;
+            const minX = Math.max(0, Math.floor(Math.min(nw.x, se.x) / 256));
+            const maxX = Math.min(n - 1, Math.floor((Math.max(nw.x, se.x) - 1) / 256));
+            const minY = Math.max(0, Math.floor(Math.min(nw.y, se.y) / 256));
+            const maxY = Math.min(n - 1, Math.floor((Math.max(nw.y, se.y) - 1) / 256));
+            const tiles = [];
+            for (let y = minY; y <= maxY; y++) {
+                for (let x = minX; x <= maxX; x++) tiles.push({ z, x, y, key: `${z}:${x}:${y}` });
+            }
+            return tiles;
+        }
+        function getWindyAccumulationTileBounds(z, x, y) {
+            const nw = map.unproject(L.point(x * 256, y * 256), z);
+            const se = map.unproject(L.point((x + 1) * 256, (y + 1) * 256), z);
+            return L.latLngBounds(se, nw);
+        }
+        async function calculateWindyAccumulationTileSetOnMainThread(runId, tiles, frames, z) {
+            const encodedToMmhLut = getWindyEncodedToMmhHalfStepLut();
+            const tileResults = new Map();
+            for (const tile of tiles) {
+                tileResults.set(tile.key, {
+                    ...tile,
+                    totals: new Float32Array(256 * 256),
+                    bounds: getWindyAccumulationTileBounds(z, tile.x, tile.y)
+                });
+            }
+            let validFrames = 0, missingFrames = 0;
+            for (let fi = 0; fi < frames.length; fi++) {
+                if (runId !== windyRadarAccumulationRunId) return null;
+                const frame = frames[fi];
+                const mode = shouldUseWindyAccumulationArchive(frame.time) ? 'archive' : 'live';
+                const msg = `Calculating tiled rainfall map… frame ${fi + 1}/${frames.length} (${mode}), ${tiles.length} Windy tiles at z${z}, native 256×256 each`;
+                setWindyAccumulationStatus(msg);
+                maybeSetWindyAccumulationProgress(Math.floor((fi / frames.length) * 96), msg, fi === 0);
+                await new Promise(r => setTimeout(r, 0));
+                let frameHadData = false;
+                for (let ti = 0; ti < tiles.length; ti++) {
+                    if (runId !== windyRadarAccumulationRunId) return null;
+                    const tile = tiles[ti];
+                    let url = buildWindyRadarTileUrlForTime(frame.time, z, tile.x, tile.y);
+                    if (shouldUseWindyAccumulationArchive(frame.time) && typeof windyRadarArchiveUrl === 'function') url = windyRadarArchiveUrl(url);
+                    try {
+                        const source = await fetchWindyRadarAccumulationCanvas(url);
+                        if (!source || !source.ctx) continue;
+                        const data = source.ctx.getImageData(0, 0, source.width, source.height).data;
+                        const totals = tileResults.get(tile.key).totals;
+                        for (let py = 0; py < 256; py++) {
+                            const sy = Math.max(0, Math.min(source.height - 1, Math.floor(py * source.height / 256)));
+                            for (let px = 0; px < 256; px++) {
+                                const sx = Math.max(0, Math.min(source.width - 1, Math.floor(px * source.width / 256)));
+                                const off = (sy * source.width + sx) * 4;
+                                const enc = getWindyRadarEncodedValue(data[off], data[off + 1], data[off + 2]);
+                                if (enc !== null) {
+                                    const lutIndex = Math.max(0, Math.min(511, Math.round(enc * 2)));
+                                    totals[py * 256 + px] += encodedToMmhLut[lutIndex] * frame.durationHours;
+                                }
+                            }
+                        }
+                        frameHadData = true;
+                    } catch (e) {
+                        console.warn('Windy tiled accumulation tile failed:', frame.time.toISOString(), tile.key, e);
+                    }
+                }
+                if (frameHadData) validFrames++; else missingFrames++;
+            }
+            return { tiles: tileResults, validFrames, missingFrames };
+        }
+        function renderWindyAccumulationTileSet(tileResults) {
+            let maxTotal = 0;
+            for (const entry of tileResults.values()) {
+                entry.dataUrl = renderWindyAccumulationImageData(256, 256, entry.totals, null);
+                for (let i = 0; i < entry.totals.length; i++) if (entry.totals[i] > maxTotal) maxTotal = entry.totals[i];
+            }
+            return { tiles: tileResults, maxTotal };
+        }
+function getWindyAccumulationRenderScale() { const size = map.getSize(); return Math.max(1, Math.ceil(Math.max(size.x, size.y) / 900)); }
+        function buildWindyAccumulationFrames(start, end) { const step = 5 * 60 * 1000, first = getWindyRadarFrameTimeGlobal(start), frames = []; for (let t = first.getTime(); t < end.getTime(); t += step) { const fs = Math.max(t, start.getTime()), fe = Math.min(t + step, end.getTime()); if (fe > fs) frames.push({ time: new Date(t), durationHours: (fe - fs) / 3600000 }); } return frames; }
+        function precomputeWindyAccumulationPixels(width, height, scale, z) {
+            // Quality is unchanged: every output pixel is still sampled, but the mapping is compacted into typed arrays.
+            const tmp = new Map();
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const ll = map.containerPointToLatLng(L.point((x + 0.5) * scale, (y + 0.5) * scale));
+                    const tile = lonLatToWindyTilePixel(ll, z);
+                    const key = `${tile.xTile}:${tile.yTile}`;
+                    let g = tmp.get(key);
+                    if (!g) {
+                        g = { xTile: tile.xTile, yTile: tile.yTile, idx: [], px: [], py: [] };
+                        tmp.set(key, g);
+                    }
+                    g.idx.push(y * width + x);
+                    g.px.push(tile.px);
+                    g.py.push(tile.py);
+                }
+            }
+            const groups = [];
+            for (const [key, g] of tmp) {
+                groups.push({
+                    key,
+                    xTile: g.xTile,
+                    yTile: g.yTile,
+                    idx: new Uint32Array(g.idx),
+                    px: new Uint16Array(g.px),
+                    py: new Uint16Array(g.py)
+                });
+            }
+            return groups;
+        }
+        function shouldUseWindyAccumulationArchive(frameTime) { return Date.now() - getWindyRadarFrameTimeGlobal(frameTime).getTime() > 2 * 60 * 60 * 1000; }
+        async function fetchWindyRadarAccumulationCanvas(url) {
+            const cached = windyRadarPointerTileCache.get(url);
+            if (cached) return cached;
+            let finalUrl = url;
+            let response;
+            try {
+                response = await fetch(finalUrl, { cache: 'force-cache' });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            } catch (firstError) {
+                if (typeof windyRadarArchiveUrl === 'function' && !String(url).includes('/radar2/archive/composite/')) {
+                    finalUrl = windyRadarArchiveUrl(url);
+                    response = await fetch(finalUrl, { cache: 'force-cache' });
+                    if (!response.ok) throw firstError;
+                } else {
+                    throw firstError;
+                }
+            }
+            const blob = await response.blob();
+            const bitmap = await createImageBitmap(blob);
+            const canvas = document.createElement('canvas');
+            canvas.width = bitmap.width;
+            canvas.height = bitmap.height;
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            ctx.drawImage(bitmap, 0, 0);
+            if (bitmap.close) bitmap.close();
+            const record = { canvas, ctx, url: finalUrl, width: canvas.width, height: canvas.height };
+            windyRadarPointerTileCache.set(url, record);
+            windyRadarPointerTileCache.set(finalUrl, record);
+            pruneWindyRadarPointerTileCache();
+            return record;
+        }
+        function formatWindyAccumulationTotalMm(mm) { if (!Number.isFinite(mm) || mm < 0.005) return '0.00 mm'; if (mm < 10) return `${mm.toFixed(2)} mm`; if (mm < 100) return `${mm.toFixed(1)} mm`; return `${Math.round(mm)} mm`; }
+        function sampleWindyAccumulationTotalAtLatLng(latlng) {
+            const p = windyRadarAccumulationPending;
+            if (!p || !p.bounds || !p.bounds.contains(latlng)) return null;
+            if (p.tiles && p.tiles.size) {
+                const z = p.sourceZoom || getWindyAccumulationNativeZoom();
+                const tile = lonLatToWindyTilePixel(latlng, z);
+                const key = `${z}:${tile.xTile}:${tile.yTile}`;
+                const entry = p.tiles.get(key);
+                if (!entry || !entry.totals) return null;
+                const x = Math.max(0, Math.min(255, tile.px));
+                const y = Math.max(0, Math.min(255, tile.py));
+                const total = entry.totals[y * 256 + x] || 0;
+                return { totalMm: total, x, y, tileKey: key, start: p.start, end: p.end, validFrames: p.validFrames, frameCount: p.frameCount, missingFrames: p.missingFrames };
+            }
+            if (!p.totals || !p.width || !p.height) return null;
+            const pt = map.latLngToLayerPoint(latlng), nw = map.latLngToLayerPoint(p.bounds.getNorthWest()), se = map.latLngToLayerPoint(p.bounds.getSouthEast());
+            const xRatio = (pt.x - nw.x) / (se.x - nw.x), yRatio = (pt.y - nw.y) / (se.y - nw.y);
+            const x = Math.max(0, Math.min(p.width - 1, Math.floor(xRatio * p.width))), y = Math.max(0, Math.min(p.height - 1, Math.floor(yRatio * p.height)));
+            const total = p.totals[y * p.width + x] || 0;
+            return { totalMm: total, x, y, start: p.start, end: p.end, validFrames: p.validFrames, frameCount: p.frameCount, missingFrames: p.missingFrames };
+        }
+
+        function showWindyAccumulationRainfallPopup(latlng, sample) { if (!sample) { L.popup({ className: 'windy-radar-pointer-popup', closeButton: true, autoPan: true }).setLatLng(latlng).setContent('<div style="font-family:Inter,Arial,sans-serif;font-size:12px;"><strong>Accumulated rainfall</strong><br>No calculated accumulation value at this location.</div>').openOn(map); return; } const totalText = formatWindyAccumulationTotalMm(sample.totalMm); const rgba = colourForWindyAccumulationMm(sample.totalMm); const colour = `rgba(${rgba[0]},${rgba[1]},${rgba[2]},${Math.max(.35, rgba[3] / 255)})`; const html = `<div style="min-width:240px;font-family:Inter,Arial,sans-serif;line-height:1.35;"><div style="font-weight:800;font-size:13px;margin-bottom:6px;color:#1a2a44;">Accumulated rainfall total</div><div style="font-size:24px;font-weight:800;color:${colour};margin-bottom:4px;text-shadow:0 1px 1px rgba(0,0,0,.18);">${totalText}</div><div style="font-size:11px;color:#555;">${sample.start.toLocaleString()} – ${sample.end.toLocaleString()}</div><div style="font-size:10px;color:#777;margin-top:5px;">${sample.validFrames}/${sample.frameCount} frames sampled${sample.missingFrames ? ` (${sample.missingFrames} missing)` : ''}</div><div style="font-size:10px;color:#999;margin-top:4px;">Estimated from radar frames in 5 minutes interval.</div></div>`; L.popup({ className: 'windy-radar-pointer-popup', closeButton: true, autoPan: true }).setLatLng(latlng).setContent(html).openOn(map); }
+        
+
+        // Half-step lookup table for Windy encoded radar value -> mm/h.
+        // Encoded values are (R+G)/2, so possible values are 0, 0.5, 1.0 ... 255.
+        // This preserves the existing calibration while removing Math.pow() from hot pixel loops.
+        let WINDY_ENCODED_TO_MMH_HALF_STEP_LUT = null;
+        function getWindyEncodedToMmhHalfStepLut() {
+            if (WINDY_ENCODED_TO_MMH_HALF_STEP_LUT) return WINDY_ENCODED_TO_MMH_HALF_STEP_LUT;
+            const lut = new Float32Array(512);
+            for (let i = 0; i < lut.length; i++) lut[i] = windyRadarEncodedToMmh(i / 2);
+            WINDY_ENCODED_TO_MMH_HALF_STEP_LUT = lut;
+            return lut;
+        }
+
+        // ==================== ULTRA-FAST WINDY RAINFALL ACCUMULATION ENGINE ====================
+        // Keeps the same viewport, zoom/native radar tile zoom, and output grid quality.
+        // Speed-ups: Web Worker + OffscreenCanvas when available, typed arrays, decoded mm/h tile cache,
+        // encoded->mm/h LUT, controlled tile concurrency, worker fallback, and throttled progress UI.
+        let windyAccumulationWorker = null;
+        let windyAccumulationLastProgressUiUpdate = 0;
+        const WINDY_ACCUMULATION_DECODED_TILE_CACHE_MAX = 160;
+
+        function maybeSetWindyAccumulationProgress(percent, text = '', force = false) {
+            const now = performance.now();
+            if (!force && percent < 100 && now - windyAccumulationLastProgressUiUpdate < 100) return;
+            windyAccumulationLastProgressUiUpdate = now;
+            setWindyAccumulationProgress(percent, text);
+        }
+        function canUseWindyAccumulationWorker() {
+            return typeof Worker !== 'undefined' && typeof Blob !== 'undefined' && typeof URL !== 'undefined' &&
+                typeof OffscreenCanvas !== 'undefined' && typeof createImageBitmap !== 'undefined';
+        }
+        function getWindyAccumulationConcurrency() {
+            const cores = Number(navigator.hardwareConcurrency) || 4;
+            if (cores >= 8) return 8;
+            if (cores >= 4) return 5;
+            return 3;
+        }
+        function getWindyAccumulationWorker() {
+            if (windyAccumulationWorker) return windyAccumulationWorker;
+            const workerSource = `
+                let currentJobId = 0;
+                const decodedTileCache = new Map();
+                const DECODED_CACHE_MAX = ${WINDY_ACCUMULATION_DECODED_TILE_CACHE_MAX};
+                function pruneDecodedTileCache() {
+                    while (decodedTileCache.size > DECODED_CACHE_MAX) {
+                        const firstKey = decodedTileCache.keys().next().value;
+                        decodedTileCache.delete(firstKey);
+                    }
+                }
+                function archiveUrl(url) { return String(url).replace('/radar2/composite/', '/radar2/archive/composite/'); }
+                function getEncoded(r, g, b) {
+                    if (b > 200 && r < 8 && g < 8) return null;
+                    const encoded = (Math.max(0, r) + Math.max(0, g)) / 2;
+                    return encoded > 0.5 ? encoded : null;
+                }
+                function colourForMm(mm, colourStops) {
+                    for (let i = 0; i < colourStops.length; i++) if (mm < colourStops[i][0]) return colourStops[i][1];
+                    return colourStops[colourStops.length - 1][1];
+                }
+                async function fetchDecodedTile(url, constants) {
+                    const cached = decodedTileCache.get(url);
+                    if (cached) return cached;
+                    let finalUrl = url;
+                    let response;
+                    try {
+                        response = await fetch(finalUrl, { cache: 'force-cache' });
+                        if (!response.ok) throw new Error('HTTP ' + response.status);
+                    } catch (firstError) {
+                        if (!String(url).includes('/radar2/archive/composite/')) {
+                            finalUrl = archiveUrl(url);
+                            response = await fetch(finalUrl, { cache: 'force-cache' });
+                            if (!response.ok) throw firstError;
+                        } else throw firstError;
+                    }
+                    const blob = await response.blob();
+                    const bitmap = await createImageBitmap(blob);
+                    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                    ctx.drawImage(bitmap, 0, 0);
+                    if (bitmap.close) bitmap.close();
+                    const rgba = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+                    const mmh = new Float32Array(canvas.width * canvas.height);
+                    const valid = new Uint8Array(canvas.width * canvas.height);
+                    for (let i = 0, p = 0; i < rgba.length; i += 4, p++) {
+                        const enc = getEncoded(rgba[i], rgba[i + 1], rgba[i + 2]);
+                        if (enc !== null) {
+                            valid[p] = 1;
+                            const lutIndex = Math.max(0, Math.min(511, Math.round(enc * 2)));
+                            mmh[p] = constants.encodedToMmhLut[lutIndex] || 0;
+                        }
+                    }
+                    const record = { mmh, valid, width: canvas.width, height: canvas.height, url: finalUrl };
+                    decodedTileCache.set(url, record);
+                    decodedTileCache.set(finalUrl, record);
+                    pruneDecodedTileCache();
+                    return record;
+                }
+                async function runWithConcurrency(items, limit, fn) {
+                    let cursor = 0;
+                    let hadData = false;
+                    async function runner() {
+                        while (cursor < items.length) {
+                            const i = cursor++;
+                            if (await fn(items[i], i)) hadData = true;
+                        }
+                    }
+                    const runners = [];
+                    for (let i = 0; i < Math.max(1, Math.min(limit, items.length)); i++) runners.push(runner());
+                    await Promise.all(runners);
+                    return hadData;
+                }
+                self.onmessage = async (event) => {
+                    const msg = event.data || {};
+                    if (msg.type === 'cancel') { currentJobId = msg.jobId; return; }
+                    if (msg.type !== 'calculate') return;
+                    const jobId = msg.jobId;
+                    currentJobId = jobId;
+                    const { width, height, frames, groups, colourStops, constants, concurrency } = msg;
+                    const totals = new Float32Array(width * height);
+                    let validFrames = 0, missingFrames = 0;
+                    try {
+                        for (let fi = 0; fi < frames.length; fi++) {
+                            if (jobId !== currentJobId) return;
+                            const frame = frames[fi];
+                            const frameHadData = await runWithConcurrency(groups, concurrency || 4, async (group) => {
+                                if (jobId !== currentJobId) return false;
+                                const url = frame.urls[group.key];
+                                if (!url) return false;
+                                try {
+                                    const source = await fetchDecodedTile(url, constants);
+                                    const idx = group.idx, px = group.px, py = group.py;
+                                    for (let i = 0; i < idx.length; i++) {
+                                        const sx = Math.max(0, Math.min(source.width - 1, Math.floor(px[i] * source.width / 256)));
+                                        const sy = Math.max(0, Math.min(source.height - 1, Math.floor(py[i] * source.height / 256)));
+                                        const off = sy * source.width + sx;
+                                        if (source.valid[off]) totals[idx[i]] += source.mmh[off] * frame.durationHours;
+                                    }
+                                    return true;
+                                } catch (e) { return false; }
+                            });
+                            if (frameHadData) validFrames++; else missingFrames++;
+                            if (fi === 0 || fi === frames.length - 1 || fi % 2 === 0) {
+                                self.postMessage({ type: 'progress', jobId, percent: Math.floor(((fi + 1) / frames.length) * 96), text: 'Calculating rainfall map… frame ' + (fi + 1) + '/' + frames.length + ', tiles ' + groups.length + ', output ' + width + '×' + height });
+                            }
+                        }
+                        if (jobId !== currentJobId) return;
+                        self.postMessage({ type: 'progress', jobId, percent: 97, text: 'Colouring accumulated rainfall grid…' });
+                        const out = new Uint8ClampedArray(width * height * 4);
+                        for (let i = 0; i < totals.length; i++) {
+                            const rgba = colourForMm(totals[i], colourStops), o = i * 4;
+                            out[o] = rgba[0]; out[o + 1] = rgba[1]; out[o + 2] = rgba[2]; out[o + 3] = rgba[3];
+                        }
+                        self.postMessage({ type: 'done', jobId, width, height, totalsBuffer: totals.buffer, rgbaBuffer: out.buffer, validFrames, missingFrames }, [totals.buffer, out.buffer]);
+                    } catch (error) {
+                        self.postMessage({ type: 'error', jobId, message: error && error.message ? error.message : 'Worker accumulation failed.' });
+                    }
+                };
+            `;
+            const blob = new Blob([workerSource], { type: 'application/javascript' });
+            windyAccumulationWorker = new Worker(URL.createObjectURL(blob));
+            return windyAccumulationWorker;
+        }
+        function buildWindyAccumulationWorkerFrames(frames, groups, z) {
+            return frames.map(frame => {
+                const urls = {};
+                for (const g of groups) {
+                    let url = buildWindyRadarTileUrlForTime(frame.time, z, g.xTile, g.yTile);
+                    if (shouldUseWindyAccumulationArchive(frame.time) && typeof windyRadarArchiveUrl === 'function') url = windyRadarArchiveUrl(url);
+                    urls[g.key] = url;
+                }
+                return { timeMs: frame.time.getTime(), durationHours: frame.durationHours, urls };
+            });
+        }
+        function cloneWindyAccumulationGroupsForWorker(groups) {
+            // Clone before transfer so fallback remains usable if the worker fails.
+            return groups.map(g => ({ key: g.key, xTile: g.xTile, yTile: g.yTile, idx: new Uint32Array(g.idx), px: new Uint16Array(g.px), py: new Uint16Array(g.py) }));
+        }
+        async function calculateWindyAccumulationInWorker(runId, width, height, frames, groups, z) {
+            const worker = getWindyAccumulationWorker();
+            const workerGroups = cloneWindyAccumulationGroupsForWorker(groups);
+            const workerFrames = buildWindyAccumulationWorkerFrames(frames, groups, z);
+            const transfer = [];
+            for (const g of workerGroups) transfer.push(g.idx.buffer, g.px.buffer, g.py.buffer);
+            return await new Promise((resolve, reject) => {
+                const onMessage = (event) => {
+                    const data = event.data || {};
+                    if (data.jobId !== runId) return;
+                    if (data.type === 'progress') {
+                        maybeSetWindyAccumulationProgress(data.percent, data.text);
+                        setWindyAccumulationStatus(data.text);
+                    } else if (data.type === 'done') {
+                        worker.removeEventListener('message', onMessage); worker.removeEventListener('error', onError);
+                        resolve({ totals: new Float32Array(data.totalsBuffer), rgba: new Uint8ClampedArray(data.rgbaBuffer), validFrames: data.validFrames, missingFrames: data.missingFrames });
+                    } else if (data.type === 'error') {
+                        worker.removeEventListener('message', onMessage); worker.removeEventListener('error', onError);
+                        reject(new Error(data.message || 'Worker accumulation failed.'));
+                    }
+                };
+                const onError = (error) => { worker.removeEventListener('message', onMessage); worker.removeEventListener('error', onError); reject(error instanceof Error ? error : new Error('Worker accumulation failed.')); };
+                worker.addEventListener('message', onMessage);
+                worker.addEventListener('error', onError);
+                worker.postMessage({
+                    type: 'calculate', jobId: runId, width, height, frames: workerFrames, groups: workerGroups,
+                    colourStops: WINDY_ACCUMULATION_COLOUR_STOPS,
+                    constants: { dbzPerEncodedUnit: WINDY_RADAR_DBZ_PER_ENCODED_UNIT, mmhNerf: WINDY_RADAR_MMH_NERF, encodedToMmhLut: Array.from(getWindyEncodedToMmhHalfStepLut()) },
+                    concurrency: getWindyAccumulationConcurrency()
+                }, transfer);
+            });
+        }
+        async function calculateWindyAccumulationOnMainThread(runId, width, height, frames, groups, z) {
+            const totals = new Float32Array(width * height);
+            const encodedToMmhLut = getWindyEncodedToMmhHalfStepLut();
+            let validFrames = 0, missingFrames = 0;
+            for (let fi = 0; fi < frames.length; fi++) {
+                if (runId !== windyRadarAccumulationRunId) return null;
+                const frame = frames[fi];
+                if (fi === 0 || fi === frames.length - 1 || fi % 2 === 0) {
+                    const mode = shouldUseWindyAccumulationArchive(frame.time) ? 'archive' : 'live';
+                    const msg = `Calculating rainfall map… frame ${fi + 1}/${frames.length} (${mode}), tiles ${groups.length}, output ${width}×${height}`;
+                    setWindyAccumulationStatus(msg); maybeSetWindyAccumulationProgress(Math.floor((fi / frames.length) * 96), msg); await new Promise(r => setTimeout(r, 0));
+                }
+                let frameHadData = false;
+                for (const group of groups) {
+                    let url = buildWindyRadarTileUrlForTime(frame.time, z, group.xTile, group.yTile);
+                    if (shouldUseWindyAccumulationArchive(frame.time) && typeof windyRadarArchiveUrl === 'function') url = windyRadarArchiveUrl(url);
+                    try {
+                        const source = await fetchWindyRadarAccumulationCanvas(url);
+                        if (!source || !source.ctx) continue;
+                        const data = source.ctx.getImageData(0, 0, source.width, source.height).data;
+                        for (let i = 0; i < group.idx.length; i++) {
+                            const sx = Math.max(0, Math.min(source.width - 1, Math.floor(group.px[i] * source.width / 256)));
+                            const sy = Math.max(0, Math.min(source.height - 1, Math.floor(group.py[i] * source.height / 256)));
+                            const off = (sy * source.width + sx) * 4;
+                            const enc = getWindyRadarEncodedValue(data[off], data[off + 1], data[off + 2]);
+                            if (enc !== null) {
+                                const lutIndex = Math.max(0, Math.min(511, Math.round(enc * 2)));
+                                totals[group.idx[i]] += encodedToMmhLut[lutIndex] * frame.durationHours;
+                            }
+                        }
+                        frameHadData = true;
+                    } catch (e) { console.warn('Windy accumulation tile failed:', frame.time.toISOString(), group.key, e); }
+                }
+                if (frameHadData) validFrames++; else missingFrames++;
+            }
+            return { totals, validFrames, missingFrames };
+        }
+        function renderWindyAccumulationImageData(width, height, totals, rgbaFromWorker = null) {
+            const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
+            const ctx = canvas.getContext('2d'); const out = ctx.createImageData(width, height);
+            if (rgbaFromWorker) out.data.set(rgbaFromWorker);
+            else {
+                for (let i = 0; i < totals.length; i++) {
+                    const rgba = colourForWindyAccumulationMm(totals[i]), o = i * 4;
+                    out.data[o] = rgba[0]; out.data[o + 1] = rgba[1]; out.data[o + 2] = rgba[2]; out.data[o + 3] = rgba[3];
+                }
+            }
+            ctx.putImageData(out, 0, 0);
+            return canvas.toDataURL('image/png');
+        }
+async function calculateWindyRadarAccumulationMap() {
+            if (isWindyAccumulationMapPlotted()) {
+                windyAccumulationContoursEnabled = false;
+                removeWindyAccumulationOverlayOnly(true);
+                restoreCurrentRadarAfterWindyAccumulation();
+            } else restoreCurrentRadarAfterWindyAccumulation();
+
+            if (!isWindyRadarPointerActive()) {
+                setWindyAccumulationStatus('Radar must be toggled on and selected before the accumulation map can be generated.', true);
+                return;
+            }
+            windyRadarAccumulationCalculating = true;
+            updateWindyAccumulationPlotButtons();
+            const runId = ++windyRadarAccumulationRunId;
+            try {
+                windyAccumulationContoursEnabled = false;
+                removeWindyAccumulationOverlayOnly();
+                restoreCurrentRadarAfterWindyAccumulation();
+                windyRadarAccumulationPending = null;
+                updateWindyAccumulationPlotButtons();
+                setDefaultWindyAccumulationTimes(false);
+
+                const { start, end } = getWindyAccumulationTimeRange();
+                const frames = buildWindyAccumulationFrames(start, end);
+                if (!frames.length) throw new Error('No 5-minute Windy Radar frames found inside that range.');
+
+                const z = getWindyAccumulationNativeZoom();
+                const bounds = map.getBounds();
+                const nativeTiles = getWindyAccumulationVisibleNativeTiles(z);
+                if (!nativeTiles.length) throw new Error('No Windy radar tiles are visible in the current viewport.');
+
+                const prepMsg = `Preparing native tiled accumulation: ${nativeTiles.length} Windy tile${nativeTiles.length === 1 ? '' : 's'} at z${z}, ${frames.length} frames, 256×256 pixels per tile…`;
+                setWindyAccumulationStatus(prepMsg);
+                maybeSetWindyAccumulationProgress(0, prepMsg, true);
+                await new Promise(r => setTimeout(r, 0));
+
+                const result = await calculateWindyAccumulationTileSetOnMainThread(runId, nativeTiles, frames, z);
+                if (runId !== windyRadarAccumulationRunId || !result) {
+                    windyRadarAccumulationCalculating = false;
+                    updateWindyAccumulationPlotButtons();
+                    return;
+                }
+
+                maybeSetWindyAccumulationProgress(98, 'Rendering native tiled accumulated rainfall images…', true);
+                await new Promise(r => setTimeout(r, 0));
+                const rendered = renderWindyAccumulationTileSet(result.tiles);
+
+                windyRadarAccumulationPending = {
+                    tiles: rendered.tiles,
+                    tileCount: rendered.tiles.size,
+                    maxTotal: rendered.maxTotal,
+                    width: 256,
+                    height: 256,
+                    bounds,
+                    start,
+                    end,
+                    validFrames: result.validFrames,
+                    frameCount: frames.length,
+                    missingFrames: result.missingFrames,
+                    createdAt: new Date(),
+                    renderScale: 1,
+                    sourceZoom: z,
+                    tiled: true
+                };
+                maybeSetWindyAccumulationProgress(100, 'Tiled accumulation calculation complete. Plotting map…', true);
+                plotWindyRadarAccumulationMap();
+                setWindyAccumulationStatus(`Tiled accumulation ready: ${result.validFrames}/${frames.length} frames sampled${result.missingFrames ? ` (${result.missingFrames} missing)` : ''}; ${nativeTiles.length} Windy tile${nativeTiles.length === 1 ? '' : 's'} rendered at native 256×256 resolution.`);
+                windyRadarAccumulationCalculating = false;
+                updateWindyAccumulationPlotButtons();
+                hideWindyAccumulationProgress(3500);
+            } catch (error) {
+                console.warn('Windy Radar accumulation map failed:', error);
+                if (windyAccumulationWorker) {
+                    try { windyAccumulationWorker.postMessage({ type: 'cancel', jobId: ++windyRadarAccumulationRunId }); } catch (e) { }
+                }
+                setWindyAccumulationStatus(error.message || 'Accumulation map generation failed.', true);
+                setWindyAccumulationProgress(0, 'Calculation stopped.');
+                hideWindyAccumulationProgress(2500);
+                windyRadarAccumulationCalculating = false;
+                updateWindyAccumulationPlotButtons();
+            }
+        }
+
+        function showWindyRadarRainfallPopup(latlng, sample) {
+            const targetLevels = getUkRadarTargetLevels();
+            const mmh = sample?.mmh ?? 0;
+            const mmhText = formatWindyRadarPointerMmh(mmh);
+            const paletteRgba = colourForRadarMmh(mmh, targetLevels);
+            const amountCss = radarRgbaCss(paletteRgba, '#0b62d6');
+            const scaleLabel = getRadarScaleLabelForMmh(mmh, targetLevels);
+            const dbzText = sample && sample.dbz > 0 ? `${sample.dbz.toFixed(1)} dBZ` : 'No echo';
+            const frameText = sample?.frameLabel || 'Current plotted frame';
+            const rgbaText = sample?.rgba ? sample.rgba.slice(0, 3).join(', ') : '-';
+            const zoomText = sample?.sourceZoom !== undefined ? `z${sample.sourceZoom}` : 'native z';
+            const html = `
+                <div style="min-width:220px; font-family:Inter,Arial,sans-serif; line-height:1.35;">
+                    <div style="font-weight:800; font-size:13px; margin-bottom:6px; color:#1a2a44;">Estimated Rainfall Amount</div>
+                    <div style="font-size:22px; font-weight:800; color:${amountCss}; margin-bottom:2px; text-shadow:0 1px 1px rgba(0,0,0,0.18);">${mmhText}</div>
+                    <div style="font-size:11px; color:#555; margin-bottom:6px;">${dbzText}</div>
+                    <div style="font-size:10px; color:#777;">Frame: ${frameText}</div>
+                    
+                </div>`;
+            L.popup({ className: 'windy-radar-pointer-popup', closeButton: true, autoPan: true })
+                .setLatLng(latlng)
+                .setContent(html)
+                .openOn(map);
+        }
+        async function handleWindyRadarMapClick(e) {
+            if (!isWindyRadarPointerActive() && !(typeof isWindyAccumulationMapPlotted === 'function' && isWindyAccumulationMapPlotted())) return;
+            if (isDrawingEnabled) return;
+            if (typeof isWindyAccumulationMapPlotted === 'function' && isWindyAccumulationMapPlotted()) {
+                showWindyAccumulationRainfallPopup(e.latlng, sampleWindyAccumulationTotalAtLatLng(e.latlng));
+                return;
+            }
+            try {
+                const sample = await sampleWindyRadarRainfallAtLatLng(e.latlng);
+                showWindyRadarRainfallPopup(e.latlng, sample);
+            } catch (error) {
+                console.warn('Failed to sample radar rainfall at clicked location:', error);
+                L.popup({ className: 'windy-radar-pointer-popup', closeButton: true, autoPan: true })
+                    .setLatLng(e.latlng)
+                    .setContent('<div style="font-family:Inter,Arial,sans-serif; font-size:12px;"><strong>Estimated Rainfall Amount</strong><br>Rainfall unavailable for this plotted tile.</div>')
+                    .openOn(map);
+            }
+        }
+        map.on('click', handleWindyRadarMapClick);
+
         function isUkCustomRadarActiveForCurrentSelection() {
             const selectedRadarLayer = document.getElementById('radarLayer')?.value;
-            return ukCustomRadarColorScaleEnabled && ['uk-precip-intensity', 'windy-radar'].includes(selectedRadarLayer);
+            // Windy Radar colour replacement is mandatory whenever Windy Radar is selected.
+            // uk-precip-intensity is intentionally excluded and keeps its provider/native colours.
+            return ['windy-radar'].includes(selectedRadarLayer);
         }
         function updateUkCustomRadarColorScaleControlVisibility() {
             const selectedRadarLayer = document.getElementById('radarLayer')?.value;
-            const selected = ['uk-precip-intensity', 'windy-radar'].includes(selectedRadarLayer);
+            const selected = ['windy-radar'].includes(selectedRadarLayer);
             const radarOn = document.getElementById('radarToggle')?.checked !== false;
             const control = document.getElementById('uk-custom-radar-colour-control');
             const editor = document.getElementById('uk-custom-radar-editor');
-            if (control) control.style.display = selected && radarOn ? 'flex' : 'none';
-            if (editor) editor.style.display = selected && radarOn && ukCustomRadarColorScaleEnabled ? 'block' : 'none';
+            const accumulationPanel = document.getElementById('windy-radar-accumulation-panel');
+            // The old Windy Radar on/off colour-scale switch has been removed; keep this guard for older cached DOM.
+            if (control) control.style.display = 'none';
+            if (editor) editor.style.display = selected && radarOn ? 'block' : 'none';
+            if (accumulationPanel) accumulationPanel.style.display = selected && radarOn ? 'block' : 'none';
+            if (selected && radarOn && typeof setDefaultWindyAccumulationTimes === 'function') setDefaultWindyAccumulationTimes(false);
+            if (typeof updateWindyAccumulationPlotButtons === 'function') updateWindyAccumulationPlotButtons();
         }
         function rebuildUkRadarOnly() {
             const select = document.getElementById('radarLayer');
-            if (['uk-precip-intensity', 'windy-radar'].includes(select?.value) && !select.disabled && document.getElementById('radarToggle')?.checked !== false) {
+            if (['windy-radar'].includes(select?.value) && !select.disabled && document.getElementById('radarToggle')?.checked !== false) {
                 clearRadarLayers();
                 plotLayerIfNecessary(select.value, radarOptions, getCurrentSliderTimestamp(), 'radar');
             }
             if (typeof updateLegend === 'function') updateLegend();
         }
         function toggleUkCustomRadarColorScale(enabled) {
-            ukCustomRadarColorScaleEnabled = !!enabled;
-            try { localStorage.setItem('uk-custom-radar-colour-enabled', ukCustomRadarColorScaleEnabled ? '1' : '0'); } catch (e) { }
+            // Backwards-compatible no-op: Windy Radar recolouring is mandatory and cannot be disabled.
+            ukCustomRadarColorScaleEnabled = true;
+            try { localStorage.setItem('uk-custom-radar-colour-enabled', '1'); } catch (e) { }
             updateUkCustomRadarColorScaleControlVisibility();
             rebuildUkRadarOnly();
         }
@@ -7988,7 +9395,7 @@
                 const id = `uk-radar-colour-level-${index}`;
                 const label = document.createElement('label');
                 label.setAttribute('for', id);
-                label.textContent = `Template colour step ${index + 1} / ${levels.length} (${level.value})`;
+                label.textContent = getUkRadarTemplateLabel(level, index, levels.length);
                 const input = document.createElement('input');
                 input.type = 'color';
                 input.id = id;
@@ -8014,11 +9421,16 @@
         }
         function initialiseUkCustomRadarColourControls() {
             try {
-                ukCustomRadarColorScaleEnabled = localStorage.getItem('uk-custom-radar-colour-enabled') === '1';
+                // The enabled flag is forced on for Windy Radar; only palette overrides remain user-configurable.
+                ukCustomRadarColorScaleEnabled = true;
+                localStorage.setItem('uk-custom-radar-colour-enabled', '1');
                 ukCustomRadarLevelOverrides = JSON.parse(localStorage.getItem('uk-custom-radar-level-overrides') || '{}') || {};
-            } catch (e) { ukCustomRadarLevelOverrides = {}; }
+            } catch (e) {
+                ukCustomRadarColorScaleEnabled = true;
+                ukCustomRadarLevelOverrides = {};
+            }
             const toggle = document.getElementById('uk-custom-radar-colour-toggle');
-            if (toggle) toggle.checked = ukCustomRadarColorScaleEnabled;
+            if (toggle) toggle.checked = true;
             buildUkCustomRadarColorInputs();
             updateUkCustomRadarColorScaleControlVisibility();
         }
@@ -8184,6 +9596,12 @@
         const WINDY_LIGHTNING_MAX_ARCHIVE_FRAMES = 96;
         let windyLightningPollTimer = null, windyLightningLayer = null, windyLightningArchive = [], windyLightningLastFrameTs = 0;
         let windyLightningActiveSourceKey = null;
+        // Incremental renderer state: keeps existing Windy lightning markers on the map
+        // and only adds/removes/updates the delta. This avoids clearing/replotting all
+        // strikes on every refetch, which was causing visible flashing.
+        const windyLightningMarkerMap = new Map(); // strike.id -> Leaflet marker
+        let windyLightningLastHotSignature = '';
+        let windyLightningLastRenderedKey = '';
         const windyLightningSourceRanges = new Map();
         const WINDY_LIGHTNING_ARCHIVE_KEY = 'windy-lightning-hot-plus-ims-5mins-v1';
         const WINDY_LIGHTNING_ARCHIVE_RETENTION_MS = 31 * 24 * 60 * 60 * 1000;
@@ -8270,7 +9688,7 @@
                 if (!s || !Number.isFinite(s.time) || !Number.isFinite(s.lat) || !Number.isFinite(s.lon)) continue;
                 if (filterStartMs != null && (s.time < filterStartMs || s.time > filterEndMs)) continue;
                 const kind = Number(s.kind) || 0;
-                const id = `${sourceKey}_${Math.round(s.time)}_${s.lat.toFixed(5)}_${s.lon.toFixed(5)}_${kind}`;
+                const id = `windy_${Math.round(s.time)}_${s.lat.toFixed(5)}_${s.lon.toFixed(5)}_${kind}`;
                 if (seen.has(id)) continue;
                 seen.add(id);
                 windyLightningArchive.push({ id, time: s.time, lat: s.lat, lon: s.lon, kind, sourceKey, mode, sourceFetchedAt: Date.now() });
@@ -8280,12 +9698,16 @@
             saveWindyLightningArchive();
             return added;
         }
-        function windyLightningStrikeColourFromTime(strikeMs) {
-            const ageMs = Math.max(0, Date.now() - Number(strikeMs));
-            if (ageMs < 60000) return '#ffffff';
-            if (ageMs < 300000) return '#ffff00';
-            if (ageMs < 900000) return '#ff9900';
-            return '#ff3333';
+        function windyLightningStrikeColourFromTime(strikeMs, referenceMs = Date.now()) {
+            // Match the lightning legend from newest to oldest:
+            // red -> gold -> hot pink -> magenta -> purple -> indigo.
+            const ageMs = Math.max(0, Number(referenceMs) - Number(strikeMs));
+            if (ageMs < 60 * 1000) return '#ff0000';      // Newest
+            if (ageMs < 5 * 60 * 1000) return '#ffd700';
+            if (ageMs < 15 * 60 * 1000) return '#ff69b4';
+            if (ageMs < 30 * 60 * 1000) return '#ff00ff';
+            if (ageMs < 60 * 60 * 1000) return '#800080';
+            return '#4b0082';                              // Oldest
         }
         function loadWindyLightningArchive() {
             try { windyLightningArchive = JSON.parse(localStorage.getItem(WINDY_LIGHTNING_ARCHIVE_KEY) || '[]') || []; } catch (e) { windyLightningArchive = []; }
@@ -8332,7 +9754,7 @@
                 maxT = Math.max(maxT, time);
                 const { lat, lon } = windyMercatorToLatLon(x, y);
                 if (lat < -90 || lat > 90 || lon < -180 || lon > 180) continue;
-                const id = `${sourceKey}_${time}_${x}_${y}_${kind}`;
+                const id = `windy_${time}_${Math.round(x)}_${Math.round(y)}_${kind}`;
                 if (seen.has(id)) continue;
                 seen.add(id);
                 windyLightningArchive.push({ id, time, lat, lon, kind, sourceKey, mode, sourceFetchedAt: Date.now() });
@@ -8358,9 +9780,9 @@
         }
         async function fetchWindyLightningArchivePayload(frameMs) {
             const url = buildWindyLightningArchiveUrl(frameMs);
-            console.info('Windy lightning ARCHIVE/BINARY 5mins fetch:', url);
+            console.info('W lightning ARCHIVE/BINARY 5mins fetch:', url);
             const r = await fetch(url, { method: 'GET', cache: 'no-store' });
-            if (!r.ok) throw new Error(`Windy archive HTTP ${r.status} for ${url}`);
+            if (!r.ok) throw new Error(`W archive HTTP ${r.status} for ${url}`);
             const arrayBuffer = await r.arrayBuffer();
             return decodeWindyLightningArchiveBinary(arrayBuffer, frameMs);
         }
@@ -8368,9 +9790,20 @@
             const cursor = windyLightningLastFrameTs || Date.now() - 20 * 60 * 1000;
             const payload = await fetchWindyLightningHotPayload(cursor);
             const values = extractWindyLightningValues(payload);
+            const nextCursor = getWindyPayloadCursor(payload, values, cursor);
+
+            // Windy-style monitoring: treat the hot JSON as a change feed. If neither
+            // the payload values nor server cursor changed, do not re-render anything.
+            // Polling still happens, but the map only changes when the JSON changes.
+            const hotSignature = `${nextCursor}|${values.length}|${values.slice(-80).join(',')}`;
+            if (hotSignature === windyLightningLastHotSignature) {
+                return { added: 0, values: values.length / 4, frames: 1, mode: 'live', unchanged: true };
+            }
+            windyLightningLastHotSignature = hotSignature;
+
             const added = addWindyLightningValues(values, sourceKey, 'live', null, null, true);
-            windyLightningLastFrameTs = Math.max(windyLightningLastFrameTs || 0, getWindyPayloadCursor(payload, values, cursor));
-            return { added, values: values.length / 4, frames: 1, mode: 'live' };
+            windyLightningLastFrameTs = Math.max(windyLightningLastFrameTs || 0, nextCursor);
+            return { added, values: values.length / 4, frames: 1, mode: 'live', changed: true };
         }
         async function fetchArchiveWindyLightningForRange(startMs, endMs, sourceKey) {
             const firstFrame = Math.floor(startMs / WINDY_LIGHTNING_FRAME_MS) * WINDY_LIGHTNING_FRAME_MS;
@@ -8383,7 +9816,7 @@
                     added += addWindyLightningStrikeObjects(strikes, sourceKey, 'archive5mins', startMs, endMs);
                     frames++;
                 } catch (e) {
-                    console.warn('Windy lightning archive binary frame failed:', new Date(frame).toISOString(), e);
+                    console.warn('W lightning archive binary frame failed:', new Date(frame).toISOString(), e);
                     frames++;
                 }
             }
@@ -8398,18 +9831,17 @@
             const existing = windyLightningSourceRanges.get(sourceKey);
             if (existing?.inFlight) return;
 
-            // Source-first: clear this source range before fetching, so stale local cache cannot masquerade as fresh archive.
-            windyLightningArchive = windyLightningArchive.filter(s => s.sourceKey !== sourceKey);
-            saveWindyLightningArchive();
+            // Do not clear an already-rendered/source-cached range before fetching.
+            // Existing strikes stay visible and new/changed strikes are merged in below.
             windyLightningSourceRanges.set(sourceKey, { inFlight: true, fetchedAt: 0, added: 0, mode });
             try {
                 const result = useLive ? await fetchLiveWindyLightningForRange(startMs, endMs, sourceKey)
                     : await fetchArchiveWindyLightningForRange(startMs, endMs, sourceKey);
                 windyLightningSourceRanges.set(sourceKey, { inFlight: false, fetchedAt: Date.now(), ...result });
-                console.info(`Windy lightning ${mode} complete for ${new Date(startMs).toISOString()} – ${new Date(endMs).toISOString()}:`, result);
+                console.info(`W lightning ${mode} complete for ${new Date(startMs).toISOString()} – ${new Date(endMs).toISOString()}:`, result);
             } catch (e) {
                 windyLightningSourceRanges.set(sourceKey, { inFlight: false, fetchedAt: Date.now(), added: 0, error: String(e), mode });
-                console.warn(`Windy lightning ${mode} source fetch failed.`, e);
+                console.warn(`W lightning ${mode} source fetch failed.`, e);
             } finally {
                 renderWindyLightningArchive(false);
             }
@@ -8424,23 +9856,57 @@
         function renderWindyLightningArchive(requestSource = true) {
             if (!isWindyLiveLightningSelected()) return;
             if (!windyLightningLayer) windyLightningLayer = L.layerGroup().addTo(map);
-            windyLightningLayer.clearLayers();
+            if (!map.hasLayer(windyLightningLayer)) windyLightningLayer.addTo(map);
+
             const opacity = parseFloat(document.getElementById('lightningOpacity')?.value || 0.8);
             const end = Number(typeof getCurrentSliderTimestamp === 'function' ? getCurrentSliderTimestamp() : Date.now()) || Date.now();
             const start = end - parseFloat(document.getElementById('lightning-lifespan')?.value || 3) * 3600 * 1000;
             const mode = isWindyLightningCurrentTime(end) ? 'live' : 'archive5mins';
             const sourceKey = windLightningRangeKey(start, end, mode);
             windyLightningActiveSourceKey = sourceKey;
+
             if (requestSource) fetchAndDisplayWindyLightningForRange(start, end);
-            const visible = windyLightningArchive.filter(s => s.sourceKey === sourceKey).slice(-3000);
+
+            // Live mode is append-only from the hot JSON feed, so filter by timestamp.
+            // Archive mode is frame/range keyed, but also accepts source-independent
+            // cached strikes in the time window to prevent disappearing/reappearing.
+            const visible = windyLightningArchive
+                .filter(s => Number(s.time) >= start && Number(s.time) <= end && (mode === 'live' || s.sourceKey === sourceKey || s.mode === 'archive5mins'))
+                .sort((a, b) => Number(a.time) - Number(b.time))
+                .slice(-3000);
+
+            const wantedIds = new Set(visible.map(s => s.id));
+
+            // Remove only markers that are no longer in the active time range.
+            for (const [id, marker] of windyLightningMarkerMap.entries()) {
+                if (!wantedIds.has(id)) {
+                    windyLightningLayer.removeLayer(marker);
+                    windyLightningMarkerMap.delete(id);
+                }
+            }
+
+            // Add genuinely new strikes and update existing marker style in place.
             visible.forEach(s => {
-                const c = windyLightningStrikeColourFromTime(s.time);
-                windyLightningLayer.addLayer(L.circleMarker([s.lat, s.lon], {
-                    radius: Math.max(2, Math.min(5, 2 + (Number(s.kind) || 0) * 0.35)),
-                    color: c, weight: 1, opacity, fillColor: c, fillOpacity: Math.min(1, opacity + 0.1), pane: 'markerPane'
-                }).bindTooltip(`Windy lightning ${s.mode}<br>${new Date(s.time).toLocaleString()}<br>type/strength: ${s.kind}`));
+                const c = windyLightningStrikeColourFromTime(s.time, end);
+                const radius = Math.max(2, Math.min(5, 2 + (Number(s.kind) || 0) * 0.35));
+                const style = { radius, color: c, weight: 1, opacity, fillColor: c, fillOpacity: Math.min(1, opacity + 0.1), pane: 'markerPane' };
+                let marker = windyLightningMarkerMap.get(s.id);
+                if (marker) {
+                    // Existing strike: update colour/opacity only, no remove/re-add, no flash.
+                    marker.setStyle(style);
+                } else {
+                    marker = L.crossMarker([s.lat, s.lon], style)
+                        .bindTooltip(`Lightning  ${s.mode}<br>${new Date(s.time).toLocaleString()}<br>type/strength: ${s.kind}`);
+                    windyLightningMarkerMap.set(s.id, marker);
+                    windyLightningLayer.addLayer(marker);
+                }
             });
-            console.info(`Windy lightning render ${mode}: visible=${visible.length}, range=${new Date(start).toISOString()} – ${new Date(end).toISOString()}`, windyLightningSourceRanges.get(sourceKey));
+
+            const renderKey = `${mode}_${sourceKey}_${visible.length}_${[...wantedIds].slice(-5).join('|')}`;
+            if (renderKey !== windyLightningLastRenderedKey) {
+                windyLightningLastRenderedKey = renderKey;
+                console.info(`W lightning render ${mode}: visible=${visible.length}, range=${new Date(start).toISOString()} – ${new Date(end).toISOString()}`, windyLightningSourceRanges.get(sourceKey));
+            }
         }
         function startWindyLiveLightning() {
             loadWindyLightningArchive();
@@ -8451,7 +9917,7 @@
         }
         function stopWindyLiveLightning(removeLayer = true) {
             if (windyLightningPollTimer) { clearInterval(windyLightningPollTimer); windyLightningPollTimer = null; }
-            if (removeLayer && windyLightningLayer) { windyLightningLayer.clearLayers(); if (map.hasLayer(windyLightningLayer)) map.removeLayer(windyLightningLayer); windyLightningLayer = null; }
+            if (removeLayer && windyLightningLayer) { windyLightningLayer.clearLayers(); windyLightningMarkerMap.clear(); if (map.hasLayer(windyLightningLayer)) map.removeLayer(windyLightningLayer); windyLightningLayer = null; windyLightningLastRenderedKey = ''; }
         }
 
         function lightningLayerTypeHandler() {
@@ -9891,8 +11357,8 @@
 
             if (isDark) {
                 // Switch to a good dark base map
-                mapStyleSelect.value = 'mapbox-traffic-day'; // or 'mapbox-dark' or 'maptiler-dark'
-                switchBaseMap('mapbox-traffic-day');
+                mapStyleSelect.value = 'mapbox-traffic-night'; // or 'mapbox-dark' or 'maptiler-dark'
+                switchBaseMap('mapbox-traffic-night');
 
                 // Update button text
                 event.target.textContent = '☀️ Light Mode';
@@ -10591,6 +12057,7 @@
 
                 if (!marker) {
                     marker = L.crossMarker([lat, lon], {
+                        pane: 'lightningPane',
                         radius: LOW_END_NOWCAST_MODE ? 5 : 6,
                         color,
                         weight: LOW_END_NOWCAST_MODE ? 1.5 : 2,
@@ -10618,6 +12085,14 @@
                     }
                 }
             }
+            // Reorder markers so newest strikes are drawn last and appear on top.
+            strikeCircles
+                .sort((a, b) => a.strike.time - b.strike.time) // oldest -> newest
+                .forEach(({ circle }) => {
+                    if (circle && typeof circle.bringToFront === 'function') {
+                        circle.bringToFront();
+                    }
+                });
 
             strikeMarkerMap.forEach((marker, key) => {
                 if (!newStrikeKeys.has(key)) toRemove.push([key, marker]);
@@ -10643,7 +12118,7 @@
             const isRadarActive = radarSelect && !radarSelect.disabled && radarSelect.value !== 'none';
 
             // Add 180 minutes (3 hours) if radar is on
-            const futureMinutes = isRadarActive ? 120 : 0;
+            const futureMinutes = isRadarActive ? 0 : 0;
 
             if (lastFilterMode === 'inputs' && customFilterStart && customFilterEnd) {
                 const filterStart = new Date(customFilterStart);
@@ -10960,10 +12435,9 @@
         }
 
         function getColorFromAge(ageFraction) {
-            if (ageFraction < 0.05) return '#ff0000';
-            if (ageFraction < 0.2) return '#ffd700'; // Newest
-            if (ageFraction < 0.4) return '#ff69b4';
-            if (ageFraction < 0.6) return '#ff00ff';
+            if (ageFraction < 0.05) return '#ffd700'; // Newest
+            if (ageFraction < 0.2) return '#ff00ff';
+            if (ageFraction < 0.5) return '#ff69b4';
             if (ageFraction < 0.8) return '#800080';
             return '#4b0082'; // Oldest
         }
@@ -11092,7 +12566,7 @@
                 legendDiv.innerHTML += '<h4>Lightning Strikes</h4>';
                 if (colorMode) {
                     legendDiv.innerHTML += `
-        <div><div class="color-box" style="background: #ff0000"></div>Newest</div>
+        
         <div><div class="color-box" style="background: #ffd700"></div>Newest</div>
         <div><div class="color-box" style="background: #ff69b4"></div></div>
         <div><div class="color-box" style="background: #ff00ff"></div></div>
@@ -11650,6 +13124,9 @@
             document.getElementById('history-label').innerText = formatTimeAgo(0);
             document.getElementById('history-time').innerText = `${start.toLocaleString()} - ${end.toLocaleString()}`;
             document.getElementById('remove-filter').style.display = 'block';
+            // Force Windy radar to fetch the frame matching the newly applied filter end time.
+            clearWindyRadarRuntimeState('manual-time-filter-applied');
+            currentFilterTimestamp = end.getTime();
             updateZIndex();
             updateLegend();
             triggerMapUpdate(end.getTime(), true);
@@ -11930,6 +13407,20 @@
             const pngZ = expertMode ? parseInt(document.getElementById('png-zindex').value) || 40 : 40;
             const numbersZ = expertMode ? parseInt(document.getElementById('numbers-zindex').value) || 1200 : 1200;
             const nowcastZ = Math.max(kmlZ, pngZ) + 10; // Ensure nowcast is above KML and PNG, but below lightning
+
+            // Required stacking order:
+            // satellite (140) < polygon fill (145) < radar (150) < UK lightning.
+            // The polygon outline remains above every configurable map overlay.
+            if (map.getPane('lightningPane')) {
+                map.getPane('lightningPane').style.zIndex = lightningZ;
+            }
+            if (map.getPane('nowcastFillPane')) {
+                map.getPane('nowcastFillPane').style.zIndex = 145;
+            }
+            if (map.getPane('nowcastOutlinePane')) {
+                const outlineZ = Math.max(2000, lightningZ, numbersZ, kmlZ, pngZ, heatmapZ, nowcastZ) + 1;
+                map.getPane('nowcastOutlinePane').style.zIndex = outlineZ;
+            }
 
             // Remove all layers to re-add them in the correct order
             if (nowcastLayer && map.hasLayer(nowcastLayer)) map.removeLayer(nowcastLayer);
@@ -13768,4 +15259,36 @@
         });
         referenceLayer.addTo(map);
     </script>
-    <script>
+<script>
+(() => {
+  'use strict';
+  class Store {
+    constructor(v){this.value=Object.freeze({...v});this.listeners=new Set()}
+    set(p){const n=Object.freeze({...this.value,...p});if(Object.keys(p).every(k=>Object.is(n[k],this.value[k])))return;this.value=n;this.listeners.forEach(f=>{try{f(n)}catch(e){console.error(e)}})}
+    subscribe(f){this.listeners.add(f);return()=>this.listeners.delete(f)}
+  }
+  class LayerManager {
+    constructor(store){this.store=store;this.entries=new Map();this.pending=new Map()}
+    register(name,adapter){if(!this.entries.has(name))this.entries.set(name,adapter);return this}
+    async setVisible(name,visible){const e=this.entries.get(name);if(!e)return;const k=`${name}:${visible}`;if(this.pending.has(k))return this.pending.get(k);const job=Promise.resolve().then(()=>visible?e.show?.():e.hide?.()).finally(()=>this.pending.delete(k));this.pending.set(k,job);return job}
+  }
+  const store=new Store({interacting:false,visible:!document.hidden,profile:window.RADARLOOP_DEVICE_PROFILE});
+  const layers=new LayerManager(store);
+  window.RadarLoopRuntime=Object.freeze({store,layers,version:'2026.07-stability'});
+  if(typeof window.toggleLayer==='function'){
+    const original=window.toggleLayer,last=new Map();
+    window.toggleLayer=function(name,enabled){const sig=`${name}:${Boolean(enabled)}`;if(last.get(name)===sig)return;last.set(name,sig);store.set({[`layer:${name}`]:Boolean(enabled)});return original.apply(this,arguments)};
+  }
+  let timer=0;
+  const start=()=>{clearTimeout(timer);document.body.classList.add('rl-interacting');store.set({interacting:true})};
+  const end=()=>{clearTimeout(timer);timer=setTimeout(()=>{document.body.classList.remove('rl-interacting');store.set({interacting:false})},window.RADARLOOP_DEVICE_PROFILE.mobile?140:70)};
+  if(typeof map!=='undefined'&&map?.on){map.on('movestart zoomstart dragstart',start);map.on('moveend zoomend dragend',end)}
+  let resume=false;
+  document.addEventListener('visibilitychange',()=>{store.set({visible:!document.hidden});if(document.hidden){resume=typeof isPlaying!=='undefined'&&Boolean(isPlaying);if(resume&&typeof stopAnimation==='function')stopAnimation()}else if(resume&&typeof playAnimation==='function'){resume=false;playAnimation()}},{passive:true});
+  if(window.RADARLOOP_DEVICE_PROFILE.mobile){const el=document.getElementById('refresh-interval');if(el&&el.value==='0.167')el.value='0.5';if(typeof setRefreshInterval==='function')setRefreshInterval()}
+  const idle=window.requestIdleCallback||(fn=>setTimeout(()=>fn({timeRemaining:()=>8}),250));
+  setInterval(()=>idle(()=>{try{if(typeof pruneWeatherTileCaches==='function')pruneWeatherTileCaches()}catch(_){}try{document.querySelectorAll('canvas').forEach(c=>{if(!c.isConnected&&c.width*c.height>0){c.width=0;c.height=0}})}catch(_){}}),120000);
+})();
+</script>
+</body>
+</html>
