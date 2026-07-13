@@ -4,6 +4,7 @@
 <head>
     <meta charset="utf-8">
     <title>RadarLoop</title>
+    <meta name="radarloop-build" content="2026.07-stability-refactor">
     <link rel="icon" type="image/png"
         href="https://raw.githubusercontent.com/Handry-Outlook/Convective-Outlook/main/Handry_outlook_icon_pride_small.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,7 +14,7 @@
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css" rel="stylesheet" />
     <link href="https://cdn.aerisapi.com/sdk/js/mapsgl/latest/aerisweather.mapsgl.css" rel="stylesheet" />
     <script src="https://cdn.aerisapi.com/sdk/js/mapsgl/latest/aerisweather.mapsgl.js"></script>
-    <script src="https://unpkg.com/leaflet@1.8.0/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <script src="https://unpkg.com/leaflet.vectorgrid@1.3.0/dist/Leaflet.VectorGrid.min.js"></script>
@@ -27,7 +28,6 @@
         }
         console.log("L.vectorGrid type:", typeof L.vectorGrid);
     </script>
-    W
     <style>
         /* Remove the default Leaflet popup styling to show ONLY our custom box */
         .met-office-popup .leaflet-popup-content-wrapper {
@@ -2506,6 +2506,20 @@
             background: rgba(20, 20, 20, 0.78);
         }
 
+    
+        /* RadarLoop 2026 stability refactor: layout and interaction containment */
+        .section { content-visibility: auto; contain-intrinsic-size: 1px 520px; contain: layout style paint; }
+        #control-panel { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+        #map, #map-3d { contain: strict; }
+        body.rl-interacting .leaflet-tile-pane, body.rl-interacting canvas { pointer-events: none; }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+        }
+        @media (max-width: 768px) {
+            .section { contain-intrinsic-size: 1px 440px; }
+            .tooltip { display: none !important; }
+            .leaflet-fade-anim .leaflet-tile { transition: none !important; }
+        }
     </style>
 </head>
 <!-- Google tag (gtag.js) -->
@@ -3642,21 +3656,41 @@
             </a>
         </div>
     </div>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/esri-leaflet@3.0.12/dist/esri-leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/leaflet.heat/dist/leaflet-heat.js"></script>
     <script src="https://unpkg.com/togeojson@0.16.0"></script>
     <script src="https://cdn.maptiler.com/maptiler-sdk-js/v3.0.1/maptiler-sdk.umd.min.js"></script>
     <script src="https://cdn.maptiler.com/leaflet-maptilersdk/v4.0.2/leaflet-maptilersdk.umd.min.js"></script>
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js"></script>
-    <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
-    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.4.3/mapbox-gl-draw.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+    
+    <script>
+    (() => {
+        'use strict';
+        const coarse = matchMedia('(pointer: coarse)').matches;
+        const mobile = coarse || /iPhone|iPad|iPod|Android|Mobile/i.test(navigator.userAgent) || Math.min(innerWidth, innerHeight) <= 820;
+        const lowMemory = Number(navigator.deviceMemory || 4) <= 4 || Number(navigator.hardwareConcurrency || 4) <= 4;
+        window.RADARLOOP_DEVICE_PROFILE = Object.freeze({ mobile, lowMemory, reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches });
+        if (window.L) {
+            L.Map.mergeOptions({
+                preferCanvas: true,
+                zoomAnimation: !mobile,
+                fadeAnimation: !mobile,
+                markerZoomAnimation: !mobile
+            });
+            L.GridLayer.mergeOptions({
+                updateWhenIdle: mobile,
+                updateWhenZooming: !mobile,
+                keepBuffer: mobile ? 1 : 2
+            });
+        }
+    })();
+    </script>
     <script>
         const mapboxAccessToken = 'pk.eyJ1IjoibWV0ZW9ncm91cC1tYXBib3giLCJhIjoiY2pudWJyMWVhMDQ0bjNxdXFsNWJ5M2ZtbSJ9.ANOKYyv5s0VFVbnesnGGUQ';
         const maptilerApiKey = 'd6FiSbcpDtzJ4g4e0oD4';
@@ -3814,20 +3848,26 @@
         map.getPane('warningPane').style.zIndex = 550; // Ensure it sits above tiles but below markers
         map.getPane('warningPane').style.pointerEvents = 'none'; // Allow clicks to pass through empty areas
 
-        // Local nowcast is rendered with Canvas instead of SVG to reduce DOM/path overhead.
-        // IMPORTANT: the fill pane is created *inside overlayPane* so its z-index
-        // interleaves with the satellite/radar tile layers instead of sitting below
-        // the whole overlayPane. Desired order: satellite (140) < nowcast fill (145) < radar (150).
+        // UK lightning stays above all normal weather layers.
+        if (!map.getPane('lightningPane')) {
+            map.createPane('lightningPane');
+        }
+        map.getPane('lightningPane').style.zIndex = 1000;
+
+        // The nowcast polygon fill must interleave with weather tiles:
+        // satellite (140) < polygon fill (145) < radar (150) < lightning.
+        // Creating it inside overlayPane allows those local z-index values to interleave.
         if (!map.getPane('nowcastFillPane')) {
             map.createPane('nowcastFillPane', map.getPane('overlayPane'));
         }
-        map.getPane('nowcastFillPane').style.zIndex = 145; // above satellite (140), below radar (150)
+        map.getPane('nowcastFillPane').style.zIndex = 145;
         map.getPane('nowcastFillPane').style.pointerEvents = 'none';
 
+        // The outline is deliberately separated from the fill and kept above all map overlays.
         if (!map.getPane('nowcastOutlinePane')) {
             map.createPane('nowcastOutlinePane');
         }
-        map.getPane('nowcastOutlinePane').style.zIndex = 650; // above warnings/labels
+        map.getPane('nowcastOutlinePane').style.zIndex = 2001;
         const nowcastFillRenderer = L.canvas({ pane: 'nowcastFillPane', padding: 0.35 });
         const nowcastOutlineRenderer = L.canvas({ pane: 'nowcastOutlinePane', padding: 0.35 });
 
@@ -8058,11 +8098,8 @@
         }
         // ==========================================
         // RADAR CUSTOM COLOUR SCALE — MM/H-BASED WINDY RADAR MAPPER
-        // Applies ONLY to radarOptions['uk-precip-intensity'].
-        // DTN PNG does not expose rainfall values. The important observed fact is that DTN's lightest rain
-        // starts in the green family, not the blue family. This function therefore interprets SOURCE colour
-        // families in DTN order: light green -> green -> dark green -> yellow -> orange -> red -> purple,
-        // and then replaces those levels with the selected custom template colours.
+        // Shared quantitative palette used only by Windy Radar and its accumulation tools.
+        // Every non-Windy radar provider keeps its native colour rendering.
         // ==========================================
 
         function dbzToWindyMmh(dbz) {
@@ -8167,117 +8204,9 @@ const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
             return formatRadarMmhLabel(level.value, index, total);
         }
 
-        function rgbToHsvForDtnSource(r, g, b) {
-            r /= 255; g /= 255; b /= 255;
-            const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
-            let h = 0;
-            if (d !== 0) {
-                if (max === r) h = ((g - b) / d) % 6;
-                else if (max === g) h = (b - r) / d + 2;
-                else h = (r - g) / d + 4;
-                h *= 60;
-                if (h < 0) h += 360;
-            }
-            return { h, s: max === 0 ? 0 : d / max, v: max };
-        }
-        function classifyDtnSourcePixelToTemplateIndex(r, g, b) {
-            const { h, s, v } = rgbToHsvForDtnSource(r, g, b);
-            // Very low saturation anti-aliased pixels. Keep bright greys low, darker greys mid/high.
-            if (s < 0.10) {
-                if (v > 0.72) return 0;
-                if (v > 0.48) return 2;
-                return 7;
-            }
-            // DTN source semantics observed by user: lightest rain is light green, then green is heavier.
-            // Green/lime family is therefore deliberately mapped to LOWER custom template levels, not to
-            // nearest yellow/green target colours.
-            if (h >= 75 && h < 165) {
-                // lime / light green -> lowest two template steps
-                if (v >= 0.84) return 0;          // lightest green = lightest rain
-                if (v >= 0.68) return 1;
-                if (v >= 0.52) return 2;          // green = slightly heavier
-                return 3;                         // darker green = heavier low/moderate
-            }
-            // Yellow is above the green family.
-            if (h >= 45 && h < 75) {
-                if (v >= 0.82) return 4;
-                return 5;
-            }
-            // Orange family.
-            if (h >= 15 && h < 45) {
-                if (v >= 0.76) return 6;
-                return 7;
-            }
-            // Red family.
-            if (h >= 345 || h < 15) {
-                if (v >= 0.58) return 8;
-                return 9;
-            }
-            // Purple / magenta family.
-            if (h >= 260 && h < 345) {
-                if (v >= 0.55) return 10;
-                return 11;
-            }
-            // Cyan/blue if present: keep as lower rainfall, because they are not high-end colours.
-            if (h >= 165 && h < 260) {
-                if (v >= 0.75) return 1;
-                return 2;
-            }
-            return 0;
-        }
-        function recolourUkRadarImageDataDtnSemantic(imageData) {
-            const targetLevels = getUkRadarTargetLevels();
-            const data = imageData.data;
-            const localRgbToLevelCache = new Map();
-            for (let i = 0; i < data.length; i += 4) {
-                const originalAlpha = data[i + 3];
-                if (originalAlpha < 2) continue;
-                const key = (data[i] << 16) | (data[i + 1] << 8) | data[i + 2];
-                let levelIndex = localRgbToLevelCache.get(key);
-                if (levelIndex === undefined) {
-                    levelIndex = classifyDtnSourcePixelToTemplateIndex(data[i], data[i + 1], data[i + 2]);
-                    localRgbToLevelCache.set(key, levelIndex);
-                }
-                const target = targetLevels[Math.min(levelIndex, targetLevels.length - 1)].rgba;
-                data[i] = target[0];
-                data[i + 1] = target[1];
-                data[i + 2] = target[2];
-                data[i + 3] = Math.round(originalAlpha * (target[3] / 255));
-            }
-            return imageData;
-        }
-        const UkRadarDtnSemanticMappedTileLayer = L.TileLayer.extend({
-            createTile: function (coords, done) {
-                const tile = document.createElement('canvas');
-                const size = this.getTileSize();
-                tile.width = size.x;
-                tile.height = size.y;
-                const img = new Image();
-                img.crossOrigin = 'anonymous';
-                img.onload = () => {
-                    try {
-                        const ctx = tile.getContext('2d', { willReadFrequently: true });
-                        ctx.clearRect(0, 0, size.x, size.y);
-                        ctx.drawImage(img, 0, 0, size.x, size.y);
-                        const imageData = ctx.getImageData(0, 0, size.x, size.y);
-                        ctx.putImageData(recolourUkRadarImageDataDtnSemantic(imageData), 0, 0);
-                        done(null, tile);
-                    } catch (error) {
-                        console.warn('UK radar DTN semantic colour mapping failed for this tile; showing original PNG tile instead.', error);
-                        const fallbackCtx = tile.getContext('2d');
-                        fallbackCtx.clearRect(0, 0, size.x, size.y);
-                        fallbackCtx.drawImage(img, 0, 0, size.x, size.y);
-                        done(null, tile);
-                    }
-                };
-                img.onerror = () => done(new Error('Failed to load UK radar PNG tile'), tile);
-                img.src = this.getTileUrl(coords);
-                return tile;
-            }
-        });
-        function createUkRadarDtnSemanticMappedTileLayer(url, options) {
-            return new UkRadarDtnSemanticMappedTileLayer(url, { ...options, crossOrigin: true });
-        }
+        // Non-Windy radar providers are rendered with their native colours.
+        // Per-pixel replacement is intentionally retained only for Windy Radar below.
+
         // ==========================================
         // WINDY RADAR CUSTOM COLOUR SCALE — MM/H BINNED + Z7 + ARCHIVE FALLBACK
         // Normal endpoint: /radar2/composite/... ; archive fallback: /radar2/archive/composite/...
@@ -12128,6 +12057,7 @@ async function calculateWindyRadarAccumulationMap() {
 
                 if (!marker) {
                     marker = L.crossMarker([lat, lon], {
+                        pane: 'lightningPane',
                         radius: LOW_END_NOWCAST_MODE ? 5 : 6,
                         color,
                         weight: LOW_END_NOWCAST_MODE ? 1.5 : 2,
@@ -12155,6 +12085,14 @@ async function calculateWindyRadarAccumulationMap() {
                     }
                 }
             }
+            // Reorder markers so newest strikes are drawn last and appear on top.
+            strikeCircles
+                .sort((a, b) => a.strike.time - b.strike.time) // oldest -> newest
+                .forEach(({ circle }) => {
+                    if (circle && typeof circle.bringToFront === 'function') {
+                        circle.bringToFront();
+                    }
+                });
 
             strikeMarkerMap.forEach((marker, key) => {
                 if (!newStrikeKeys.has(key)) toRemove.push([key, marker]);
@@ -12497,10 +12435,9 @@ async function calculateWindyRadarAccumulationMap() {
         }
 
         function getColorFromAge(ageFraction) {
-            if (ageFraction < 0.05) return '#ff0000';
-            if (ageFraction < 0.2) return '#ffd700'; // Newest
-            if (ageFraction < 0.4) return '#ff69b4';
-            if (ageFraction < 0.6) return '#ff00ff';
+            if (ageFraction < 0.05) return '#ffd700'; // Newest
+            if (ageFraction < 0.2) return '#ff00ff';
+            if (ageFraction < 0.5) return '#ff69b4';
             if (ageFraction < 0.8) return '#800080';
             return '#4b0082'; // Oldest
         }
@@ -12629,7 +12566,7 @@ async function calculateWindyRadarAccumulationMap() {
                 legendDiv.innerHTML += '<h4>Lightning Strikes</h4>';
                 if (colorMode) {
                     legendDiv.innerHTML += `
-        <div><div class="color-box" style="background: #ff0000"></div>Newest</div>
+        
         <div><div class="color-box" style="background: #ffd700"></div>Newest</div>
         <div><div class="color-box" style="background: #ff69b4"></div></div>
         <div><div class="color-box" style="background: #ff00ff"></div></div>
@@ -13471,13 +13408,18 @@ async function calculateWindyRadarAccumulationMap() {
             const numbersZ = expertMode ? parseInt(document.getElementById('numbers-zindex').value) || 1200 : 1200;
             const nowcastZ = Math.max(kmlZ, pngZ) + 10; // Ensure nowcast is above KML and PNG, but below lightning
 
-            // Keep local nowcast fill visually sandwiched between satellite and radar.
-            // This pane is separate from the expert-mode nowcast outline/layer ordering below.
+            // Required stacking order:
+            // satellite (140) < polygon fill (145) < radar (150) < UK lightning.
+            // The polygon outline remains above every configurable map overlay.
+            if (map.getPane('lightningPane')) {
+                map.getPane('lightningPane').style.zIndex = lightningZ;
+            }
             if (map.getPane('nowcastFillPane')) {
                 map.getPane('nowcastFillPane').style.zIndex = 145;
             }
             if (map.getPane('nowcastOutlinePane')) {
-                map.getPane('nowcastOutlinePane').style.zIndex = 650;
+                const outlineZ = Math.max(2000, lightningZ, numbersZ, kmlZ, pngZ, heatmapZ, nowcastZ) + 1;
+                map.getPane('nowcastOutlinePane').style.zIndex = outlineZ;
             }
 
             // Remove all layers to re-add them in the correct order
@@ -15317,4 +15259,36 @@ async function calculateWindyRadarAccumulationMap() {
         });
         referenceLayer.addTo(map);
     </script>
-    <script>
+<script>
+(() => {
+  'use strict';
+  class Store {
+    constructor(v){this.value=Object.freeze({...v});this.listeners=new Set()}
+    set(p){const n=Object.freeze({...this.value,...p});if(Object.keys(p).every(k=>Object.is(n[k],this.value[k])))return;this.value=n;this.listeners.forEach(f=>{try{f(n)}catch(e){console.error(e)}})}
+    subscribe(f){this.listeners.add(f);return()=>this.listeners.delete(f)}
+  }
+  class LayerManager {
+    constructor(store){this.store=store;this.entries=new Map();this.pending=new Map()}
+    register(name,adapter){if(!this.entries.has(name))this.entries.set(name,adapter);return this}
+    async setVisible(name,visible){const e=this.entries.get(name);if(!e)return;const k=`${name}:${visible}`;if(this.pending.has(k))return this.pending.get(k);const job=Promise.resolve().then(()=>visible?e.show?.():e.hide?.()).finally(()=>this.pending.delete(k));this.pending.set(k,job);return job}
+  }
+  const store=new Store({interacting:false,visible:!document.hidden,profile:window.RADARLOOP_DEVICE_PROFILE});
+  const layers=new LayerManager(store);
+  window.RadarLoopRuntime=Object.freeze({store,layers,version:'2026.07-stability'});
+  if(typeof window.toggleLayer==='function'){
+    const original=window.toggleLayer,last=new Map();
+    window.toggleLayer=function(name,enabled){const sig=`${name}:${Boolean(enabled)}`;if(last.get(name)===sig)return;last.set(name,sig);store.set({[`layer:${name}`]:Boolean(enabled)});return original.apply(this,arguments)};
+  }
+  let timer=0;
+  const start=()=>{clearTimeout(timer);document.body.classList.add('rl-interacting');store.set({interacting:true})};
+  const end=()=>{clearTimeout(timer);timer=setTimeout(()=>{document.body.classList.remove('rl-interacting');store.set({interacting:false})},window.RADARLOOP_DEVICE_PROFILE.mobile?140:70)};
+  if(typeof map!=='undefined'&&map?.on){map.on('movestart zoomstart dragstart',start);map.on('moveend zoomend dragend',end)}
+  let resume=false;
+  document.addEventListener('visibilitychange',()=>{store.set({visible:!document.hidden});if(document.hidden){resume=typeof isPlaying!=='undefined'&&Boolean(isPlaying);if(resume&&typeof stopAnimation==='function')stopAnimation()}else if(resume&&typeof playAnimation==='function'){resume=false;playAnimation()}},{passive:true});
+  if(window.RADARLOOP_DEVICE_PROFILE.mobile){const el=document.getElementById('refresh-interval');if(el&&el.value==='0.167')el.value='0.5';if(typeof setRefreshInterval==='function')setRefreshInterval()}
+  const idle=window.requestIdleCallback||(fn=>setTimeout(()=>fn({timeRemaining:()=>8}),250));
+  setInterval(()=>idle(()=>{try{if(typeof pruneWeatherTileCaches==='function')pruneWeatherTileCaches()}catch(_){}try{document.querySelectorAll('canvas').forEach(c=>{if(!c.isConnected&&c.width*c.height>0){c.width=0;c.height=0}})}catch(_){}}),120000);
+})();
+</script>
+</body>
+</html>
