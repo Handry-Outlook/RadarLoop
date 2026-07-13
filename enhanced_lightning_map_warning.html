@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8">
     <title>RadarLoop</title>
-    <meta name="radarloop-build" content="2026.07-stability-refactor">
+    <meta name="radarloop-build" content="2026.07-ios-memory-budget">
     <link rel="icon" type="image/png"
         href="https://raw.githubusercontent.com/Handry-Outlook/Convective-Outlook/main/Handry_outlook_icon_pride_small.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -3840,6 +3840,13 @@
             zoomOffset: -1      // Required for 512px tiles in Leaflet
         });
 
+        // Plot the enabled coastline/reference overlay immediately on startup.
+        // Adding it here avoids waiting for the rest of the application script and
+        // preserves the labelsPane z-index above the weather layers.
+        const initialReferenceToggle = document.getElementById('overlay-toggle');
+        if (!initialReferenceToggle || initialReferenceToggle.checked) {
+            referenceLayer.addTo(map);
+        }
 
         // For 3D Mode (Mapbox GL)
         const referenceSourceId = 'reference-overlay-source';
@@ -3875,40 +3882,122 @@
         const X_ID = 'wgE96YE3scTQLKjnqiMsv';
         const X_SECRET = '1XwHqbCjiTqtzWi8txyN4JtM0ezVNuEfaDXQdkjq';
 
-        // 3. Initialize the Leaflet-specific Controller
-        // Use 'LeafletMapController' instead of 'MapController'
+        // WebGL engines are created only when a user actually requests them.
+        // This avoids keeping Mapbox GL and Aeris MapsGL GPU contexts alive for the whole session.
         let mapsglController = null;
+        let map3DDestroyTimer = null;
+        let mapsGLDestroyTimer = null;
 
-        try {
-            const account = new aerisweather.mapsgl.Account(X_ID, X_SECRET);
-            mapsglController = new aerisweather.mapsgl.LeafletMapController(map, {
-                account: account
-            });
-            console.log("MapsGL Controller initialized for Leaflet");
-        } catch (e) {
-            console.error("MapsGL initialization failed:", e);
+        function ensureMapsGLController() {
+            clearTimeout(mapsGLDestroyTimer);
+            if (mapsglController) return mapsglController;
+            try {
+                const account = new aerisweather.mapsgl.Account(X_ID, X_SECRET);
+                mapsglController = new aerisweather.mapsgl.LeafletMapController(map, { account });
+                console.log('MapsGL Controller created on demand');
+            } catch (e) {
+                console.error('MapsGL initialization failed:', e);
+            }
+            return mapsglController;
         }
-        // MapsGL click data inspector disabled. Windy Radar rainfall click popups are handled separately below.
-        map3D = new mapboxgl.Map({
-            container: 'map-3d',
-            style: 'mapbox://styles/handry-outlook/cm9457ty1009d01sk37353ux2',
-            center: [-4.5, 53.5],
-            zoom: 5,
-            projection: 'globe',
-            accessToken: mapboxAccessToken
-        });
-
-        map3D.on('load', () => {
-            map3D.addSource('mapbox-dem', {
-                'type': 'raster-dem',
-                'url': 'mapbox://mapbox.terrain-rgb',
-                'tileSize': 512,
-                'maxzoom': 14
+        function destroyMapsGLController(reason = 'idle') {
+            clearTimeout(mapsGLDestroyTimer);
+            if (!mapsglController) return;
+            try {
+                if (typeof mapsglController.destroy === 'function') mapsglController.destroy();
+                else if (typeof mapsglController.remove === 'function') mapsglController.remove();
+            } catch (e) { console.warn('MapsGL teardown warning:', e); }
+            mapsglController = null;
+            console.info(`MapsGL Controller released: ${reason}`);
+        }
+        function scheduleMapsGLDestroy() {
+            clearTimeout(mapsGLDestroyTimer);
+            mapsGLDestroyTimer = setTimeout(() => destroyMapsGLController('inactive for 3 minutes'), 3 * 60 * 1000);
+        }
+        function ensureMap3D() {
+            clearTimeout(map3DDestroyTimer);
+            if (map3D) return map3D;
+            map3D = new mapboxgl.Map({
+                container: 'map-3d',
+                style: 'mapbox://styles/handry-outlook/cm9457ty1009d01sk37353ux2',
+                center: [-4.5, 53.5], zoom: 5, projection: 'globe', accessToken: mapboxAccessToken
             });
-            map3D.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 12 });
-            map3D.resize(); // Ensure 3D map is sized correctly
-        });
-        map.invalidateSize(); // Ensure 2D map is sized correctly
+            map3D.on('load', () => {
+                if (!map3D || map3D.getSource('mapbox-dem')) return;
+                map3D.addSource('mapbox-dem', { type: 'raster-dem', url: 'mapbox://mapbox.terrain-rgb', tileSize: 512, maxzoom: 14 });
+                map3D.setTerrain({ source: 'mapbox-dem', exaggeration: 12 });
+                map3D.resize();
+            });
+            console.log('Mapbox 3D map created on demand');
+            return map3D;
+        }
+        function destroyMap3D(reason = 'idle') {
+            clearTimeout(map3DDestroyTimer);
+            if (!map3D) return;
+            try { map3D.remove(); } catch (e) { console.warn('Mapbox teardown warning:', e); }
+            map3D = null;
+            strikeLayer3D = []; nowcastLayer3D = []; numberOverlay3D = []; drawnItems3D = [];
+            console.info(`Mapbox 3D map released: ${reason}`);
+        }
+        function scheduleMap3DDestroy() {
+            clearTimeout(map3DDestroyTimer);
+            map3DDestroyTimer = setTimeout(() => { if (!is3DMode) destroyMap3D('2D mode for 3 minutes'); }, 3 * 60 * 1000);
+        }
+        map.invalidateSize();
+
+        
+        // RadarLoop one-shot initial weather render fix:
+        // A real drag causes Leaflet to finish its layout and then requests the
+        // current weather frame. Reproduce that sequence once after startup,
+        // without repeated redraws or repeated frame resets (which caused flashing).
+        let initialWeatherRenderRequested = false;
+
+        function requestInitialWeatherRender() {
+            if (!map || initialWeatherRenderRequested) return;
+            initialWeatherRenderRequested = true;
+
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    try {
+                        map.invalidateSize({ pan: false, animate: false });
+                    } catch (error) {
+                        console.warn('Initial map layout stabilisation skipped:', error);
+                    }
+
+                    // Run only one weather update after the final map dimensions exist.
+                    // Resetting the frame key is necessary because an earlier startup
+                    // attempt may have been cached while the map had incomplete bounds.
+                    window.setTimeout(() => {
+                        try {
+                            if (typeof getCurrentSliderTimestamp === 'function' &&
+                                typeof scheduleWeatherLayerUpdate === 'function') {
+                                if (typeof resetWeatherFrameKey === 'function') {
+                                    resetWeatherFrameKey();
+                                }
+                                scheduleWeatherLayerUpdate(
+                                    getCurrentSliderTimestamp(),
+                                    'initial-layout-ready'
+                                );
+                            } else {
+                                // Fallback mirrors the event produced by the first drag.
+                                map.fire('moveend');
+                            }
+                        } catch (error) {
+                            console.warn('Initial weather render request skipped:', error);
+                            map.fire('moveend');
+                        }
+                    }, 0);
+                });
+            });
+        }
+
+        // Window load ensures the large application script, controls, and async
+        // layer setup are ready before the single initial weather request.
+        if (document.readyState === 'complete') {
+            window.setTimeout(requestInitialWeatherRender, 0);
+        } else {
+            window.addEventListener('load', requestInitialWeatherRender, { once: true });
+        }
 
         const timeSliderContainer = document.querySelector('.time-slider-container');
         const logo = document.createElement('img');
@@ -6198,6 +6287,7 @@
             if (!enabled) {
                 // Remove MapsGL layers if controller exists
                 if (mapsglController) {
+                    if (layerKey === 'nowcast' || layerKey === 'lightning') scheduleMapsGLDestroy();
                     if (layerKey === 'nowcast') {
                         ['hail-severe-probability', 'hail-severe-probability-max', 'hail-size', 'hail-size-max', 'hail-threats', 'lightning-threats'].forEach(id => mapsglController.removeWeatherLayer(id));
                     }
@@ -6546,6 +6636,7 @@
             prune(weatherTileUrlCache, 320);
             prune(weatherTileNegativeCache, 240);
             prune(weatherTileInFlight, WEATHER_TILE_INFLIGHT_LIMIT);
+            prune(radarValidationCache, isMobileWeatherDevice() ? 160 : 320);
         }
 
 
@@ -8985,7 +9076,7 @@ function getWindyAccumulationRenderScale() { const size = map.getSize(); return 
         // encoded->mm/h LUT, controlled tile concurrency, worker fallback, and throttled progress UI.
         let windyAccumulationWorker = null;
         let windyAccumulationLastProgressUiUpdate = 0;
-        const WINDY_ACCUMULATION_DECODED_TILE_CACHE_MAX = 160;
+        const WINDY_ACCUMULATION_DECODED_TILE_CACHE_MAX = isMobileWeatherDevice() ? 64 : 128;
 
         function maybeSetWindyAccumulationProgress(percent, text = '', force = false) {
             const now = performance.now();
@@ -9930,7 +10021,7 @@ async function calculateWindyRadarAccumulationMap() {
             if (newType !== 'xweather-lightning' && window.xWeatherLayers['xweather-lightning']) { map.removeLayer(window.xWeatherLayers['xweather-lightning']); window.xWeatherLayers['xweather-lightning'] = null; }
             if (mapsglController) ['lightning-all', 'lightning-density', 'lightning-density-accum'].forEach(id => { if (config?.type !== 'mapsgl' || config.id !== id) mapsglController.removeWeatherLayer(id); });
             if (config && config.type === 'custom-live-windy-lightning') { startWindyLiveLightning(); updateLegend(); return; }
-            if (config && config.type === 'mapsgl') { const currentOpacity = parseFloat(document.getElementById('lightningOpacity')?.value || 0.8); mapsglController.addWeatherLayer(config.id, { opacity: currentOpacity }); updateLegend(); return; }
+            if (config && config.type === 'mapsgl') { ensureMapsGLController(); const currentOpacity = parseFloat(document.getElementById('lightningOpacity')?.value || 0.8); mapsglController.addWeatherLayer(config.id, { opacity: currentOpacity }); updateLegend(); return; }
             plotLayerIfNecessary(newType, lightningOptions, getCurrentSliderTimestamp(), 'lightning');
             updateLegend();
         }
@@ -10020,6 +10111,7 @@ async function calculateWindyRadarAccumulationMap() {
 
             // 4. Handle MapsGL Selection
             if (config && config.type === 'mapsgl') {
+                ensureMapsGLController();
                 clearNowcastLayers(); // Ensure raster nowcasts are gone
 
                 // --- ADDED: Get current opacity from the nowcast slider ---
@@ -10910,7 +11002,8 @@ async function calculateWindyRadarAccumulationMap() {
             map.getContainer().style.opacity = '1';
             map.getContainer().style.height = 'auto';
             map.getContainer().style.overflow = 'visible';
-            map3D.getContainer().style.opacity = '0';
+            if (map3D) map3D.getContainer().style.opacity = '0';
+            scheduleMap3DDestroy();
             clear3DPolygons();
             const button = document.querySelector('#top-bar button[onclick="toggle3DMode()"]') || document.querySelector('#control-panel button[onclick="toggle3DMode()"]');
             if (button) {
@@ -11519,6 +11612,7 @@ async function calculateWindyRadarAccumulationMap() {
             }
 
             if (is3DMode) {
+                ensureMap3D();
                 map3D.jumpTo({ center: [-4.5, 53.5], zoom: 5 });
                 map3D.resize();
 
@@ -11541,6 +11635,7 @@ async function calculateWindyRadarAccumulationMap() {
                     map3D.once('style.load', setup3DEnvironment);
                 }
             } else {
+                scheduleMap3DDestroy();
                 map.invalidateSize();
                 map.addLayer(drawnItems);
                 clear3DPolygons();
@@ -12257,8 +12352,17 @@ async function calculateWindyRadarAccumulationMap() {
             toggleAutoLatest();
         }
 
-        function setRefreshInterval() {
-            if (refreshTimer) clearInterval(refreshTimer);
+        function setRefreshInterval({ immediate = true } = {}) {
+            if (refreshTimer) {
+                clearInterval(refreshTimer);
+                refreshTimer = null;
+            }
+
+            // The refresh interval controls subsequent refreshes only. Always request
+            // lightning immediately when the control is initialised or changed, so a
+            // 30-second interval never creates a 30-second blank map on first load.
+            if (immediate) fetchData();
+
             const interval = parseFloat(document.getElementById('refresh-interval').value);
             if (interval > 0) {
                 refreshTimer = setInterval(fetchData, interval * 60 * 1000);
@@ -12341,97 +12445,114 @@ async function calculateWindyRadarAccumulationMap() {
             pendingFileType = null;
         }
 
+        let lightningFetchInFlight = null;
+        let lightningArchiveCache = null;
+
+        function mergeAndRenderLightning(incomingStrikes) {
+            if (!Array.isArray(incomingStrikes) || !incomingStrikes.length) return;
+
+            const merged = [...strikeData, ...incomingStrikes];
+            const seen = new Set();
+            strikeData = merged.filter(s => {
+                if (!s || !s.strike_time || !Array.isArray(s.coordinates)) return false;
+                const key = `${s.strike_time}_${s.coordinates[0]}_${s.coordinates[1]}`;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                if (!(s.time instanceof Date)) s.time = new Date(s.strike_time);
+                return !isNaN(s.time);
+            });
+
+            lastUpdateTime = new Date();
+            document.getElementById('last-update').innerText =
+                `Last update: ${lastUpdateTime.toLocaleString()}`;
+
+            // Force the slider to the live/right-hand edge only for the first plot.
+            // Otherwise an old persisted/default slider position can filter out the
+            // newest strikes and make the first refresh appear to be the cause.
+            if (!ukLightningInitialSyncComplete && lastFilterMode === 'slider') {
+                const slider = document.getElementById('history-slider');
+                const maxHours = parseInt(document.getElementById('max-history-hours').value, 10) || 6;
+                slider.max = maxHours * 60;
+                slider.value = slider.max;
+            }
+
+            if (lastFilterMode === 'slider') updateHistory();
+            else if (!(lastFilterMode === 'inputs' && customFilterStart && customFilterEnd)) applyFilter();
+            syncUkLightningLayerAfterDataLoad();
+        }
+
         async function fetchData() {
-            const githubUrl1 = 'https://raw.githubusercontent.com/HandryOutlook/lightning_data_new/refs/heads/main/lightning_data.json';
-            const githubUrl2 = 'https://raw.githubusercontent.com/HandryOutlook/lightning_data_new/refs/heads/main/lightning_data_2025_autumn.json';
-            const githubUrl3 = 'https://raw.githubusercontent.com/HandryOutlook/lightning_data_new_2026/refs/heads/main/lightning_data_2026_summer_part1.json';
-            const githubUrl4 = 'https://raw.githubusercontent.com/HandryOutlook/lightning_data_new_2026/refs/heads/main/lightning_data_2026_summer.json';
+            // Coalesce interval/manual calls so a slow request cannot create multiple
+            // competing startup fetches.
+            if (lightningFetchInFlight) return lightningFetchInFlight;
+
             const metOfficeBaseUrl = 'https://data.consumer-digital.api.metoffice.gov.uk/v1/lightning';
+            const archiveUrls = [
+                'https://raw.githubusercontent.com/HandryOutlook/lightning_data_new/refs/heads/main/lightning_data.json',
+                'https://raw.githubusercontent.com/HandryOutlook/lightning_data_new/refs/heads/main/lightning_data_2025_autumn.json',
+                'https://raw.githubusercontent.com/HandryOutlook/lightning_data_new_2026/refs/heads/main/lightning_data_2026_summer_part1.json',
+                'https://raw.githubusercontent.com/HandryOutlook/lightning_data_new_2026/refs/heads/main/lightning_data_2026_summer.json'
+            ];
 
-            try {
-                // Fetch the main Met Office URL to get chunks and strikes
-                const mainResponse = await fetch(metOfficeBaseUrl).then(res => res.json()).catch(() => null);
-                if (!mainResponse) {
-                    console.error('Failed to fetch main Met Office URL');
-                    throw new Error('No data from main Met Office URL');
-                }
+            lightningFetchInFlight = (async () => {
+                try {
+                    // LIVE DATA FIRST. Do not make the initial plot wait for the large
+                    // GitHub archives or for every Met Office chunk to finish.
+                    const mainResponse = await fetch(`${metOfficeBaseUrl}?_=${Date.now()}`, {
+                        cache: 'no-store'
+                    }).then(res => {
+                        if (!res.ok) throw new Error(`Met Office lightning HTTP ${res.status}`);
+                        return res.json();
+                    });
 
-                // Extract strikes from the base URL
-                const baseStrikes = mainResponse?.lightning_strikes?.map(s => ({
-                    ...s,
-                    time: new Date(s.strike_time)
-                })) || [];
-
-                // Extract chunks and generate chunk URLs
-                const chunkUrls = mainResponse?.chunks?.map(chunk =>
-                    `${metOfficeBaseUrl}?last-minutes=1&chunk=${chunk.chunk}`
-                ) || [];
-                if (!mainResponse.chunks) {
-                    console.warn('No chunks data found in main Met Office URL response');
-                }
-
-                // Fetch both GitHub URLs and all chunk URLs in parallel
-                const fetchPromises = [
-                    fetch(githubUrl1).then(res => res.json()).catch(() => null),
-                    fetch(githubUrl2).then(res => res.json()).catch(() => null),
-                    fetch(githubUrl3).then(res => res.json()).catch(() => null),
-                    fetch(githubUrl4).then(res => res.json()).catch(() => null),
-                    ...chunkUrls.map(url => fetch(url).then(res => res.json()).catch(() => null))
-                ];
-
-                const responses = await Promise.all(fetchPromises);
-
-                // Process GitHub strikes from both URLs
-                const githubStrikes1 = responses[0]?.lightning_strikes?.map(s => ({
-                    ...s,
-                    time: new Date(s.strike_time)
-                })) || [];
-                const githubStrikes2 = responses[1]?.lightning_strikes?.map(s => ({
-                    ...s,
-                    time: new Date(s.strike_time)
-                })) || [];
-
-                // Combine strikes from all Met Office chunk responses (skip the first two responses, which are GitHub)
-                const chunkStrikes = responses.slice(2).flatMap(response =>
-                    response?.lightning_strikes?.map(s => ({
+                    const normalise = response => response?.lightning_strikes?.map(s => ({
                         ...s,
                         time: new Date(s.strike_time)
-                    })) || []
-                );
+                    })) || [];
 
-                // Combine all strikes (both GitHub URLs, base URL, and chunk URLs)
-                const allStrikes = [...githubStrikes1, ...githubStrikes2, ...baseStrikes, ...chunkStrikes];
+                    // First paint from the base response, normally within one request.
+                    mergeAndRenderLightning(normalise(mainResponse));
 
-                // Deduplicate strikes
-                const seen = new Map();
-                strikeData = allStrikes.filter(s => {
-                    const key = `${s.strike_time}_${s.coordinates[0]}_${s.coordinates[1]}`;
-                    if (!seen.has(key)) {
-                        seen.set(key, true);
-                        return true;
+                    // Plot each chunk as soon as that individual request completes.
+                    // Promise.allSettled waits only for cleanup, not for rendering.
+                    const chunkJobs = (mainResponse?.chunks || []).map(chunk =>
+                        fetch(`${metOfficeBaseUrl}?last-minutes=1&chunk=${encodeURIComponent(chunk.chunk)}&_=${Date.now()}`, {
+                            cache: 'no-store'
+                        })
+                            .then(res => res.ok ? res.json() : null)
+                            .then(response => mergeAndRenderLightning(normalise(response)))
+                            .catch(error => console.warn('Lightning chunk skipped:', error))
+                    );
+
+                    // Archives are useful for history, but they are never on the critical
+                    // path for the initial live strike display. Load them once in parallel.
+                    if (!lightningArchiveCache) {
+                        lightningArchiveCache = Promise.allSettled(
+                            archiveUrls.map(url => fetch(url).then(res => res.ok ? res.json() : null))
+                        ).then(results => results.flatMap(result =>
+                            result.status === 'fulfilled' ? normalise(result.value) : []
+                        ));
                     }
-                    return false;
-                });
+                    lightningArchiveCache
+                        .then(archiveStrikes => mergeAndRenderLightning(archiveStrikes))
+                        .catch(error => console.warn('Lightning archive load skipped:', error));
 
-                // Update last update time in the UI
-                lastUpdateTime = new Date();
-                document.getElementById('last-update').innerText = `Last update: ${lastUpdateTime.toLocaleString()}`;
+                    await Promise.allSettled(chunkJobs);
+                } catch (error) {
+                    // Keep already-rendered/archive data on screen if the live endpoint
+                    // briefly fails; never replace it with an empty layer.
+                    console.error('Error fetching live lightning data:', error);
+                    if (lightningArchiveCache) {
+                        lightningArchiveCache
+                            .then(archiveStrikes => mergeAndRenderLightning(archiveStrikes))
+                            .catch(() => {});
+                    }
+                } finally {
+                    lightningFetchInFlight = null;
+                }
+            })();
 
-                // Apply filters based on the last filter mode
-                if (lastFilterMode === 'slider') {
-                    updateHistory(); // Calls updateNowcast()
-                } else if (!(lastFilterMode === 'inputs' && customFilterStart && customFilterEnd)) {
-                    applyFilter(); // Calls updateNowcast()
-                }
-            } catch (error) {
-                console.error('Error fetching lightning data:', error);
-                strikeData = [];
-                if (lastFilterMode === 'slider') {
-                    updateHistory();
-                } else if (!(lastFilterMode === 'inputs' && customFilterStart && customFilterEnd)) {
-                    applyFilter();
-                }
-            }
+            return lightningFetchInFlight;
         }
 
         function getColorFromAge(ageFraction) {
@@ -13288,6 +13409,38 @@ async function calculateWindyRadarAccumulationMap() {
             updateLegend();
         }
 
+        // Ensure the default UK lightning layer is rendered after its asynchronous
+        // data fetch completes. At startup the empty LayerGroup can be added before
+        // strikeData exists, so merely having the toggle checked is not sufficient.
+        let ukLightningInitialSyncComplete = false;
+        function syncUkLightningLayerAfterDataLoad() {
+            const toggle = document.getElementById('lightning-layer-toggle');
+            if (!toggle || !toggle.checked || !map) return;
+
+            requestAnimationFrame(() => {
+                if (!is3DMode && !map.hasLayer(strikeLayer)) {
+                    map.addLayer(strikeLayer);
+                }
+
+                // Re-run the active filter now that strikeData is populated. This
+                // creates the markers immediately rather than waiting for a drag.
+                if (lastFilterMode === 'slider' && typeof updateHistory === 'function') {
+                    updateHistory();
+                } else if (typeof applyFilter === 'function') {
+                    applyFilter();
+                }
+
+                if (is3DMode && typeof update3DView === 'function') {
+                    update3DView();
+                } else {
+                    updateZIndex();
+                }
+
+                ukLightningInitialSyncComplete = true;
+                updateLegend();
+            });
+        }
+
         function toggleKMLLayer() {
             const toggle = document.getElementById('kml-layer-toggle').checked;
             if (is3DMode) {
@@ -13717,6 +13870,7 @@ async function calculateWindyRadarAccumulationMap() {
         function playAnimation() {
             if (isPlaying) return;
             isPlaying = true;
+            window.__radarLoopAnimationStartedAt = Date.now();
             const slider = document.getElementById('history-slider');
             let currentValue = parseFloat(slider.value);
             const maxValue = parseFloat(slider.max);
@@ -15220,8 +15374,15 @@ async function calculateWindyRadarAccumulationMap() {
         });
         initializeDrawControl();
         initializeDragAndDrop();
-        fetchData();
-        setRefreshInterval();
+        // Start live lightning as soon as this script reaches application startup.
+        // fetchData() coalesces this with any DOM/load fallback below.
+        setRefreshInterval({ immediate: true });
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', fetchData, { once: true });
+        } else {
+            queueMicrotask(fetchData);
+        }
+        window.addEventListener('load', fetchData, { once: true });
         document.addEventListener('DOMContentLoaded', () => {
             // Only add title group on desktop (screen width ≥769px)
             if (window.innerWidth >= 769) {
@@ -15257,8 +15418,77 @@ async function calculateWindyRadarAccumulationMap() {
                 }
             });
         });
-        referenceLayer.addTo(map);
+        // Keep startup state synchronised without removing/re-adding the layer.
+        const coastlineToggleAtReady = document.getElementById('overlay-toggle');
+        if (coastlineToggleAtReady?.checked && !map.hasLayer(referenceLayer)) {
+            referenceLayer.addTo(map);
+        }
     </script>
+<script>
+/* RadarLoop iOS memory-budget guardrails. Kept separate so the original application remains auditable. */
+(() => {
+  'use strict';
+  const mobile = window.RADARLOOP_DEVICE_PROFILE?.mobile ?? /iPhone|iPad|iPod|Android|Mobile/i.test(navigator.userAgent);
+  const MAX_MOBILE_ANIMATED_LAYERS = 3;
+  const ANIMATION_WATCHDOG_MS = mobile ? 20 * 60 * 1000 : 30 * 60 * 1000;
+  const animatedToggleIds = ['radarToggle','satelliteToggle','isobarToggle','windToggle','lightningToggle','tropicalStormsToggle','rotationToggle','surfaceFrontToggle','observationToggle','nowcastToggle','warningToggle'];
+
+  function enabledAnimatedLayerCount() {
+    return animatedToggleIds.reduce((n,id) => n + (document.getElementById(id)?.checked ? 1 : 0), 0);
+  }
+  animatedToggleIds.forEach(id => document.getElementById(id)?.addEventListener('change', e => {
+    if (!mobile || !e.target.checked || enabledAnimatedLayerCount() <= MAX_MOBILE_ANIMATED_LAYERS) return;
+    e.target.checked = false;
+    e.target.dispatchEvent(new Event('change'));
+    alert(`For stability on this device, RadarLoop allows up to ${MAX_MOBILE_ANIMATED_LAYERS} animated weather layers at once.`);
+  }));
+
+  const watchdog = setInterval(() => {
+    if (typeof isPlaying !== 'undefined' && isPlaying && window.__radarLoopAnimationStartedAt && Date.now() - window.__radarLoopAnimationStartedAt >= ANIMATION_WATCHDOG_MS) {
+      if (typeof stopAnimation === 'function') stopAnimation();
+      window.__radarLoopAnimationStartedAt = 0;
+      alert('RadarLoop paused the long-running animation to release memory. Press Play to continue.');
+    }
+  }, 30000);
+
+  function releaseDetachedCanvases() {
+    document.querySelectorAll('canvas').forEach(canvas => {
+      if (!canvas.isConnected && (canvas.width || canvas.height)) { canvas.width = 0; canvas.height = 0; }
+    });
+  }
+  function terminateAccumulationWorker() {
+    try { if (typeof windyAccumulationWorker !== 'undefined' && windyAccumulationWorker) windyAccumulationWorker.terminate(); } catch (_) {}
+    try { windyAccumulationWorker = null; } catch (_) {}
+  }
+  function releaseHeavyResources(reason, final = false) {
+    try { if (typeof stopAnimation === 'function' && typeof isPlaying !== 'undefined' && isPlaying) stopAnimation(); } catch (_) {}
+    try { if (typeof WEATHER_PERF !== 'undefined' && WEATHER_PERF.abortController) WEATHER_PERF.abortController.abort(); } catch (_) {}
+    try { if (typeof WEATHER_PERF !== 'undefined') { WEATHER_PERF.queue.length = 0; WEATHER_PERF.managedGridUpdateQueue.clear(); } } catch (_) {}
+    try { if (typeof pruneWeatherTileCaches === 'function') pruneWeatherTileCaches(); } catch (_) {}
+    try { if (typeof stopWindyLiveLightning === 'function' && document.hidden) stopWindyLiveLightning(false); } catch (_) {}
+    try { if (typeof is3DMode !== 'undefined' && !is3DMode && typeof destroyMap3D === 'function') destroyMap3D(reason); } catch (_) {}
+    try { if (typeof destroyMapsGLController === 'function' && document.hidden) destroyMapsGLController(reason); } catch (_) {}
+    if (final) terminateAccumulationWorker();
+    releaseDetachedCanvases();
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) releaseHeavyResources('page hidden', false);
+  }, { passive: true });
+  window.addEventListener('pagehide', () => {
+    clearInterval(watchdog);
+    try { if (typeof destroyMap3D === 'function') destroyMap3D('pagehide'); } catch (_) {}
+    try { if (typeof destroyMapsGLController === 'function') destroyMapsGLController('pagehide'); } catch (_) {}
+    releaseHeavyResources('pagehide', true);
+  }, { capture: true });
+  window.addEventListener('beforeunload', () => releaseHeavyResources('beforeunload', true), { capture: true });
+
+  window.RadarLoopMemoryBudget = Object.freeze({
+    mobile, maxAnimatedLayers: MAX_MOBILE_ANIMATED_LAYERS, animationWatchdogMs: ANIMATION_WATCHDOG_MS,
+    cleanup: () => releaseHeavyResources('manual cleanup', false)
+  });
+})();
+</script>
 <script>
 (() => {
   'use strict';
@@ -15285,10 +15515,65 @@ async function calculateWindyRadarAccumulationMap() {
   if(typeof map!=='undefined'&&map?.on){map.on('movestart zoomstart dragstart',start);map.on('moveend zoomend dragend',end)}
   let resume=false;
   document.addEventListener('visibilitychange',()=>{store.set({visible:!document.hidden});if(document.hidden){resume=typeof isPlaying!=='undefined'&&Boolean(isPlaying);if(resume&&typeof stopAnimation==='function')stopAnimation()}else if(resume&&typeof playAnimation==='function'){resume=false;playAnimation()}},{passive:true});
-  if(window.RADARLOOP_DEVICE_PROFILE.mobile){const el=document.getElementById('refresh-interval');if(el&&el.value==='0.167')el.value='0.5';if(typeof setRefreshInterval==='function')setRefreshInterval()}
+  if(window.RADARLOOP_DEVICE_PROFILE.mobile){const el=document.getElementById('refresh-interval');if(el&&el.value==='0.167')el.value='0.5';if(typeof setRefreshInterval==='function')setRefreshInterval({immediate:false})}
   const idle=window.requestIdleCallback||(fn=>setTimeout(()=>fn({timeRemaining:()=>8}),250));
   setInterval(()=>idle(()=>{try{if(typeof pruneWeatherTileCaches==='function')pruneWeatherTileCaches()}catch(_){}try{document.querySelectorAll('canvas').forEach(c=>{if(!c.isConnected&&c.width*c.height>0){c.width=0;c.height=0}})}catch(_){}}),120000);
 })();
 </script>
+
+<script id="uk-lightning-independent-startup-bootstrap">
+/*
+ * Independent UK-lightning startup bootstrap.
+ *
+ * This deliberately lives in its own script element. If any unrelated statement in
+ * RadarLoop's very large main script throws before its normal bottom-of-file startup
+ * calls are reached, browser event handlers such as the Auto-Refresh dropdown may
+ * still work, but the original initial fetch is never invoked. That exactly produces
+ * the symptom where changing Auto-Refresh suddenly starts plotting.
+ */
+(() => {
+    'use strict';
+
+    let started = false;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 80; // 20 seconds at 250 ms; normally succeeds immediately.
+
+    function startUkLightningImmediately() {
+        attempts += 1;
+
+        if (typeof window.fetchData !== 'function') {
+            if (attempts < MAX_ATTEMPTS) {
+                window.setTimeout(startUkLightningImmediately, 250);
+            } else {
+                console.error('UK lightning startup failed: fetchData was not initialised.');
+            }
+            return;
+        }
+
+        // fetchData contains its own in-flight coalescing, so repeated browser lifecycle
+        // events cannot create competing network requests.
+        if (!started) {
+            started = true;
+            Promise.resolve(window.fetchData()).catch(error => {
+                started = false;
+                console.error('Immediate UK lightning startup request failed:', error);
+            });
+        }
+    }
+
+    // A zero-delay task runs after the current parser/script task, without waiting for
+    // the selected Auto-Refresh interval or for the user to touch the control.
+    window.setTimeout(startUkLightningImmediately, 0);
+
+    // These are resilience fallbacks for slow devices and unusual script ordering.
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', startUkLightningImmediately, { once: true });
+    } else {
+        startUkLightningImmediately();
+    }
+    window.addEventListener('load', startUkLightningImmediately, { once: true });
+})();
+</script>
+
 </body>
 </html>
