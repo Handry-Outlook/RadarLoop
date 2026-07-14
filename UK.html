@@ -5103,14 +5103,14 @@
             'fcst-surface-fronts-isolines': {
                 url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-surface-fronts-isolines/${iso}/${iso}/{z}/{x}/{y}.png',
                 interval: 60 * 60 * 1000, // Hourly update, for example
-                type: 'vector-tile', // Typically vector tiles for lines/contours
+                type: 'tile-layer', // Typically vector tiles for lines/contours
                 bounds: null,
                 attribution: 'dtn'
             },
             'fsurface-analysis': {
                 url: 'https://maps.aerisapi.com/wgE96YE3scTQLKjnqiMsv_1XwHqbCjiTqtzWi8txyN4JtM0ezVNuEfaDXQdkjq/fsurface-analysis/{z}/{x}/{y}/${iso2}_${iso2}.webp',
                 interval: 5 * 60 * 1000,
-                type: 'vector-tile',
+                type: 'tile-layer',
                 bounds: null,
                 attribution: 'X weather' //range 7 days
             },
@@ -5656,28 +5656,28 @@
             'pressure_two': {
                 url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-manta-mean-sea-level-pressure-isolines/${iso}/${iso}/{z}/{x}/{y}.png',
                 interval: 60 * 60 * 1000, // Hourly update, for example
-                type: 'vector-tile', // Typically vector tiles for lines/contours
+                type: 'tile-layer', // Typically vector tiles for lines/contours
                 bounds: null,
                 attribution: 'dtn'
             },
             'pressure_four': {
                 url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-manta-mean-sea-level-pressure-4mb-isolines/${iso}/${iso}/{z}/{x}/{y}.png',
                 interval: 60 * 60 * 1000, // 12-hourly update
-                type: 'vector-tile',
+                type: 'tile-layer',
                 bounds: null,
                 attribution: 'dtn'
             },
             'fcst-geopotential-height-500hpa-isolines': {
                 url: 'https://tiles.meteoguard.dtn.com/tiles/fcst-geopotential-height-500hpa-isolines-dk-lg/${iso}/${iso}/{z}/{x}/{y}.png',
                 interval: 5 * 60 * 1000, // 12-hourly update
-                type: 'vector-tile',
+                type: 'tile-layer',
                 bounds: null,
                 attribution: 'dtn'
             },
             'fpressure-msl-isobars': {
                 url: 'https://maps.aerisapi.com/wgE96YE3scTQLKjnqiMsv_1XwHqbCjiTqtzWi8txyN4JtM0ezVNuEfaDXQdkjq/fpressure-msl-isobars/{z}/{x}/{y}/${iso2}_${iso2}.webp',
                 interval: 30 * 60 * 1000,
-                type: 'vector-tile',
+                type: 'tile-layer',
                 bounds: null,
                 attribution: 'X weather' //range 7 days
             },
@@ -7147,10 +7147,10 @@
                 } else if (layerOptions.type === 'vector-tile') {
                     try {
                         const defaultStyle = { fill: true, opacity: currentOpacity, fillOpacity: currentOpacity, weight: 0, color: 'inherit' };
-                        let vectorStyles = (layerKey === 'isobar' || layerKey === 'wind') ?
+                        let vectorStyles = layerKey === 'wind' ?
                             {
-                                'default': { stroke: true, color: layerKey === 'isobar' ? '#FFFFFF' : '#88E0FF', weight: 2, opacity: currentOpacity, fill: false },
-                                'features': { stroke: true, color: layerKey === 'isobar' ? '#FFFFFF' : '#88E0FF', weight: 2, opacity: currentOpacity, fill: false }
+                                'default': { stroke: true, color: '#88E0FF', weight: 2, opacity: currentOpacity, fill: false },
+                                'features': { stroke: true, color: '#88E0FF', weight: 2, opacity: currentOpacity, fill: false }
                             } :
                             { 'default': defaultStyle, 'features': defaultStyle };
 
@@ -8100,12 +8100,12 @@
             const layerList = [
                 { layer: radarLayer, opacity: opacities.radar, color: '#FF8C00', key: 'radar' },
                 { layer: satelliteLayer, opacity: opacities.satellite, color: null, key: 'satellite' },
-                { layer: isobarLayer, opacity: opacities.isobar, color: '#FFFFFF', key: 'isobar' },
+                { layer: isobarLayer, opacity: opacities.isobar, color: null, key: 'isobar' },
                 { layer: windLayer, opacity: opacities.wind, color: '#88E0FF', key: 'wind' },
                 { layer: lightningLayer, opacity: opacities.lightning, color: '#FFFF00', key: 'lightning' },
                 { layer: tropicalStormsLayer, opacity: opacities.tropicalStorms, color: '#FF00FF', key: 'tropicalStorms' },
                 { layer: rotationLayer, opacity: opacities.rotation, color: '#00FFFF', key: 'rotation' },
-                { layer: surfaceFrontLayer, opacity: opacities.surfaceFront, color: '#FFFFFF', key: 'surfaceFront' },
+                { layer: surfaceFrontLayer, opacity: opacities.surfaceFront, color: null, key: 'surfaceFront' },
                 { layer: observationLayer, opacity: opacities.observation, color: '#00FF00', key: 'observation' },
                 { layer: NowcastLayer, opacity: opacities.nowcast, color: '#FFA500', key: 'nowcast' },
                 { layer: warningLayer, opacity: opacities.warning, color: '#FF0000', key: 'warning' }
