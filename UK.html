@@ -6859,6 +6859,13 @@
 
             try {
 
+                // Renderer/projection selection is based on the actual payload.
+                // PNG/JPEG/WebP endpoints are image tiles even when legacy configuration calls them vector tiles.
+                const isImageTilePayload = /\.(?:png|webp|jpe?g)(?:\?|$)/i.test(finalUrl);
+                // Only DTN satellite products use flipped-Y TMS. Every other tiled product uses normal XYZ.
+                const useTmsProjection = layerKey === 'satellite' &&
+                    /^https:\/\/tiles\.meteoguard\.dtn\.com\//i.test(finalUrl);
+
                 if (layerOptions.type === 'feature-layer') {
                     newLayer = L.esri.featureLayer({
                         url: finalUrl,
@@ -7120,13 +7127,13 @@
                         className: 'seamless-layer',
                 weatherManaged: true
                     });
-                } else if (layerOptions.type === 'raster-tile') {
+                } else if (layerOptions.type === 'raster-tile' || isImageTilePayload) {
                     const tileOptions = {
                         ...efficientTileOptions,
                         opacity: currentOpacity,
                         zIndex: zIndex,
                         pane: 'overlayPane',
-                        tms: layerOptions.tms === true,
+                        tms: useTmsProjection,
                         tileSize: 256,
                         crossOrigin: true,
                         className: 'seamless-layer',
@@ -7154,9 +7161,8 @@
                             } :
                             { 'default': defaultStyle, 'features': defaultStyle };
 
-                        // --- UPDATE FOR TMS SUPPORT ---
-                        // Check if this is the Europe forecast layer which needs TMS coordinates
-                        const isEuropeForecast = (layerType === 'radar-nowcast-forecast');
+                        // Non-image vector payloads use normal XYZ. A {-y} URL token, when present,
+                        // performs its own explicit Y inversion without enabling TMS globally.
 
                         newLayer = L.vectorGrid.protobuf(finalUrl, {
                             ...efficientTileOptions,
@@ -7166,14 +7172,14 @@
                 weatherManaged: true,
                             zIndex: zIndex,
                             pane: 'overlayPane',
-                            tms: isEuropeForecast // Apply TMS if it's the Europe forecast
+                            tms: false
                         });
                     } catch (error) {
-                        newLayer = L.tileLayer(finalUrl, { ...efficientTileOptions, opacity: currentOpacity, zIndex: zIndex, pane: 'overlayPane', tms: layerOptions.tms === true, tileSize: 256, className: 'seamless-layer',
+                        newLayer = L.tileLayer(finalUrl, { ...efficientTileOptions, opacity: currentOpacity, zIndex: zIndex, pane: 'overlayPane', tms: false, tileSize: 256, className: 'seamless-layer',
                 weatherManaged: true });
                     }
                 } else {
-                    newLayer = L.tileLayer(finalUrl, { ...efficientTileOptions, opacity: currentOpacity, zIndex: zIndex, pane: 'overlayPane', tms: true, tileSize: 256, className: 'seamless-layer',
+                    newLayer = L.tileLayer(finalUrl, { ...efficientTileOptions, opacity: currentOpacity, zIndex: zIndex, pane: 'overlayPane', tms: useTmsProjection, tileSize: 256, className: 'seamless-layer',
                 weatherManaged: true });
                 }
 
@@ -8098,17 +8104,17 @@
 
             // 2. Define standard Leaflet layers
             const layerList = [
-                { layer: radarLayer, opacity: opacities.radar, color: '#FF8C00', key: 'radar' },
-                { layer: satelliteLayer, opacity: opacities.satellite, color: null, key: 'satellite' },
-                { layer: isobarLayer, opacity: opacities.isobar, color: null, key: 'isobar' },
-                { layer: windLayer, opacity: opacities.wind, color: '#88E0FF', key: 'wind' },
-                { layer: lightningLayer, opacity: opacities.lightning, color: '#FFFF00', key: 'lightning' },
-                { layer: tropicalStormsLayer, opacity: opacities.tropicalStorms, color: '#FF00FF', key: 'tropicalStorms' },
-                { layer: rotationLayer, opacity: opacities.rotation, color: '#00FFFF', key: 'rotation' },
-                { layer: surfaceFrontLayer, opacity: opacities.surfaceFront, color: null, key: 'surfaceFront' },
-                { layer: observationLayer, opacity: opacities.observation, color: '#00FF00', key: 'observation' },
-                { layer: NowcastLayer, opacity: opacities.nowcast, color: '#FFA500', key: 'nowcast' },
-                { layer: warningLayer, opacity: opacities.warning, color: '#FF0000', key: 'warning' }
+                { layer: radarLayer, opacity: opacities.radar, key: 'radar' },
+                { layer: satelliteLayer, opacity: opacities.satellite, key: 'satellite' },
+                { layer: isobarLayer, opacity: opacities.isobar, key: 'isobar' },
+                { layer: windLayer, opacity: opacities.wind, key: 'wind' },
+                { layer: lightningLayer, opacity: opacities.lightning, key: 'lightning' },
+                { layer: tropicalStormsLayer, opacity: opacities.tropicalStorms, key: 'tropicalStorms' },
+                { layer: rotationLayer, opacity: opacities.rotation, key: 'rotation' },
+                { layer: surfaceFrontLayer, opacity: opacities.surfaceFront, key: 'surfaceFront' },
+                { layer: observationLayer, opacity: opacities.observation, key: 'observation' },
+                { layer: NowcastLayer, opacity: opacities.nowcast, key: 'nowcast' },
+                { layer: warningLayer, opacity: opacities.warning, key: 'warning' }
             ];
 
             // 3. Update Standard Leaflet Layers
@@ -8125,35 +8131,12 @@
                     layer.setOpacity(opacity);
                 }
 
-                // C. VECTOR LAYERS / GEOJSON (Warning/Nowcast Polygons)
-                if (layer.setStyle) {
-                    if (key === 'warning') {
-                        layer.setStyle((f) => {
-                            const colors = { 'Yellow': '#FFD700', 'Amber': '#FF8C00', 'Red': '#D32F2F' };
-                            return {
-                                fillColor: colors[f.properties.warninglevel] || '#FFD700',
-                                fillOpacity: opacity,
-                                opacity: opacity,
-                                weight: 2,
-                                color: '#222'
-                            };
-                        });
-                    } else if (color && typeof createVectorLayerStyles === 'function') {
-                        // IMPORTANT: You must re-run your style generator to inject the new opacity
-                        layer.setStyle(createVectorLayerStyles(opacity, color));
-                    } else {
-                        layer.setStyle({
-                            fillOpacity: opacity * 0.7,
-                            opacity: opacity
-                        });
-                    }
-                }
+                // C. Never replace or regenerate provider colours/styles here.
 
                 // D. RECURSIVE GROUP UPDATE (For Xweather/Aeris FeatureGroups)
                 if (layer.eachLayer) {
                     layer.eachLayer(sub => {
                         if (sub.setOpacity) sub.setOpacity(opacity);
-                        if (sub.setStyle) sub.setStyle({ fillOpacity: opacity * 0.7, opacity: opacity });
                         if (sub.getElement && sub.getElement()) sub.getElement().style.opacity = opacity;
                     });
                 }
