@@ -12335,20 +12335,36 @@ async function calculateWindyRadarAccumulationMap() {
             toggleAutoLatest();
         }
 
+        function refreshLiveDataAndWeatherLayers() {
+            // UK lightning and weather tiles use separate update pipelines. Previously,
+            // the auto-refresh timer only called fetchData(), so Windy radar remained on
+            // the frame that was selected when the page first loaded.
+            fetchData();
+
+            const slider = document.getElementById('history-slider');
+            const isAtLatest = !slider || Number(slider.value) >= Number(slider.max);
+            const isManualTimeFilterActive = lastFilterMode === 'inputs' && customFilterStart && customFilterEnd;
+
+            // Do not move a user away from a historical frame or a manual time filter.
+            // At "Now", Date.now() lets updateMapLayers choose the newest available
+            // provider frame. WEATHER_PERF.frameKeys prevents needless same-frame redraws.
+            if (isAtLatest && !isManualTimeFilterActive) {
+                triggerMapUpdate(Date.now());
+            }
+        }
+
         function setRefreshInterval({ immediate = true } = {}) {
             if (refreshTimer) {
                 clearInterval(refreshTimer);
                 refreshTimer = null;
             }
 
-            // The refresh interval controls subsequent refreshes only. Always request
-            // lightning immediately when the control is initialised or changed, so a
-            // 30-second interval never creates a 30-second blank map on first load.
-            if (immediate) fetchData();
+            // Refresh both live lightning and time-sensitive weather layers immediately.
+            if (immediate) refreshLiveDataAndWeatherLayers();
 
             const interval = parseFloat(document.getElementById('refresh-interval').value);
             if (interval > 0) {
-                refreshTimer = setInterval(fetchData, interval * 60 * 1000);
+                refreshTimer = setInterval(refreshLiveDataAndWeatherLayers, interval * 60 * 1000);
             }
         }
 
