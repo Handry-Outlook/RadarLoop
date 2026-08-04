@@ -6585,7 +6585,13 @@
 
                     for (let retry = 0; retry < 2; retry++) {
                         try {
-                            const response = await weatherPerfFetch(checkUrl, { method: 'GET', cache: 'force-cache' });
+                            const validationUrl = isWindyRadarLayer
+                                ? addWindyRadarCacheBuster(checkUrl, `${checkTime.getTime()}-${Date.now()}`)
+                                : checkUrl;
+                            const response = await weatherPerfFetch(validationUrl, {
+                                method: 'GET',
+                                cache: isWindyRadarLayer ? 'no-store' : 'force-cache'
+                            });
                             if (response.ok) {
                                 return tileUrl;
                             }
@@ -7392,7 +7398,15 @@
                 const layerConfig = def.options[layerType];
                 if (!layerConfig) continue;
                 const frameKey = getWeatherLayerFrameKey(def.key, layerType, layerConfig, targetTimestamp);
-                if (WEATHER_PERF.frameKeys.get(def.key) === frameKey) {
+                const isLiveWindyRadar = def.key === 'radar' && layerType === 'windy-radar' &&
+                    document.getElementById('history-slider') &&
+                    Number(document.getElementById('history-slider').value) >= Number(document.getElementById('history-slider').max) &&
+                    !(lastFilterMode === 'inputs' && customFilterStart && customFilterEnd);
+
+                // Do not suppress repeated checks for the current Windy frame. Windy may publish
+                // a timestamp after our first probe. Marking the requested frame as completed would
+                // otherwise keep an older fallback layer until the next five-minute boundary.
+                if (!isLiveWindyRadar && WEATHER_PERF.frameKeys.get(def.key) === frameKey) {
                     WEATHER_PERF.skippedSameFrameUpdates++;
                     continue;
                 }
@@ -8316,6 +8330,13 @@ const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
             return String(url).replace('/radar2/archive/composite/', '/radar2/composite/');
         }
 
+        function addWindyRadarCacheBuster(url, token = Date.now()) {
+            const value = String(url || '');
+            if (!value || value.includes('/radar2/archive/composite/')) return value;
+            const separator = value.includes('?') ? '&' : '?';
+            return `${value}${separator}_rlcb=${encodeURIComponent(String(token))}`;
+        }
+
         function isWindyRadarFrameArchiveOnly(url, nowMs = Date.now()) {
             const frameMs = getWindyRadarFrameMsFromUrl(url);
             if (!Number.isFinite(frameMs)) return false;
@@ -8469,7 +8490,12 @@ const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
                             done(new Error('Failed to load W radar archive tile'), tile);
                         }
                     };
-                    img.src = url;
+                    // Windy's current-frame URL can be retained by the browser/CDN even after
+                    // a newer radar frame is available. Use one layer-level refresh token for live
+                    // tiles, while leaving immutable archive frames cacheable.
+                    img.src = isArchiveAttempt
+                        ? url
+                        : addWindyRadarCacheBuster(url, this.options.windyRefreshToken || Date.now());
                 };
                 loadUrl(firstUrl, archiveFirst);
                 return tile;
@@ -8479,6 +8505,7 @@ const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
             return new WindyRadarArchiveAwareTileLayer(url, {
                 ...options,
                 crossOrigin: true,
+                windyRefreshToken: options?.windyRefreshToken || Date.now(),
                 // Always request Windy's highest native radar tiles, even when the map is zoomed out.
                 minNativeZoom: WINDY_RADAR_MAX_NATIVE_ZOOM,
                 maxNativeZoom: WINDY_RADAR_MAX_NATIVE_ZOOM
@@ -12335,6 +12362,7 @@ async function calculateWindyRadarAccumulationMap() {
             toggleAutoLatest();
         }
 
+        let lastWindyLiveRefreshFrameMs = null;
         function refreshLiveDataAndWeatherLayers() {
             // UK lightning and weather tiles use separate update pipelines. Previously,
             // the auto-refresh timer only called fetchData(), so Windy radar remained on
@@ -12349,7 +12377,25 @@ async function calculateWindyRadarAccumulationMap() {
             // At "Now", Date.now() lets updateMapLayers choose the newest available
             // provider frame. WEATHER_PERF.frameKeys prevents needless same-frame redraws.
             if (isAtLatest && !isManualTimeFilterActive) {
-                triggerMapUpdate(Date.now());
+                const nowMs = Date.now();
+                const processingDelayMs = 5 * 60 * 1000;
+                const frameIntervalMs = 5 * 60 * 1000;
+                const candidateFrameMs = Math.floor((nowMs - processingDelayMs) / frameIntervalMs) * frameIntervalMs;
+                const windySelected = document.getElementById('radarToggle')?.checked &&
+                    document.getElementById('radarLayer')?.value === 'windy-radar';
+
+                if (windySelected) {
+                    // Probe on every configured refresh while the plotted frame is older than the
+                    // newest candidate. This is necessary because the provider can publish a frame
+                    // several refresh cycles after its nominal timestamp.
+                    const plottedFrameMs = Number(lastRadarTimestamp);
+                    if (!Number.isFinite(plottedFrameMs) || plottedFrameMs < candidateFrameMs) {
+                        lastWindyLiveRefreshFrameMs = candidateFrameMs;
+                        clearWindyRadarRuntimeState('live-frame-reprobe');
+                        resetWeatherFrameKey('radar');
+                    }
+                }
+                triggerMapUpdate(nowMs);
             }
         }
 
