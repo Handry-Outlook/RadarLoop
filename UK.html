@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8">
     <title>RadarLoop</title>
-    <meta name="radarloop-build" content="2026.07-ios-memory-budget">
+    <meta name="radarloop-build" content="2026.08-global-high-resolution-turbo-default-safe">
     <link rel="icon" type="image/png"
         href="https://raw.githubusercontent.com/Handry-Outlook/Convective-Outlook/main/Handry_outlook_icon_pride_small.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -15,6 +15,7 @@
     <link href="https://cdn.aerisapi.com/sdk/js/mapsgl/latest/aerisweather.mapsgl.css" rel="stylesheet" />
     <script src="https://cdn.aerisapi.com/sdk/js/mapsgl/latest/aerisweather.mapsgl.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.js"></script>
     <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <script src="https://unpkg.com/leaflet.vectorgrid@1.3.0/dist/Leaflet.VectorGrid.min.js"></script>
@@ -2401,6 +2402,12 @@
                     #b83dba, #3e00e9, #2600ff);
         }
 
+        .opera-radar-layer {
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            pointer-events: none;
+            transition: opacity 0.18s linear;
+        }
         .windy-radar-crisp-tile,
         .leaflet-tile.windy-radar-crisp-tile,
         canvas.windy-radar-crisp-tile,
@@ -2520,6 +2527,51 @@
             .tooltip { display: none !important; }
             .leaflet-fade-anim .leaflet-tile { transition: none !important; }
         }
+    
+        .opera-radar-canvas-layer { position:absolute; pointer-events:none; image-rendering:auto; }
+        .leaflet-opera-radar-pane { pointer-events:none; }
+    
+        .satellite-fast-tile {
+            will-change: opacity;
+            backface-visibility: hidden;
+            transform: translateZ(0);
+        }
+    
+        .radar-palette-select-label {
+            display: block;
+            margin: 7px 0 4px;
+            font-size: 11px;
+            font-weight: 700;
+            color: #445;
+        }
+        body.dark-mode .radar-palette-select-label { color: #d6dfeb; }
+        .radar-palette-select {
+            width: 100%;
+            min-height: 34px;
+            margin-bottom: 7px;
+            padding: 6px 9px;
+            border: 1px solid rgba(70, 95, 125, .35);
+            border-radius: 7px;
+            background: #fff;
+            color: #1a2a44;
+            font-size: 12px;
+        }
+        body.dark-mode .radar-palette-select {
+            background: #182333;
+            color: #edf4ff;
+            border-color: rgba(180, 205, 235, .28);
+        }
+        .radar-palette-preview {
+            display: flex;
+            width: 100%;
+            height: 16px;
+            margin: 7px 0 10px;
+            overflow: hidden;
+            border-radius: 5px;
+            border: 1px solid rgba(40, 60, 90, .22);
+            background: rgba(0, 0, 0, .08);
+        }
+        .radar-palette-preview span { flex: 1 1 0; min-width: 1px; }
     </style>
 </head>
 <!-- Google tag (gtag.js) -->
@@ -2631,6 +2683,7 @@
                     </option>
 
                     <option value="windy-radar">Global High Resolution Rainfall Radar Composite</option>
+                    <option value="opera-dbzh">Europe OPERA Reflectivity Composite</option>
 
                     <option value="uk-precip-intensity">UK High Resolution Rainfall Intensity (Smoothed)</option>
                     <option value="uk-precip-type">UK High Resolution Precipitation Type</option>
@@ -2688,7 +2741,24 @@
 
                 </div>
                 <div class="uk-custom-radar-editor" id="uk-custom-radar-editor" style="display: none;">
-                    <div class="uk-custom-radar-editor-title">Global Radar mm/h colour scale</div>
+                    <div class="uk-custom-radar-editor-title">Global High Resolution / OPERA mm/h colour scale</div>
+                    <label class="radar-palette-select-label" for="radar-palette-select">Preset colour scheme</label>
+                    <select id="radar-palette-select" class="radar-palette-select" onchange="applyRadarPalettePreset(this.value)">
+                        <option value="windy-clean">Global High Resolution Clean</option>
+                        <option value="classic">Classic Weather Radar</option>
+                        <option value="high-contrast">High Contrast Severe</option>
+                        <option value="soft-professional">Soft Professional</option>
+                        <option value="colourblind">Colour-blind Friendly</option>
+                        <option value="blue-magenta">Blue to Magenta</option>
+                        <option value="turbo">Turbo Spectrum</option>
+                        <option value="viridis">Viridis</option>
+                        <option value="plasma">Plasma</option>
+                        <option value="ice-fire">Ice to Fire</option>
+                        <option value="ocean-storm">Ocean Storm</option>
+                        <option value="radarscope">RadarScope Inspired</option>
+                    </select>
+                    <div class="uk-custom-radar-editor-help">The selected preset applies to both Global High Resolution Radar and OPERA. All presets use the same rainfall-rate intervals. Individual colours can still be edited below.</div>
+                    <div id="radar-palette-preview" class="radar-palette-preview" aria-hidden="true"></div>
                     <div id="uk-custom-radar-colour-inputs" class="uk-custom-radar-colour-inputs"></div>
                     <button type="button" class="uk-custom-radar-reset" onclick="resetUkCustomRadarColorScale()">Reset
                         custom colours</button>
@@ -4044,7 +4114,7 @@
         let lastNowcastCalcResult = [];
         let lastWeatherLayerUpdateTime = 0;
         let lastZIndexUpdateTime = 0;
-        const WEATHER_TILE_CACHE_TTL_MS = 10 * 60 * 1000;
+        const WEATHER_TILE_CACHE_TTL_MS = 30 * 60 * 1000;
         const WEATHER_TILE_NEGATIVE_CACHE_TTL_MS = 90 * 1000;
         const weatherTileUrlCache = new Map();
         const weatherTileNegativeCache = new Map();
@@ -4057,14 +4127,14 @@
         // - managed weather GridLayer updates are drip-fed across animation frames on mobile,
         // - no long global tile freeze is used, so the map should not feel stuck.
         const WEATHER_PERF = {
-            maxProbeConcurrency: 10,
-            maxAnimationProbeConcurrency: 4,
-            maxMobileProbeConcurrency: 5,
-            updateDebounceMs: 160,
-            animationUpdateDebounceMs: 900,
-            interactionSettleMs: 70,
+            maxProbeConcurrency: 16,
+            maxAnimationProbeConcurrency: 8,
+            maxMobileProbeConcurrency: 6,
+            updateDebounceMs: 55,
+            animationUpdateDebounceMs: 220,
+            interactionSettleMs: 45,
             mobileZoomSettleMs: 60,
-            minAnimationWeatherGapMs: 900,
+            minAnimationWeatherGapMs: 250,
             frameKeys: new Map(),
             queue: [],
             active: 0,
@@ -4081,8 +4151,8 @@
             lastZoomEndAt: 0,
             lastZoomDirection: 0,
             mobileTileBurstUntil: 0,
-            mobileTileBatchSize: 2,
-            mobileTileBatchDelayMs: 18,
+            mobileTileBatchSize: 3,
+            mobileTileBatchDelayMs: 10,
             interactionTimer: null,
             latestInteractionTimestamp: null,
             lastProgressivePreviewKey: null,
@@ -4176,6 +4246,45 @@
                 best = { url: lastValidTileUrls[layerType], checkedAt: Date.now() - WEATHER_TILE_CACHE_TTL_MS };
             }
             return best;
+        }
+
+        let weatherAdjacentPrefetchToken = 0;
+        function scheduleAdjacentWeatherFramePrefetch(targetTimestamp, layerDefs) {
+            const token = ++weatherAdjacentPrefetchToken;
+            const run = async () => {
+                if (token !== weatherAdjacentPrefetchToken || WEATHER_PERF.mapInteracting || isPlaying) return;
+                const tasks = [];
+                for (const def of layerDefs) {
+                    const select = document.getElementById(def.select);
+                    const toggle = document.getElementById(def.toggle);
+                    if (!select || select.disabled || (toggle && !toggle.checked) || !select.value || select.value === 'none') continue;
+                    const config = def.options[select.value];
+                    if (!config) continue;
+                    const interval = Math.max(60000, Number(config.interval) || 300000);
+                    for (const direction of [-1, 1]) {
+                        const neighbourTimestamp = targetTimestamp + direction * interval;
+                        const key = `${def.key}|${select.value}|${roundWeatherTimestampForLayer(neighbourTimestamp, config)}`;
+                        if (weatherTileUrlCache.has(key) || weatherTileNegativeCache.has(key)) continue;
+                        tasks.push(async () => {
+                            try {
+                                const url = await fetchTileUrl(neighbourTimestamp, config, def.key, select.value);
+                                if (url && token === weatherAdjacentPrefetchToken) {
+                                    weatherTileUrlCache.set(key, { url, checkedAt: Date.now(), cachedAt: Date.now() });
+                                }
+                            } catch (error) {
+                                if (error?.name !== 'AbortError') console.debug('Adjacent weather prefetch skipped:', def.key, error);
+                            }
+                        });
+                    }
+                }
+                const concurrency = isMobileWeatherDevice() ? 2 : 5;
+                for (let index = 0; index < tasks.length; index += concurrency) {
+                    if (token !== weatherAdjacentPrefetchToken || WEATHER_PERF.mapInteracting || isPlaying) return;
+                    await Promise.allSettled(tasks.slice(index, index + concurrency).map(task => task()));
+                }
+            };
+            if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 700 });
+            else setTimeout(run, 120);
         }
 
         function scheduleWeatherLayerUpdate(timestamp, reason = 'debounced') {
@@ -4448,10 +4557,10 @@
                 const radarEnabled = document.getElementById('radarToggle')?.checked;
                 if (selectedRadar === 'windy-radar' && radarEnabled && radarLayer && map && map.hasLayer(radarLayer) && typeof radarLayer.redraw === 'function') {
                     radarLayer.redraw();
-                    console.info(`Windy Radar crisp redraw: ${reason}`);
+                    console.info(`Global High Resolution Radar crisp redraw: ${reason}`);
                 }
             } catch (e) {
-                console.warn('Windy Radar crisp redraw skipped:', e);
+                console.warn('Global High Resolution Radar crisp redraw skipped:', e);
             }
         }
         map.on('zoomend resize', () => refreshWindyRadarCrispTiles('zoom/resize'));
@@ -4501,7 +4610,18 @@
                 interval: 5 * 60 * 1000,
                 type: 'raster-tile',
                 bounds: null,
-                attribution: 'Windy.com'
+                attribution: 'Global High Resolution Radar'
+            },
+            'opera-dbzh': {
+                url: 'https://datavis.daneradarowe.pl/images/polar/opera/OPERA@${operaTime}@0@DBZH.bin',
+                interval: 5 * 60 * 1000,
+                type: 'opera-scalar',
+                width: 3800,
+                height: 4400,
+                bytesPerPixel: 1,
+                projection: '+proj=laea +lat_0=55 +lon_0=10 +x_0=1950000 +y_0=-2100000 +units=m +ellps=WGS84 +no_defs',
+                projectedExtent: [0, -4400000, 3800000, 0],
+                attribution: 'Data source: EUMETNET'
             },
             'uk-nw-precip-intensity': {
                 url: 'https://max.nwstatic.co.uk/tiles3/${isoNw1}/${isoNw2}/{z}/{x}/{y}.pbf',
@@ -4905,7 +5025,7 @@
             'satellite': {
                 url: 'https://maps.aerisapi.com/wgE96YE3scTQLKjnqiMsv_1XwHqbCjiTqtzWi8txyN4JtM0ezVNuEfaDXQdkjq/satellite/{z}/{x}/{y}/${iso2}_${iso2}.webp',
                 interval: 5 * 60 * 1000,
-                type: 'vector-tile',
+                type: 'raster-tile',
                 bounds: null,
                 attribution: 'X weather' //range 7 days
             },
@@ -4913,14 +5033,14 @@
                 url: 'https://sat.windy.com/satellite/composite/${windyIso}/{z}/{x}/{y}/opticalflow.jpg?maxt=${windyMaxt}',
                 interval: 10 * 60 * 1000,
                 type: 'tile-layer',
-                attribution: 'Windy.com / EUMETSAT / NOAA / JMA'
+                attribution: 'Global High Resolution Satellite / EUMETSAT / NOAA / JMA'
             },
             'eumetsat-geocolor': {
                 // EUMETSAT MTG Full Disc RGB GeoColour — WMS served as XYZ tiles via a
                 // custom getTileUrl that converts {z}/{x}/{y} → EPSG:4326 BBOX.
                 //https://view.eumetsat.int/geoserver/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=mtg_fd%3Argb_geocolour&STYLES=&tiled=true&TIME=2026-05-01T16%3A10%3A00.000Z&WIDTH=512&HEIGHT=512&CRS=EPSG%3A4326&BBOX=39.375%2C-11.25%2C45%2C-5.625
                 //https://view.eumetsat.int/geoserver/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=mtg_fd%3Argb_geocolour&STYLES=&tiled=true&TIME=${isoMs}&WIDTH=512&HEIGHT=512&CRS=EPSG%3A4326&BBOX=56.250%2C-11.250%2C61.875%2C0
-                url: 'https://view.eumetsat.int/geoserver/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=mtg_fd%3Argb_geocolour&STYLES=&tiled=true&TIME=${isoMs}&WIDTH=512&HEIGHT=512&CRS=EPSG%3A4326&BBOX={bbox}',
+                url: 'https://view.eumetsat.int/geoserver/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=mtg_fd%3Argb_geocolour&STYLES=&tiled=true&TIME=${isoMs}&WIDTH=256&HEIGHT=256&CRS=EPSG%3A4326&BBOX={bbox}',
                 interval: 15 * 60 * 1000,
                 type: 'wms-xyz',
                 attribution: '© EUMETSAT'
@@ -4928,28 +5048,28 @@
             'satellite-water-vapor': {
                 url: 'https://maps.aerisapi.com/wgE96YE3scTQLKjnqiMsv_1XwHqbCjiTqtzWi8txyN4JtM0ezVNuEfaDXQdkjq/satellite-water-vapor/{z}/{x}/{y}/${iso2}_${iso2}.webp',
                 interval: 5 * 60 * 1000,
-                type: 'vector-tile',
+                type: 'raster-tile',
                 bounds: null,
                 attribution: 'X weather' //range 7 days
             },
             'satellite-infrared-color': {
                 url: 'https://maps.aerisapi.com/wgE96YE3scTQLKjnqiMsv_1XwHqbCjiTqtzWi8txyN4JtM0ezVNuEfaDXQdkjq/satellite-infrared-color/{z}/{x}/{y}/${iso2}_${iso2}.webp',
                 interval: 5 * 60 * 1000,
-                type: 'vector-tile',
+                type: 'raster-tile',
                 bounds: null,
                 attribution: 'X weather' //range 7 days
             },
             'satellite-visible': {
                 url: 'https://maps.aerisapi.com/wgE96YE3scTQLKjnqiMsv_1XwHqbCjiTqtzWi8txyN4JtM0ezVNuEfaDXQdkjq/satellite-visible/{z}/{x}/{y}/${iso2}_${iso2}.webp',
                 interval: 5 * 60 * 1000,
-                type: 'vector-tile',
+                type: 'raster-tile',
                 bounds: null,
                 attribution: 'X weather' //range 7 days
             },
             'satellite-geocolor': {
                 url: 'https://maps.aerisapi.com/wgE96YE3scTQLKjnqiMsv_1XwHqbCjiTqtzWi8txyN4JtM0ezVNuEfaDXQdkjq/satellite-geocolor/{z}/{x}/{y}/${iso2}_${iso2}.webp',
                 interval: 5 * 60 * 1000,
-                type: 'vector-tile',
+                type: 'raster-tile',
                 bounds: null,
                 attribution: 'X weather' //range 7 days
             },
@@ -5016,7 +5136,7 @@
         };
         const lightningOptions = {
 
-            'windy-live-lightning': { type: 'custom-live-windy-lightning', label: 'Windy Live Global Lightning SSE' },
+            'windy-live-lightning': { type: 'custom-live-windy-lightning', label: 'Global High Resolution Live Lightning SSE' },
 
             'xweather-lightning': {
                 type: 'geojson',
@@ -6428,6 +6548,22 @@
                 if (part === 'HHmm') return padWindyRadar(frame.getUTCHours()) + padWindyRadar(frame.getUTCMinutes());
                 return '';
             };
+            const roundOperaTimeDown = (value) => {
+                const date = new Date(value);
+                if (Number.isNaN(date.getTime())) return null;
+                date.setUTCMinutes(Math.floor(date.getUTCMinutes() / 5) * 5, 0, 0);
+                return date;
+            };
+            const formatOperaTime = (value) => {
+                const date = roundOperaTimeDown(value);
+                if (!date) return '';
+                const pad = number => String(number).padStart(2, '0');
+                return String(date.getUTCFullYear()) +
+                    pad(date.getUTCMonth() + 1) +
+                    pad(date.getUTCDate()) + 'T' +
+                    pad(date.getUTCHours()) +
+                    pad(date.getUTCMinutes());
+            };
             const formatWindyRadarMaxt = (d) => {
                 const maxt = new Date(getWindyRadarFrameTime(d).getTime() + (4 * 60 + 51) * 1000);
                 return String(maxt.getUTCFullYear()) + padWindyRadar(maxt.getUTCMonth() + 1) + padWindyRadar(maxt.getUTCDate()) +
@@ -6525,6 +6661,15 @@
                 maxAttempts = layerConfig.type === 'image' ? 4 : 288;
             }
 
+            if (layerConfig.type === 'opera-scalar') {
+                const attempts = isHistoricalView ? 3 : 4;
+                for (let attempt = 0; attempt < attempts && currentTimeCheck >= minTime; attempt++) {
+                    const url = layerConfig.url.replace(/\${operaTime}/g, formatOperaTime(currentTimeCheck));
+                    try { const response = await weatherPerfFetch(url,{method:'GET',cache:'force-cache'}); if(response.ok){const buffer=await response.arrayBuffer();if(buffer.byteLength===layerConfig.width*layerConfig.height){cacheOperaBinaryFrame(url,buffer);lastValidTileUrls[layerTypeKey]=url;return cacheAndReturn(url);}} } catch(error){console.warn('OPERA validation failed',error);} currentTimeCheck=new Date(currentTimeCheck.getTime()-interval);
+                }
+                return cacheAndReturn(null);
+            }
+
             if (layerConfig.type === 'image') {
                 for (let attempt = 0; attempt < maxAttempts && currentTimeCheck >= minTime; attempt++) {
                     let url = layerConfig.url
@@ -6537,7 +6682,8 @@
                         .replace(/\${windyRadarMM}/g, formatWindyRadarPart(currentTimeCheck, 'MM'))
                         .replace(/\${windyRadarDD}/g, formatWindyRadarPart(currentTimeCheck, 'DD'))
                         .replace(/\${windyRadarHHmm}/g, formatWindyRadarPart(currentTimeCheck, 'HHmm'))
-                        .replace(/\${windyRadarMaxt}/g, formatWindyRadarMaxt(currentTimeCheck));
+                        .replace(/\${windyRadarMaxt}/g, formatWindyRadarMaxt(currentTimeCheck))
+                        .replace(/\${operaTime}/g, formatOperaTime(currentTimeCheck));
                     if (isWindyRadarLayer) {
                         url = normaliseWindyRadarLiveUrl(url);
                         if (isWindyRadarFrameArchiveOnly(url)) url = windyRadarArchiveUrl(url);
@@ -6573,7 +6719,8 @@
                         .replace(/\${windyRadarMM}/g, formatWindyRadarPart(checkTime, 'MM'))
                         .replace(/\${windyRadarDD}/g, formatWindyRadarPart(checkTime, 'DD'))
                         .replace(/\${windyRadarHHmm}/g, formatWindyRadarPart(checkTime, 'HHmm'))
-                        .replace(/\${windyRadarMaxt}/g, formatWindyRadarMaxt(checkTime));
+                        .replace(/\${windyRadarMaxt}/g, formatWindyRadarMaxt(checkTime))
+                        .replace(/\${operaTime}/g, formatOperaTime(checkTime));
                     if (isWindyRadarLayer) {
                         tileUrl = normaliseWindyRadarLiveUrl(tileUrl);
                         if (isWindyRadarFrameArchiveOnly(tileUrl)) tileUrl = windyRadarArchiveUrl(tileUrl);
@@ -6634,7 +6781,7 @@
                     if (++i >= removeCount) break;
                 }
             };
-            prune(weatherTileUrlCache, 320);
+            prune(weatherTileUrlCache, 900);
             prune(weatherTileNegativeCache, 240);
             prune(weatherTileInFlight, WEATHER_TILE_INFLIGHT_LIMIT);
             prune(radarValidationCache, isMobileWeatherDevice() ? 160 : 320);
@@ -6676,9 +6823,9 @@
                     lastRequestedRadarTimestamp = null;
                     isRadarAnimating = false;
                 }
-                console.info(`Windy Radar runtime state cleared: ${reason}`);
+                console.info(`Global High Resolution Radar runtime state cleared: ${reason}`);
             } catch (e) {
-                console.warn('Unable to clear Windy Radar runtime state:', e);
+                console.warn('Unable to clear Global High Resolution Radar runtime state:', e);
             }
         }
 
@@ -6719,6 +6866,275 @@
             return job;
         }
 
+        // OPERA inverse-projected canvas renderer
+        const OPERA_SCALAR_WIDTH = 3800, OPERA_SCALAR_HEIGHT = 4400;
+        const operaBinaryFrameCache = new Map();
+        function cacheOperaBinaryFrame(url, buffer) {
+            operaBinaryFrameCache.delete(url); operaBinaryFrameCache.set(url, buffer);
+            while (operaBinaryFrameCache.size > 8) operaBinaryFrameCache.delete(operaBinaryFrameCache.keys().next().value);
+        }
+        function ensureOperaRadarPane() {
+            let pane = map.getPane('operaRadarPane');
+            if (!pane) pane = map.createPane('operaRadarPane');
+            pane.style.zIndex = '450'; pane.style.pointerEvents = 'none';
+            pane.classList.add('leaflet-opera-radar-pane'); return pane;
+        }
+        let operaWindyColourLutCache = null;
+        let operaWindyColourLutSignature = '';
+        function getOperaWindyColourLut() {
+            const targetLevels = getUkRadarTargetLevels();
+            const signature = JSON.stringify(targetLevels.map(level => [level.value, level.rgba]));
+            if (operaWindyColourLutCache && signature === operaWindyColourLutSignature) return operaWindyColourLutCache;
+            const lut = new Uint8ClampedArray(256 * 4);
+            for (let encoded = 0; encoded < 255; encoded++) {
+                const dbz = encoded * 0.5 - 32;
+                const mmh = dbz > 0 ? windyDbzToMmh(dbz) : 0;
+                const colour = mmh >= WINDY_RADAR_MIN_VISIBLE_MMH
+                    ? colourForRadarMmh(mmh, targetLevels)
+                    : null;
+                const index = encoded * 4;
+                if (colour) {
+                    lut[index] = colour[0];
+                    lut[index + 1] = colour[1];
+                    lut[index + 2] = colour[2];
+                    lut[index + 3] = colour[3];
+                }
+            }
+            operaWindyColourLutCache = lut;
+            operaWindyColourLutSignature = signature;
+            return lut;
+        }
+
+        // Fast OPERA frame switching. Projection geometry depends on the map view, not frame time,
+        // so cache the destination-pixel -> OPERA-source-index lookup and reuse it across slider frames.
+        const operaProjectionIndexCache = new Map();
+        const operaRenderedFrameCache = new Map();
+        const OPERA_PROJECTION_CACHE_LIMIT = 4;
+        const OPERA_RENDERED_FRAME_CACHE_LIMIT = 8;
+        function touchOperaCache(cache, key, value, limit) {
+            cache.delete(key);
+            cache.set(key, value);
+            while (cache.size > limit) cache.delete(cache.keys().next().value);
+            return value;
+        }
+        function getOperaViewCacheKey(leafletMap, width, height) {
+            const center = leafletMap.getCenter();
+            return [
+                leafletMap.getZoom(),
+                center.lat.toFixed(6),
+                center.lng.toFixed(6),
+                leafletMap.getSize().x,
+                leafletMap.getSize().y,
+                width,
+                height
+            ].join(':');
+        }
+        function getOperaRenderedCacheKey(frameUrl, viewKey) {
+            return `${frameUrl || 'frame'}|${viewKey}|${operaWindyColourLutSignature}`;
+        }
+
+        const OperaProjectedCanvasLayer=L.Layer.extend({
+            initialize(buffer,options={}){L.setOptions(this,options);this._values=new Uint8Array(buffer);this._sw=+options.width;this._sh=+options.height;this._projection=options.projection;this._extent=options.projectedExtent;this._frameUrl=options.frameUrl||'';this._opacity=options.opacity??1;this._generation=0;this._bound=()=>this._schedule();},
+            onAdd(m){this._map=m;ensureOperaRadarPane();this._canvas=L.DomUtil.create('canvas','opera-radar-canvas-layer opera-radar-layer');this._canvas.style.opacity=this._opacity;m.getPane('operaRadarPane').appendChild(this._canvas);m.on('moveend zoomend resize',this._bound);this._schedule();},
+            onRemove(m){this._generation++;m.off('moveend zoomend resize',this._bound);this._canvas?.remove();this._canvas=null;this._map=null;},
+            setOpacity(v){this._opacity=+v;if(this._canvas)this._canvas.style.opacity=v;return this;},
+            sampleRainfallAtLatLng(latlng) {
+                if (!latlng || typeof proj4 !== 'function') return null;
+                const [minX, minY, maxX, maxY] = this._extent;
+                const projected = proj4('EPSG:4326', this._projection, [latlng.lng, latlng.lat]);
+                const projectedX = projected[0], projectedY = projected[1];
+                if (projectedX < minX || projectedX >= maxX || projectedY < minY || projectedY >= maxY) return null;
+                const sourceX = Math.floor((projectedX - minX) / (maxX - minX) * this._sw);
+                const sourceY = Math.floor((maxY - projectedY) / (maxY - minY) * this._sh);
+                if (sourceX < 0 || sourceX >= this._sw || sourceY < 0 || sourceY >= this._sh) return null;
+                const encoded = this._values[sourceY * this._sw + sourceX];
+                if (encoded === 255) return { mmh: 0, dbz: 0, encoded, sourceX, sourceY, noData: true };
+                const dbz = encoded * 0.5 - 32;
+                const mmh = dbz > 0 ? windyDbzToMmh(dbz) : 0;
+                return { mmh, dbz, encoded, sourceX, sourceY, noData: false };
+            },
+            _schedule(){const g=++this._generation;requestAnimationFrame(()=>this._render(g));},
+            async _render(g){
+                const leafletMap=this._map, canvas=this._canvas;
+                if(!leafletMap||!canvas||g!==this._generation)return;
+                const size=leafletMap.getSize(),max=1100000,n=size.x*size.y;
+                const scale=Math.min(1,Math.max(.72,Math.sqrt(max/n)));
+                const w=Math.max(1,Math.round(size.x*scale)),h=Math.max(1,Math.round(size.y*scale));
+                canvas.width=w;canvas.height=h;canvas.style.width=size.x+'px';canvas.style.height=size.y+'px';
+                L.DomUtil.setPosition(canvas,leafletMap.containerPointToLayerPoint([0,0]));
+                const ctx=canvas.getContext('2d',{alpha:true});
+                if(!ctx)return;
+                ctx.imageSmoothingEnabled=false;
+
+                // Build/update the shared Windy palette first so its signature is stable for cache keys.
+                const operaLut=getOperaWindyColourLut();
+                const viewKey=getOperaViewCacheKey(leafletMap,w,h);
+                const renderedKey=getOperaRenderedCacheKey(this._frameUrl,viewKey);
+                const cachedImage=operaRenderedFrameCache.get(renderedKey);
+                if(cachedImage){
+                    touchOperaCache(operaRenderedFrameCache,renderedKey,cachedImage,OPERA_RENDERED_FRAME_CACHE_LIMIT);
+                    if(g!==this._generation||this._canvas!==canvas||!canvas.isConnected)return;
+                    ctx.putImageData(cachedImage,0,0);
+                    this.fire('load');
+                    return;
+                }
+
+                let sourceIndices=operaProjectionIndexCache.get(viewKey);
+                if(!sourceIndices){
+                    sourceIndices=new Int32Array(w*h);
+                    sourceIndices.fill(-1);
+                    const [minX,minY,maxX,maxY]=this._extent,dx=size.x/w,dy=size.y/h;
+                    for(let y0=0;y0<h;y0+=64){
+                        for(let y=y0;y<Math.min(h,y0+64);y++){
+                            const containerY=(y+.5)*dy;
+                            for(let x=0;x<w;x++){
+                                const ll=leafletMap.containerPointToLatLng([(x+.5)*dx,containerY]);
+                                const q=proj4('EPSG:4326',this._projection,[ll.lng,ll.lat]);
+                                const px=q[0],py=q[1];
+                                if(px<minX||px>=maxX||py<minY||py>=maxY)continue;
+                                const sx=Math.floor((px-minX)/(maxX-minX)*this._sw);
+                                const sy=Math.floor((maxY-py)/(maxY-minY)*this._sh);
+                                if(sx>=0&&sx<this._sw&&sy>=0&&sy<this._sh)sourceIndices[y*w+x]=sy*this._sw+sx;
+                            }
+                        }
+                        if(g!==this._generation)return;
+                        await new Promise(resolve=>setTimeout(resolve,0));
+                    }
+                    touchOperaCache(operaProjectionIndexCache,viewKey,sourceIndices,OPERA_PROJECTION_CACHE_LIMIT);
+                }else{
+                    touchOperaCache(operaProjectionIndexCache,viewKey,sourceIndices,OPERA_PROJECTION_CACHE_LIMIT);
+                }
+
+                if(g!==this._generation||this._canvas!==canvas||!canvas.isConnected)return;
+                const imageData=ctx.createImageData(w,h),out=imageData.data,values=this._values;
+                // Colouring a cached geometry is a tight typed-array loop and normally completes in milliseconds.
+                for(let pixel=0;pixel<sourceIndices.length;pixel++){
+                    const sourceIndex=sourceIndices[pixel];
+                    if(sourceIndex<0)continue;
+                    const lutIndex=values[sourceIndex]*4,outputIndex=pixel*4;
+                    out[outputIndex]=operaLut[lutIndex];
+                    out[outputIndex+1]=operaLut[lutIndex+1];
+                    out[outputIndex+2]=operaLut[lutIndex+2];
+                    out[outputIndex+3]=operaLut[lutIndex+3];
+                }
+                if(g!==this._generation||this._canvas!==canvas||!canvas.isConnected)return;
+                ctx.putImageData(imageData,0,0);
+                touchOperaCache(operaRenderedFrameCache,renderedKey,imageData,OPERA_RENDERED_FRAME_CACHE_LIMIT);
+                this.fire('load');
+            }
+        });
+        let operaInitialPrefetchPromise = null;
+        let operaProjectionWarmupPromise = null;
+        function getOperaInitialRenderDimensions(leafletMap) {
+            const size = leafletMap.getSize();
+            const maximumPixels = 1100000;
+            const nativePixels = Math.max(1, size.x * size.y);
+            const scale = Math.min(1, Math.max(.72, Math.sqrt(maximumPixels / nativePixels)));
+            return {
+                size,
+                width: Math.max(1, Math.round(size.x * scale)),
+                height: Math.max(1, Math.round(size.y * scale))
+            };
+        }
+        function warmOperaProjectionCacheForCurrentView() {
+            if (!map || typeof proj4 !== 'function') return Promise.resolve(null);
+            const config = radarOptions['opera-dbzh'];
+            if (!config) return Promise.resolve(null);
+            const dimensions = getOperaInitialRenderDimensions(map);
+            const viewKey = getOperaViewCacheKey(map, dimensions.width, dimensions.height);
+            if (operaProjectionIndexCache.has(viewKey)) return Promise.resolve(viewKey);
+            if (operaProjectionWarmupPromise?.viewKey === viewKey) return operaProjectionWarmupPromise.promise;
+
+            // Capture map/view state so a later map movement cannot corrupt this lookup.
+            const leafletMap = map;
+            const mapSize = dimensions.size;
+            const width = dimensions.width;
+            const height = dimensions.height;
+            const zoom = leafletMap.getZoom();
+            const center = leafletMap.getCenter();
+            const topLeftLatLng = leafletMap.containerPointToLatLng([0, 0]);
+            const bottomRightLatLng = leafletMap.containerPointToLatLng([mapSize.x, mapSize.y]);
+            const sourceIndices = new Int32Array(width * height);
+            sourceIndices.fill(-1);
+            const [minX, minY, maxX, maxY] = config.projectedExtent;
+            const pixelStepX = mapSize.x / width;
+            const pixelStepY = mapSize.y / height;
+
+            const promise = (async () => {
+                for (let rowStart = 0; rowStart < height; rowStart += 80) {
+                    // Stop warming if the map view changed significantly.
+                    const currentCenter = leafletMap.getCenter();
+                    if (leafletMap.getZoom() !== zoom || Math.abs(currentCenter.lat - center.lat) > 1e-7 || Math.abs(currentCenter.lng - center.lng) > 1e-7) return null;
+                    const rowEnd = Math.min(height, rowStart + 80);
+                    for (let y = rowStart; y < rowEnd; y++) {
+                        const yRatio = ((y + .5) * pixelStepY) / mapSize.y;
+                        const latitude = topLeftLatLng.lat + (bottomRightLatLng.lat - topLeftLatLng.lat) * yRatio;
+                        for (let x = 0; x < width; x++) {
+                            // Use Leaflet for the exact Web Mercator conversion. This warm-up runs
+                            // concurrently with the binary request and is cached for the renderer.
+                            const latLng = leafletMap.containerPointToLatLng([(x + .5) * pixelStepX, (y + .5) * pixelStepY]);
+                            const projected = proj4('EPSG:4326', config.projection, [latLng.lng, latLng.lat]);
+                            const projectedX = projected[0], projectedY = projected[1];
+                            if (projectedX < minX || projectedX >= maxX || projectedY < minY || projectedY >= maxY) continue;
+                            const sourceX = Math.floor((projectedX - minX) / (maxX - minX) * config.width);
+                            const sourceY = Math.floor((maxY - projectedY) / (maxY - minY) * config.height);
+                            if (sourceX >= 0 && sourceX < config.width && sourceY >= 0 && sourceY < config.height) {
+                                sourceIndices[y * width + x] = sourceY * config.width + sourceX;
+                            }
+                        }
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                }
+                touchOperaCache(operaProjectionIndexCache, viewKey, sourceIndices, OPERA_PROJECTION_CACHE_LIMIT);
+                return viewKey;
+            })().finally(() => {
+                if (operaProjectionWarmupPromise?.viewKey === viewKey) operaProjectionWarmupPromise = null;
+            });
+            operaProjectionWarmupPromise = { viewKey, promise };
+            return promise;
+        }
+        function prefetchOperaFrameForTimestamp(timestamp) {
+            const config = radarOptions['opera-dbzh'];
+            if (!config || !Number.isFinite(Number(timestamp))) return Promise.resolve(null);
+            warmOperaProjectionCacheForCurrentView();
+            const rounded = new Date(Math.floor(Number(timestamp) / config.interval) * config.interval);
+            const url = config.url.replace(/\${operaTime}/g, formatOperaTime(rounded));
+            if (operaBinaryFrameCache.has(url)) return Promise.resolve(url);
+            if (operaInitialPrefetchPromise?.url === url) return operaInitialPrefetchPromise.promise;
+            const promise = (async () => {
+                try {
+                    if ('caches' in window) {
+                        const cache = await caches.open('radarloop-opera-frames-v1');
+                        const cachedResponse = await cache.match(url);
+                        if (cachedResponse) return await cachedResponse.arrayBuffer();
+                        const response = await fetch(url, { method: 'GET', cache: 'force-cache', priority: 'high' });
+                        if (!response.ok) return null;
+                        try { await cache.put(url, response.clone()); } catch (error) { }
+                        return await response.arrayBuffer();
+                    }
+                    const response = await fetch(url, { method: 'GET', cache: 'force-cache', priority: 'high' });
+                    return response.ok ? await response.arrayBuffer() : null;
+                } catch (error) {
+                    return null;
+                }
+            })()
+                .then(buffer => {
+                    if (buffer && buffer.byteLength === config.width * config.height) {
+                        cacheOperaBinaryFrame(url, buffer);
+                        return url;
+                    }
+                    return null;
+                })
+                .catch(() => null)
+                .finally(() => {
+                    if (operaInitialPrefetchPromise?.url === url) operaInitialPrefetchPromise = null;
+                });
+            operaInitialPrefetchPromise = { url, promise };
+            return promise;
+        }
+
+        async function createOperaDbzhLayer(url,opts,opacity){let b=operaBinaryFrameCache.get(url);if(!b&&operaInitialPrefetchPromise?.url===url){await operaInitialPrefetchPromise.promise;b=operaBinaryFrameCache.get(url);}if(!b){const r=await weatherPerfFetch(url,{method:'GET',cache:'force-cache'});if(!r.ok)throw new Error(`OPERA HTTP ${r.status}`);b=await r.arrayBuffer();if(b.byteLength!==opts.width*opts.height)throw new Error(`OPERA size ${b.byteLength}, expected ${opts.width*opts.height}`);cacheOperaBinaryFrame(url,b);}const layer=new OperaProjectedCanvasLayer(b,{...opts,opacity,pane:'operaRadarPane',frameUrl:url});layer._operaTimestampUrl=url;return layer;}
+
         // ==========================================
         // 4. MAIN UPDATE FUNCTIONS (UNIFIED)
         // ==========================================
@@ -6729,6 +7145,19 @@
          * @param {number|null} timestamp - The rounded timestamp of the plotted data.
          * @param {string} layerKey - 'satellite', 'radar', 'isobar', or 'wind'.
          */
+        function getSatelliteOptimisedTileOptions(baseOptions, layerType) {
+            return {
+                ...baseOptions,
+                updateWhenIdle: false,
+                updateWhenZooming: false,
+                keepBuffer: isMobileWeatherDevice() ? 3 : 6,
+                reuseTiles: true,
+                detectRetina: false,
+                crossOrigin: true,
+                className: `seamless-layer satellite-fast-tile satellite-${layerType}`
+            };
+        }
+
         async function plotMainLayer(finalUrl, layerType, timestamp, layerKey, windyRadarContext = '') {
             if (typeof WEATHER_PERF !== 'undefined' && WEATHER_PERF.mapInteracting) {
                 scheduleWeatherLayerUpdate(timestamp, 'plot-paused-during-map-interaction');
@@ -6739,7 +7168,7 @@
                 try {
                     if (typeof radarLayer !== 'undefined' && radarLayer && map.hasLayer(radarLayer)) map.removeLayer(radarLayer);
                     if (typeof windyRadarLayerHiddenForAccumulation !== 'undefined') windyRadarLayerHiddenForAccumulation = true;
-                } catch (e) { console.warn('Radar redraw suppressed while Windy accumulation is plotted:', e); }
+                } catch (e) { console.warn('Radar redraw suppressed while Global High Resolution accumulation is plotted:', e); }
                 return;
             }
             let layerOptions, zIndex, currentLayerRef, lastTimestampRef, lastTypeRef, isAnimatingRef;
@@ -6877,7 +7306,9 @@
                 const useTmsProjection = layerKey === 'satellite' &&
                     /^https:\/\/tiles\.meteoguard\.dtn\.com\//i.test(finalUrl);
 
-                if (layerOptions.type === 'feature-layer') {
+                if (layerOptions.type === 'opera-scalar') {
+                    newLayer = await createOperaDbzhLayer(finalUrl, layerOptions, currentOpacity);
+                } else if (layerOptions.type === 'feature-layer') {
                     newLayer = L.esri.featureLayer({
                         url: finalUrl,
                         pane: 'warningPane',
@@ -7006,7 +7437,8 @@
                         pane: 'overlayPane',
                         attribution: layerOptions.attribution,
                         className: imageClass
-                    }); newLayer.bindPopup(function (l) {
+                    });
+                    if (layerType !== 'opera-dbzh') newLayer.bindPopup(function (l) {
                         const p = l.feature.properties;
 
                         const formatTime = (ts) => ts ? new Date(ts).toLocaleString('en-GB', {
@@ -7135,11 +7567,15 @@
                         pane: 'overlayPane',
                         attribution: layerOptions.attribution,
                         tileSize: 256,
-                        className: 'seamless-layer',
-                weatherManaged: true
+                        updateWhenIdle: false,
+                        updateWhenZooming: false,
+                        keepBuffer: isMobileWeatherDevice() ? 3 : 6,
+                        crossOrigin: true,
+                        className: 'seamless-layer satellite-fast-tile',
+                        weatherManaged: true
                     });
                 } else if (layerOptions.type === 'raster-tile' || isImageTilePayload) {
-                    const tileOptions = {
+                    const baseTileOptions = {
                         ...efficientTileOptions,
                         opacity: currentOpacity,
                         zIndex: zIndex,
@@ -7148,8 +7584,11 @@
                         tileSize: 256,
                         crossOrigin: true,
                         className: 'seamless-layer',
-                weatherManaged: true
+                        weatherManaged: true
                     };
+                    const tileOptions = layerKey === 'satellite'
+                        ? getSatelliteOptimisedTileOptions(baseTileOptions, layerType)
+                        : baseTileOptions;
                     if (layerKey === 'radar' && layerType === 'windy-radar') {
                         newLayer = createWindyRadarArchiveAwareTileLayer(finalUrl, {
                             ...tileOptions,
@@ -7164,7 +7603,7 @@
                     }
                 } else if (layerOptions.type === 'vector-tile') {
                     if (layerType === 'windy-radar' || layerOptions.applyWindyColourReplacement === true) {
-                        throw new Error('Windy colour replacement is forbidden for PBF/vector layers.');
+                        throw new Error('Global High Resolution colour replacement is forbidden for PBF/vector layers.');
                     }
                     try {
                         // DTN PBF tiles expose polygon colours directly on the `geojsonLayer`
@@ -7232,7 +7671,7 @@
                 newLayer.addTo(map);
 
                 const layerLoadedPromise = new Promise(resolve => {
-                    const timeout = setTimeout(() => resolve(true), 1000);
+                    const timeout = setTimeout(() => resolve(true), layerType === 'opera-dbzh' ? 90 : (layerKey === 'satellite' ? 320 : (newLayer instanceof L.GridLayer ? 500 : 350)));
                     newLayer.once('load', () => { clearTimeout(timeout); resolve(true); });
                     newLayer.once('error', () => { clearTimeout(timeout); resolve(false); });
                 });
@@ -7279,7 +7718,7 @@
                             if (layerToDispose && map.hasLayer(layerToDispose)) {
                                 map.removeLayer(layerToDispose);
                             }
-                        }, 350);
+                        }, layerType === 'opera-dbzh' ? 60 : (layerKey === 'satellite' ? 90 : 140));
                     }
                     lastValidTileUrls[layerType] = finalUrl;
                 } else {
@@ -7449,14 +7888,23 @@
                 });
             }
 
+            // Satellite jobs are inserted second in layerDefs. Move them to the front so the
+            // visually dominant background starts downloading before overlays.
+            if (jobs.length > 1) {
+                const satelliteJob = jobs.splice(1, 1)[0];
+                if (satelliteJob) jobs.unshift(satelliteJob);
+            }
             activeWeatherLayerPlotCount = jobs.length;
-            const concurrency = isMobileWeatherDevice() ? 2 : (isPlaying ? 1 : (LOW_END_NOWCAST_MODE ? 1 : (jobs.length >= 4 ? 2 : 3)));
+            const concurrency = isMobileWeatherDevice() ? 2 : (LOW_END_NOWCAST_MODE ? 2 : (isPlaying ? 4 : Math.min(6, Math.max(3, jobs.length))));
             for (let i = 0; i < jobs.length; i += concurrency) {
                 if (generation !== WEATHER_PERF.generation || WEATHER_PERF.mapInteracting || pendingWeatherLayerTimestamp !== null) break;
                 await Promise.allSettled(jobs.slice(i, i + concurrency).map(job => job()));
             }
 
-            if (generation === WEATHER_PERF.generation) WEATHER_PERF.lastWeatherUpdateFinished = Date.now();
+            if (generation === WEATHER_PERF.generation) {
+                WEATHER_PERF.lastWeatherUpdateFinished = Date.now();
+                scheduleAdjacentWeatherFramePrefetch(targetTimestamp, layerDefs);
+            }
             isPlotting = false;
             activeWeatherLayerPlotCount = 0;
             updateLegend();
@@ -8062,8 +8510,8 @@
                 }
 
                 // Keep cache bounded so long sessions don't grow memory indefinitely.
-                if (weatherTileUrlCache.size > 500) {
-                    for (const key of weatherTileUrlCache.keys()) { weatherTileUrlCache.delete(key); if (weatherTileUrlCache.size <= 350) break; }
+                if (weatherTileUrlCache.size > 1100) {
+                    for (const key of weatherTileUrlCache.keys()) { weatherTileUrlCache.delete(key); if (weatherTileUrlCache.size <= 850) break; }
                 }
                 if (weatherTileNegativeCache.size > 500) {
                     for (const key of weatherTileNegativeCache.keys()) { weatherTileNegativeCache.delete(key); if (weatherTileNegativeCache.size <= 350) break; }
@@ -8092,7 +8540,17 @@
                     }
                 }
                 if (!finalUrl) {
-                    console.warn(`No valid URL for ${layerKey} ${layerType} at ${new Date(targetTimestamp).toISOString()}`);
+                    if (layerType === 'opera-dbzh') {
+                        const roundedOperaDate = new Date(targetTimestamp);
+                        roundedOperaDate.setUTCMinutes(Math.floor(roundedOperaDate.getUTCMinutes() / 5) * 5, 0, 0);
+                        console.warn(
+                            `No valid URL for radar opera-dbzh. Requested ${new Date(targetTimestamp).toISOString()}, ` +
+                            `rounded down to ${roundedOperaDate.toISOString()}. ` +
+                            `No valid OPERA scalar frame was found.`
+                        );
+                    } else {
+                        console.warn(`No valid URL for ${layerKey} ${layerType} at ${new Date(targetTimestamp).toISOString()}`);
+                    }
                 }
             } catch (error) {
                 console.error(`Error in plotLayerIfNecessary for ${layerType} (${layerKey}):`, error);
@@ -8226,42 +8684,92 @@
     return Math.pow(Math.pow(10, dbz / 10) * 0.005, 0.625);
 }
 
-const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
-            // Light professional 2^n mm/h rainfall colour scale
-            // Thresholds are lower bounds: colour applies from this mm/h until the next threshold.
-            // No dark red / dark purple; high-end uses brighter pink/lavender/violet.
-
-            [0.00000, [0, 0, 0, 0]],           // no rain / transparent
-
-            // Very light rain / drizzle
-            [0.03125, [225, 245, 255, 120]],   // 1/32 mm/h - very pale blue
-            [0.06250, [185, 225, 245, 170]],   // 1/16 mm/h - pale blue
-            [0.12500, [135, 195, 235, 210]],   // 1/8 mm/h - light blue
-            [0.25000, [80, 155, 220, 235]],    // 1/4 mm/h - medium blue
-            [0.50000, [45, 110, 220, 255]],    // 1/2 mm/h - clear blue
-
-            // Light to moderate rain
-            [1.00000, [0, 170, 120, 255]],     // 1 mm/h - teal green
-            [2.00000, [70, 205, 80, 255]],     // 2 mm/h - green
-            [4.00000, [235, 235, 0, 255]],     // 4 mm/h - yellow
-
-            // Heavy rain
-            [8.00000, [255, 185, 0, 255]],     // 8 mm/h - amber
-            [16.00000, [255, 105, 0, 255]],    // 16 mm/h - orange
-            [32.00000, [255, 35, 35, 255]],    // 32 mm/h - bright red
-
-            // Very heavy / extreme rain, lighter high-end colours
-            [64.00000, [255, 95, 95, 255]],    // 64 mm/h - light red
-            [128.00000, [255, 145, 165, 255]], // 128 mm/h - pink
-            [256.00000, [245, 180, 220, 255]], // 256 mm/h - pale magenta-pink
-            [512.00000, [220, 185, 245, 255]], // 512 mm/h - light lavender
-            [1024.00000, [185, 145, 235, 255]],// 1024 mm/h - soft violet
-            [2048.00000, [155, 105, 225, 255]],// 2048 mm/h - medium violet
-            [4096.00000, [255, 255, 255, 255]],// 4096 mm/h - white debug/overflow
-            [8192.00000, [255, 0, 255, 255]],  // 8192+ mm/h - magenta debug/failed calibration
-
-            [99999, [255, 0, 255, 255]]
+        const RADAR_SHARED_MMH_INTERVALS = [
+            0, 0.03125, 0.0625, 0.125, 0.25, 0.5, 1, 2, 4, 8, 16,
+            32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 99999
         ];
+        function makeRadarPalette(colours) {
+            return RADAR_SHARED_MMH_INTERVALS.map((value, index) => [
+                value,
+                index === 0 ? [0, 0, 0, 0] : colours[Math.min(index - 1, colours.length - 1)].slice()
+            ]);
+        }
+        const RADAR_PALETTE_PRESETS = {
+            'windy-clean': makeRadarPalette([
+                [225,245,255,120],[185,225,245,170],[135,195,235,210],[80,155,220,235],[45,110,220,255],
+                [0,170,120,255],[70,205,80,255],[235,235,0,255],[255,185,0,255],[255,105,0,255],
+                [255,35,35,255],[255,95,95,255],[255,145,165,255],[245,180,220,255],[220,185,245,255],
+                [185,145,235,255],[155,105,225,255],[255,255,255,255],[255,0,255,255],[255,0,255,255]
+            ]),
+            'classic': makeRadarPalette([
+                [190,230,255,135],[145,205,255,175],[95,175,250,205],[40,125,235,230],[0,185,215,245],
+                [0,180,120,255],[35,210,55,255],[175,225,0,255],[245,235,0,255],[255,185,0,255],
+                [255,115,0,255],[245,45,15,255],[210,10,25,255],[175,0,90,255],[175,0,175,255],
+                [205,80,225,255],[235,150,245,255],[255,230,255,255],[255,255,255,255],[255,0,255,255]
+            ]),
+            'high-contrast': makeRadarPalette([
+                [95,105,205,170],[55,100,230,195],[0,145,255,220],[0,215,255,235],[0,185,105,245],
+                [20,230,40,255],[150,240,0,255],[255,255,0,255],[255,180,0,255],[255,95,0,255],
+                [255,20,0,255],[190,0,0,255],[225,0,145,255],[170,0,230,255],[115,0,195,255],
+                [85,0,155,255],[235,130,245,255],[255,255,255,255],[255,255,255,255],[255,0,255,255]
+            ]),
+            'soft-professional': makeRadarPalette([
+                [225,240,250,105],[195,225,242,135],[155,205,232,165],[115,180,220,190],[80,145,205,210],
+                [55,170,165,220],[70,185,110,230],[130,195,75,235],[205,210,80,240],[235,190,75,245],
+                [235,145,70,250],[220,100,70,250],[200,65,70,255],[180,65,110,255],[155,75,155,255],
+                [175,120,200,255],[205,160,220,255],[245,235,250,255],[255,255,255,255],[255,0,255,255]
+            ]),
+            'colourblind': makeRadarPalette([
+                [230,240,255,130],[195,220,248,160],[155,195,238,190],[105,155,220,215],[55,110,185,235],
+                [0,135,145,245],[0,160,125,250],[70,175,100,255],[180,190,70,255],[235,190,50,255],
+                [245,145,35,255],[225,100,25,255],[195,70,30,255],[170,55,55,255],[150,65,120,255],
+                [120,80,170,255],[165,135,205,255],[240,240,245,255],[255,255,255,255],[255,0,255,255]
+            ]),
+            'blue-magenta': makeRadarPalette([
+                [215,240,255,125],[170,220,255,155],[115,195,255,185],[70,165,250,215],[25,125,240,235],
+                [35,85,225,245],[80,65,215,250],[120,55,205,255],[160,45,195,255],[195,40,175,255],
+                [225,40,145,255],[245,45,105,255],[255,65,65,255],[255,115,45,255],[255,170,55,255],
+                [255,220,105,255],[255,245,175,255],[255,255,255,255],[255,255,255,255],[255,0,255,255]
+            ]),
+            'turbo': makeRadarPalette([
+                [48,18,59,120],[55,45,125,150],[54,81,178,180],[43,120,210,205],[26,160,220,225],
+                [24,190,190,240],[70,210,130,248],[130,225,75,255],[195,225,45,255],[240,205,35,255],
+                [255,165,25,255],[255,115,20,255],[245,65,25,255],[220,35,40,255],[180,25,65,255],
+                [145,20,85,255],[115,15,105,255],[255,235,245,255],[255,255,255,255],[255,0,255,255]
+            ]),
+            'viridis': makeRadarPalette([
+                [68,1,84,125],[70,18,102,150],[71,37,117,180],[65,57,128,205],[57,78,135,225],
+                [49,99,141,240],[42,120,142,248],[35,140,140,255],[31,160,136,255],[40,180,120,255],
+                [70,198,98,255],[110,212,72,255],[155,222,52,255],[195,228,40,255],[225,230,35,255],
+                [245,232,40,255],[253,240,75,255],[255,250,155,255],[255,255,255,255],[255,0,255,255]
+            ]),
+            'plasma': makeRadarPalette([
+                [13,8,135,125],[42,5,147,150],[70,3,158,180],[98,2,165,205],[125,3,168,225],
+                [150,18,161,240],[175,35,149,248],[198,55,132,255],[218,75,112,255],[235,98,91,255],
+                [247,124,70,255],[253,151,51,255],[253,180,38,255],[248,207,42,255],[240,230,70,255],
+                [245,243,115,255],[252,250,170,255],[255,252,220,255],[255,255,255,255],[255,0,255,255]
+            ]),
+            'ice-fire': makeRadarPalette([
+                [220,245,255,115],[175,225,250,145],[120,195,240,175],[65,155,220,205],[25,110,195,230],
+                [20,75,165,245],[65,55,150,250],[115,45,145,255],[165,45,125,255],[205,55,95,255],
+                [235,75,65,255],[250,105,35,255],[255,145,20,255],[255,185,35,255],[255,220,75,255],
+                [255,240,130,255],[255,250,190,255],[255,255,235,255],[255,255,255,255],[255,0,255,255]
+            ]),
+            'ocean-storm': makeRadarPalette([
+                [215,250,255,115],[165,235,245,145],[105,215,230,175],[45,185,210,205],[0,150,190,230],
+                [0,125,165,245],[0,160,120,250],[50,195,85,255],[125,215,55,255],[205,225,40,255],
+                [250,205,30,255],[255,160,30,255],[255,110,35,255],[245,65,55,255],[215,35,85,255],
+                [180,25,125,255],[145,35,170,255],[225,180,245,255],[255,255,255,255],[255,0,255,255]
+            ]),
+            'radarscope': makeRadarPalette([
+                [100,150,255,135],[40,110,245,170],[0,200,255,205],[0,210,150,235],[0,185,65,250],
+                [45,220,35,255],[150,235,0,255],[245,235,0,255],[255,185,0,255],[255,120,0,255],
+                [250,45,15,255],[205,0,0,255],[255,0,145,255],[200,0,200,255],[140,0,220,255],
+                [95,40,235,255],[210,150,255,255],[255,235,255,255],[255,255,255,255],[255,0,255,255]
+            ])
+        };
+        let activeRadarPalettePreset = 'turbo';
+        let UK_CUSTOM_RADAR_COLOR_TEMPLATE = RADAR_PALETTE_PRESETS[activeRadarPalettePreset];
 
         const WINDY_RADAR_DBZ_PER_ENCODED_UNIT = 56 / 94; // calibrated from Windy picker: RGB(93,95,26) → 56 dBZ
         const WINDY_RADAR_MIN_VISIBLE_MMH = 0.03;
@@ -8325,6 +8833,12 @@ const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
         // Non-Windy radar providers are rendered with their native colours.
         // Per-pixel replacement is intentionally retained only for Windy Radar below.
 
+
+        function refreshOperaRadarColourScale() {
+            operaWindyColourLutCache = null;
+            operaWindyColourLutSignature = '';
+            if (radarLayer?._isOperaDbzhLayer && typeof radarLayer._schedule === 'function') radarLayer._schedule();
+        }
         // ==========================================
         // WINDY RADAR CUSTOM COLOUR SCALE — MM/H BINNED + Z7 + ARCHIVE FALLBACK
         // Normal endpoint: /radar2/composite/... ; archive fallback: /radar2/archive/composite/...
@@ -8341,7 +8855,7 @@ const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
             const previous = getWindyRadarArchiveCutoffMs() || 0;
             const next = Math.max(previous, frameMs);
             localStorage.setItem(WINDY_RADAR_ARCHIVE_CUTOFF_KEY, String(next));
-            console.info(`Windy Radar: normal endpoint missing for ${new Date(frameMs).toISOString()}; stored archive-only cutoff ${new Date(next).toISOString()}. Frames at/before this time will use archive first.`);
+            console.info(`Global High Resolution Radar: normal endpoint missing for ${new Date(frameMs).toISOString()}; stored archive-only cutoff ${new Date(next).toISOString()}. Frames at/before this time will use archive first.`);
         }
         function getWindyRadarFrameMsFromUrl(url) {
             const match = String(url).match(/\/radar2\/(?:archive\/)?composite\/(\d{4})\/(\d{2})\/(\d{2})\/(\d{4})\//);
@@ -8467,7 +8981,7 @@ const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
                 const nativeZoom = Math.min(originalZoom, WINDY_RADAR_MAX_NATIVE_ZOOM);
                 const scale = Math.pow(2, originalZoom - nativeZoom);
                 const nativeCoords = { x: Math.floor(coords.x / scale), y: Math.floor(coords.y / scale), z: nativeZoom };
-                if (originalZoom > WINDY_RADAR_MAX_NATIVE_ZOOM) console.info(`W Radar: requested zoom ${originalZoom} is above native max ${WINDY_RADAR_MAX_NATIVE_ZOOM}; using ${nativeZoom}/${nativeCoords.x}/${nativeCoords.y} and crisp nearest-neighbour scaling/cropping it.`);
+                if (originalZoom > WINDY_RADAR_MAX_NATIVE_ZOOM) console.info(`Global High Resolution Radar: requested zoom ${originalZoom} is above native max ${WINDY_RADAR_MAX_NATIVE_ZOOM}; using ${nativeZoom}/${nativeCoords.x}/${nativeCoords.y} and crisp nearest-neighbour scaling/cropping it.`);
 
                 const drawImage = (img) => {
                     ctx.clearRect(0, 0, size.x, size.y);
@@ -8505,8 +9019,8 @@ const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
                 const archiveFirst = archiveOnlyByAge || shouldUseWindyRadarArchiveFirst(normalUrl);
                 const archiveUrl = windyRadarArchiveUrl(normalUrl);
                 const firstUrl = archiveFirst ? archiveUrl : normalUrl;
-                if (archiveOnlyByAge) console.info(`W Radar: selected frame ${new Date(frameMs).toISOString()} is >= 2 hours older than real browser now ${new Date().toISOString()}, forcing archive endpoint first:`, archiveUrl);
-                else if (archiveFirst) console.info(`W Radar: selected frame ${new Date(frameMs).toISOString()} is at/before learned archive cutoff, using archive endpoint first:`, archiveUrl);
+                if (archiveOnlyByAge) console.info(`Global High Resolution Radar: selected frame ${new Date(frameMs).toISOString()} is >= 2 hours older than real browser now ${new Date().toISOString()}, forcing archive endpoint first:`, archiveUrl);
+                else if (archiveFirst) console.info(`Global High Resolution Radar: selected frame ${new Date(frameMs).toISOString()} is at/before learned archive cutoff, using archive endpoint first:`, archiveUrl);
 
                 const loadUrl = (url, isArchiveAttempt) => {
                     const img = new Image(); img.crossOrigin = 'anonymous';
@@ -8514,10 +9028,10 @@ const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
                     img.onerror = () => {
                         if (!isArchiveAttempt) {
                             rememberWindyRadarArchiveCutoff(frameMs);
-                            console.info('W Radar: live tile failed; retrying archive tile:', archiveUrl);
+                            console.info('Global High Resolution Radar: live tile failed; retrying archive tile:', archiveUrl);
                             loadUrl(archiveUrl, true);
                         } else {
-                            console.warn('W Radar: archive tile failed:', url);
+                            console.warn('Global High Resolution Radar: archive tile failed:', url);
                             done(new Error('Failed to load W radar archive tile'), tile);
                         }
                     };
@@ -8625,7 +9139,7 @@ const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
         function isWindyRadarPointerActive() {
             const radarToggle = document.getElementById('radarToggle');
             const radarSelect = document.getElementById('radarLayer');
-            return !!(radarToggle?.checked && radarSelect?.value === 'windy-radar' && radarLayer && map.hasLayer(radarLayer));
+            return !!(radarToggle?.checked && ['windy-radar', 'opera-dbzh'].includes(radarSelect?.value) && radarLayer && map.hasLayer(radarLayer));
         }
         async function sampleWindyRadarRainfallAtLatLng(latlng) {
             const z = getWindyRadarPointerNativeZoom();
@@ -8738,7 +9252,21 @@ const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
         function colourForWindyAccumulationMm(mm) { for (const [limit, rgba] of WINDY_ACCUMULATION_COLOUR_STOPS) { if (mm < limit) return rgba; } return WINDY_ACCUMULATION_COLOUR_STOPS[WINDY_ACCUMULATION_COLOUR_STOPS.length - 1][1]; }
         function ensureWindyAccumulationPane() { if (!map.getPane('windyAccumulationPane')) { map.createPane('windyAccumulationPane', map.getPane('overlayPane')); } const pane = map.getPane('windyAccumulationPane'); pane.style.zIndex = String(WINDY_ACCUMULATION_Z_INDEX); pane.style.pointerEvents = 'none'; pane.style.display = 'block'; }
         function hideCurrentRadarForWindyAccumulation() { try { if (typeof radarLayer !== 'undefined' && radarLayer && map.hasLayer(radarLayer)) { map.removeLayer(radarLayer); windyRadarLayerHiddenForAccumulation = true; } } catch (e) { console.warn('Could not hide current radar for accumulation plot:', e); } }
-        function restoreCurrentRadarAfterWindyAccumulation() { try { const radarToggle = document.getElementById('radarToggle'), radarSelect = document.getElementById('radarLayer'); if (windyRadarLayerHiddenForAccumulation && radarLayer && radarToggle?.checked && radarSelect?.value === 'windy-radar' && !map.hasLayer(radarLayer)) { radarLayer.addTo(map); if (radarLayer.setZIndex) radarLayer.setZIndex(typeof RADAR_Z_INDEX === 'number' ? RADAR_Z_INDEX : 150); if (typeof updateLayerOpacities === 'function') updateLayerOpacities(); } windyRadarLayerHiddenForAccumulation = false; } catch (e) { console.warn('Could not restore radar after accumulation unplot:', e); } }
+        function restoreCurrentRadarAfterWindyAccumulation() {
+            try {
+                const radarToggle = document.getElementById('radarToggle');
+                const radarSelect = document.getElementById('radarLayer');
+                const supportedProvider = ['windy-radar', 'opera-dbzh'].includes(radarSelect?.value);
+                if (windyRadarLayerHiddenForAccumulation && radarLayer && radarToggle?.checked && supportedProvider && !map.hasLayer(radarLayer)) {
+                    radarLayer.addTo(map);
+                    if (radarLayer.setZIndex) radarLayer.setZIndex(typeof RADAR_Z_INDEX === 'number' ? RADAR_Z_INDEX : 150);
+                    if (typeof updateLayerOpacities === 'function') updateLayerOpacities();
+                }
+                windyRadarLayerHiddenForAccumulation = false;
+            } catch (e) {
+                console.warn('Could not restore radar after accumulation unplot:', e);
+            }
+        }
         function removeWindyAccumulationLegend() {
             if (windyRadarAccumulationLegend && windyRadarAccumulationLegend.parentNode) {
                 windyRadarAccumulationLegend.parentNode.removeChild(windyRadarAccumulationLegend);
@@ -8880,7 +9408,7 @@ const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
             addWindyAccumulationLegend(p.start, p.end, p.validFrames, p.frameCount, p.missingFrames);
             hideCurrentRadarForWindyAccumulation();
             if (windyAccumulationContoursEnabled) drawWindyAccumulationContourLabels();
-            const tileText = p.tiles ? ` Native tiled overlay: ${p.tiles.size} Windy tile${p.tiles.size === 1 ? '' : 's'} at z${p.sourceZoom}.` : '';
+            const tileText = p.tiles ? ` Native tiled overlay: ${p.tiles.size} Windy tile${p.tiles.size === 1 ? '' : 's'} at z${p.sourceZoom}.` : (p.provider ? ` Source: ${p.provider}.` : '');
             setWindyAccumulationStatus(`Accumulation map plotted; current radar hidden until Hide Accumulation. Click the map for accumulated rainfall totals. ${p.validFrames}/${p.frameCount} frames sampled${p.missingFrames ? ` (${p.missingFrames} missing)` : ''}.${tileText}`);
             updateWindyAccumulationPlotButtons();
         }
@@ -8921,7 +9449,7 @@ const UK_CUSTOM_RADAR_COLOR_TEMPLATE = [
                 noWrap: true,
                 updateWhenIdle: false,
                 updateWhenZooming: false,
-                keepBuffer: 1,
+                keepBuffer: isMobileWeatherDevice() ? 2 : 4,
                 className: 'windy-radar-crisp-tile',
                 attribution: ''
             });
@@ -9354,15 +9882,196 @@ function getWindyAccumulationRenderScale() { const size = map.getSize(); return 
             ctx.putImageData(out, 0, 0);
             return canvas.toDataURL('image/png');
         }
+        function normaliseOperaAccumulationDate(value) {
+            // buildWindyAccumulationFrames returns { time: Date, durationHours }, not Date directly.
+            const candidate = value && typeof value === 'object' && 'time' in value ? value.time : value;
+            const date = candidate instanceof Date ? new Date(candidate.getTime()) : new Date(candidate);
+            return Number.isFinite(date.getTime()) ? date : null;
+        }
+        function formatOperaAccumulationTime(value) {
+            const rounded = normaliseOperaAccumulationDate(value);
+            if (!rounded) throw new Error(`Invalid OPERA accumulation frame time: ${String(value)}`);
+            rounded.setUTCMinutes(Math.floor(rounded.getUTCMinutes() / 5) * 5, 0, 0);
+            const pad = number => String(number).padStart(2, '0');
+            return String(rounded.getUTCFullYear()) +
+                pad(rounded.getUTCMonth() + 1) +
+                pad(rounded.getUTCDate()) + 'T' +
+                pad(rounded.getUTCHours()) +
+                pad(rounded.getUTCMinutes());
+        }
+
+        function buildOperaAccumulationUrl(date) {
+            return `https://datavis.daneradarowe.pl/images/polar/opera/OPERA@${formatOperaAccumulationTime(date)}@0@DBZH.bin`;
+        }
+
+        async function fetchOperaAccumulationFrame(frameInfo) {
+            const frameDate = normaliseOperaAccumulationDate(frameInfo);
+            if (!frameDate) throw new Error('OPERA accumulation received an invalid frame descriptor.');
+            const url = buildOperaAccumulationUrl(frameDate);
+            let buffer = operaBinaryFrameCache.get(url);
+            if (!buffer) {
+                const response = await weatherPerfFetch(url, { method: 'GET', cache: 'force-cache' });
+                if (!response.ok) return null;
+                buffer = await response.arrayBuffer();
+                if (buffer.byteLength !== OPERA_SCALAR_WIDTH * OPERA_SCALAR_HEIGHT) return null;
+                cacheOperaBinaryFrame(url, buffer);
+            }
+            return { url, values: new Uint8Array(buffer), time: frameDate, durationHours: Number(frameInfo?.durationHours) || (5 / 60) };
+        }
+
+        async function calculateOperaRadarAccumulationMap() {
+            if (!isOperaRadarSelected()) {
+                setWindyAccumulationStatus('OPERA must be toggled on and selected before OPERA accumulation can be generated.', true);
+                return;
+            }
+            windyRadarAccumulationCalculating = true;
+            updateWindyAccumulationPlotButtons();
+            const runId = ++windyRadarAccumulationRunId;
+            try {
+                windyAccumulationContoursEnabled = false;
+                removeWindyAccumulationOverlayOnly(true);
+                restoreCurrentRadarAfterWindyAccumulation();
+                windyRadarAccumulationPending = null;
+                updateWindyAccumulationPlotButtons();
+                setDefaultWindyAccumulationTimes(false);
+
+                const { start, end } = getWindyAccumulationTimeRange();
+                const frames = buildWindyAccumulationFrames(start, end);
+                if (!frames.length) throw new Error('No 5-minute OPERA frames fall inside that range.');
+
+                const bounds = map.getBounds();
+                const mapSize = map.getSize();
+                const maximumPixels = 650000;
+                const nativePixels = Math.max(1, mapSize.x * mapSize.y);
+                const scale = Math.min(0.8, Math.sqrt(maximumPixels / nativePixels));
+                const width = Math.max(1, Math.round(mapSize.x * scale));
+                const height = Math.max(1, Math.round(mapSize.y * scale));
+                const totals = new Float32Array(width * height);
+                const sourceIndices = new Int32Array(width * height);
+                sourceIndices.fill(-1);
+
+                const projection = radarOptions['opera-dbzh'].projection;
+                const [minX, minY, maxX, maxY] = radarOptions['opera-dbzh'].projectedExtent;
+                const pixelStepX = mapSize.x / width;
+                const pixelStepY = mapSize.y / height;
+
+                setWindyAccumulationStatus(`Preparing OPERA accumulation grid ${width} x ${height} for ${frames.length} five-minute frames...`);
+                maybeSetWindyAccumulationProgress(1, 'Projecting visible map pixels into the OPERA grid...', true);
+
+                for (let y = 0; y < height; y++) {
+                    const containerY = (y + 0.5) * pixelStepY;
+                    for (let x = 0; x < width; x++) {
+                        const latLng = map.containerPointToLatLng([(x + 0.5) * pixelStepX, containerY]);
+                        const projected = proj4('EPSG:4326', projection, [latLng.lng, latLng.lat]);
+                        const projectedX = projected[0], projectedY = projected[1];
+                        if (projectedX < minX || projectedX >= maxX || projectedY < minY || projectedY >= maxY) continue;
+                        const sourceX = Math.floor((projectedX - minX) / (maxX - minX) * OPERA_SCALAR_WIDTH);
+                        const sourceY = Math.floor((maxY - projectedY) / (maxY - minY) * OPERA_SCALAR_HEIGHT);
+                        if (sourceX >= 0 && sourceX < OPERA_SCALAR_WIDTH && sourceY >= 0 && sourceY < OPERA_SCALAR_HEIGHT) {
+                            sourceIndices[y * width + x] = sourceY * OPERA_SCALAR_WIDTH + sourceX;
+                        }
+                    }
+                    if (y % 24 === 0) {
+                        if (runId !== windyRadarAccumulationRunId) return;
+                        await new Promise(resolve => setTimeout(resolve, 0));
+                    }
+                }
+
+                let validFrames = 0;
+                let missingFrames = 0;
+                for (let frameIndex = 0; frameIndex < frames.length; frameIndex++) {
+                    if (runId !== windyRadarAccumulationRunId) return;
+                    const frame = await fetchOperaAccumulationFrame(frames[frameIndex]);
+                    if (!frame) {
+                        missingFrames++;
+                    } else {
+                        validFrames++;
+                        const values = frame.values;
+                        for (let pixel = 0; pixel < sourceIndices.length; pixel++) {
+                            const sourceIndex = sourceIndices[pixel];
+                            if (sourceIndex < 0) continue;
+                            const encoded = values[sourceIndex];
+                            if (encoded === 255) continue;
+                            const dbz = encoded * 0.5 - 32;
+                            if (dbz <= 0) continue;
+                            const mmh = windyDbzToMmh(dbz);
+                            if (mmh >= WINDY_RADAR_MIN_VISIBLE_MMH) totals[pixel] += mmh * frame.durationHours;
+                        }
+                    }
+                    const percent = Math.round(((frameIndex + 1) / frames.length) * 94);
+                    const frameTimeText = formatOperaAccumulationTime(frames[frameIndex]);
+                    const message = `Calculating OPERA accumulation: ${frameTimeText}, frame ${frameIndex + 1}/${frames.length}, ${validFrames} available, ${missingFrames} missing...`;
+                    setWindyAccumulationStatus(message);
+                    maybeSetWindyAccumulationProgress(percent, message, true);
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                }
+                if (!validFrames) throw new Error('No OPERA frames were available for the selected accumulation period.');
+
+                maybeSetWindyAccumulationProgress(96, 'Colouring the OPERA accumulated-rainfall grid...', true);
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const context = canvas.getContext('2d', { alpha: true });
+                const imageData = context.createImageData(width, height);
+                let maxTotal = 0;
+                for (let pixel = 0; pixel < totals.length; pixel++) {
+                    const total = totals[pixel];
+                    if (total > maxTotal) maxTotal = total;
+                    const colour = colourForWindyAccumulationMm(total);
+                    const output = pixel * 4;
+                    imageData.data[output] = colour[0];
+                    imageData.data[output + 1] = colour[1];
+                    imageData.data[output + 2] = colour[2];
+                    imageData.data[output + 3] = colour[3];
+                }
+                context.putImageData(imageData, 0, 0);
+                const dataUrl = canvas.toDataURL('image/png');
+                canvas.width = 1;
+                canvas.height = 1;
+
+                windyRadarAccumulationPending = {
+                    totals,
+                    dataUrl,
+                    width,
+                    height,
+                    bounds,
+                    start,
+                    end,
+                    validFrames,
+                    frameCount: frames.length,
+                    missingFrames,
+                    maxTotal,
+                    createdAt: new Date(),
+                    provider: 'OPERA / EUMETNET',
+                    tiled: false
+                };
+                maybeSetWindyAccumulationProgress(100, 'OPERA accumulation complete. Plotting map...', true);
+                plotWindyRadarAccumulationMap();
+                setWindyAccumulationStatus(`OPERA accumulation ready: ${validFrames}/${frames.length} frames sampled${missingFrames ? ` (${missingFrames} missing)` : ''}. Click the map for accumulated rainfall totals.`);
+                hideWindyAccumulationProgress(3500);
+            } catch (error) {
+                console.warn('OPERA accumulation map failed:', error);
+                setWindyAccumulationStatus(error.message || 'OPERA accumulation generation failed.', true);
+                setWindyAccumulationProgress(0, 'Calculation stopped.');
+                hideWindyAccumulationProgress(2500);
+            } finally {
+                windyRadarAccumulationCalculating = false;
+                updateWindyAccumulationPlotButtons();
+            }
+        }
+
 async function calculateWindyRadarAccumulationMap() {
+            if (isOperaRadarSelected()) {
+                return calculateOperaRadarAccumulationMap();
+            }
             if (isWindyAccumulationMapPlotted()) {
                 windyAccumulationContoursEnabled = false;
                 removeWindyAccumulationOverlayOnly(true);
                 restoreCurrentRadarAfterWindyAccumulation();
             } else restoreCurrentRadarAfterWindyAccumulation();
 
-            if (!isWindyRadarPointerActive()) {
-                setWindyAccumulationStatus('Radar must be toggled on and selected before the accumulation map can be generated.', true);
+            if (!isWindyRadarSelected() && !isOperaRadarSelected()) {
+                setWindyAccumulationStatus('Global High Resolution Radar or OPERA must be toggled on and selected before the accumulation map can be generated.', true);
                 return;
             }
             windyRadarAccumulationCalculating = true;
@@ -9378,7 +10087,7 @@ async function calculateWindyRadarAccumulationMap() {
 
                 const { start, end } = getWindyAccumulationTimeRange();
                 const frames = buildWindyAccumulationFrames(start, end);
-                if (!frames.length) throw new Error('No 5-minute Windy Radar frames found inside that range.');
+                if (!frames.length) throw new Error('No 5-minute Global High Resolution Radar frames found inside that range.');
 
                 const z = getWindyAccumulationNativeZoom();
                 const bounds = map.getBounds();
@@ -9425,7 +10134,7 @@ async function calculateWindyRadarAccumulationMap() {
                 updateWindyAccumulationPlotButtons();
                 hideWindyAccumulationProgress(3500);
             } catch (error) {
-                console.warn('Windy Radar accumulation map failed:', error);
+                console.warn('Global High Resolution Radar accumulation map failed:', error);
                 if (windyAccumulationWorker) {
                     try { windyAccumulationWorker.postMessage({ type: 'cancel', jobId: ++windyRadarAccumulationRunId }); } catch (e) { }
                 }
@@ -9437,6 +10146,42 @@ async function calculateWindyRadarAccumulationMap() {
             }
         }
 
+        function isRadarProviderSelected(providerId) {
+            const radarToggle = document.getElementById('radarToggle');
+            const radarSelect = document.getElementById('radarLayer');
+            return !!(radarToggle?.checked && radarSelect?.value === providerId);
+        }
+        function isOperaRadarSelected() {
+            return isRadarProviderSelected('opera-dbzh');
+        }
+        function isWindyRadarSelected() {
+            return isRadarProviderSelected('windy-radar');
+        }
+
+        function isOperaRadarPointerActive() {
+            const radarToggle = document.getElementById('radarToggle');
+            const radarSelect = document.getElementById('radarLayer');
+            return !!(radarToggle?.checked && radarSelect?.value === 'opera-dbzh' && radarLayer &&
+                map.hasLayer(radarLayer) && typeof radarLayer.sampleRainfallAtLatLng === 'function');
+        }
+        function getOperaFrameLabel(url) {
+            const match = String(url || '').match(/OPERA@(\d{8}T\d{4})@0@DBZH\.bin/i);
+            if (!match) return 'Current OPERA frame';
+            const value = match[1];
+            return `${value.slice(0,4)}-${value.slice(4,6)}-${value.slice(6,8)} ${value.slice(9,11)}:${value.slice(11,13)} UTC`;
+        }
+        function sampleOperaRadarRainfallAtLatLng(latlng) {
+            if (!isOperaRadarPointerActive()) return null;
+            const sample = radarLayer.sampleRainfallAtLatLng(latlng);
+            if (!sample) return null;
+            return {
+                ...sample,
+                provider: 'OPERA / EUMETNET',
+                frameLabel: getOperaFrameLabel(radarLayer._operaTimestampUrl),
+                sourceZoom: '1 km grid'
+            };
+        }
+
         function showWindyRadarRainfallPopup(latlng, sample) {
             const targetLevels = getUkRadarTargetLevels();
             const mmh = sample?.mmh ?? 0;
@@ -9446,11 +10191,12 @@ async function calculateWindyRadarAccumulationMap() {
             const scaleLabel = getRadarScaleLabelForMmh(mmh, targetLevels);
             const dbzText = sample && sample.dbz > 0 ? `${sample.dbz.toFixed(1)} dBZ` : 'No echo';
             const frameText = sample?.frameLabel || 'Current plotted frame';
+            const providerText = sample?.provider || 'Global High Resolution Radar';
             const rgbaText = sample?.rgba ? sample.rgba.slice(0, 3).join(', ') : '-';
             const zoomText = sample?.sourceZoom !== undefined ? `z${sample.sourceZoom}` : 'native z';
             const html = `
                 <div style="min-width:220px; font-family:Inter,Arial,sans-serif; line-height:1.35;">
-                    <div style="font-weight:800; font-size:13px; margin-bottom:6px; color:#1a2a44;">Estimated Rainfall Amount</div>
+                    <div style="font-weight:800; font-size:13px; margin-bottom:6px; color:#1a2a44;">Estimated Rainfall Amount</div><div style="font-size:10px;color:#777;margin-bottom:4px;">${providerText}</div>
                     <div style="font-size:22px; font-weight:800; color:${amountCss}; margin-bottom:2px; text-shadow:0 1px 1px rgba(0,0,0,0.18);">${mmhText}</div>
                     <div style="font-size:11px; color:#555; margin-bottom:6px;">${dbzText}</div>
                     <div style="font-size:10px; color:#777;">Frame: ${frameText}</div>
@@ -9462,14 +10208,16 @@ async function calculateWindyRadarAccumulationMap() {
                 .openOn(map);
         }
         async function handleWindyRadarMapClick(e) {
-            if (!isWindyRadarPointerActive() && !(typeof isWindyAccumulationMapPlotted === 'function' && isWindyAccumulationMapPlotted())) return;
+            if (!isWindyRadarPointerActive() && !isOperaRadarPointerActive() && !(typeof isWindyAccumulationMapPlotted === 'function' && isWindyAccumulationMapPlotted())) return;
             if (isDrawingEnabled) return;
             if (typeof isWindyAccumulationMapPlotted === 'function' && isWindyAccumulationMapPlotted()) {
                 showWindyAccumulationRainfallPopup(e.latlng, sampleWindyAccumulationTotalAtLatLng(e.latlng));
                 return;
             }
             try {
-                const sample = await sampleWindyRadarRainfallAtLatLng(e.latlng);
+                const sample = isOperaRadarPointerActive()
+                    ? sampleOperaRadarRainfallAtLatLng(e.latlng)
+                    : await sampleWindyRadarRainfallAtLatLng(e.latlng);
                 showWindyRadarRainfallPopup(e.latlng, sample);
             } catch (error) {
                 console.warn('Failed to sample radar rainfall at clicked location:', error);
@@ -9485,11 +10233,11 @@ async function calculateWindyRadarAccumulationMap() {
             const selectedRadarLayer = document.getElementById('radarLayer')?.value;
             // Windy Radar colour replacement is mandatory whenever Windy Radar is selected.
             // uk-precip-intensity is intentionally excluded and keeps its provider/native colours.
-            return ['windy-radar'].includes(selectedRadarLayer);
+            return ['windy-radar', 'opera-dbzh'].includes(selectedRadarLayer);
         }
         function updateUkCustomRadarColorScaleControlVisibility() {
             const selectedRadarLayer = document.getElementById('radarLayer')?.value;
-            const selected = ['windy-radar'].includes(selectedRadarLayer);
+            const selected = ['windy-radar', 'opera-dbzh'].includes(selectedRadarLayer);
             const radarOn = document.getElementById('radarToggle')?.checked !== false;
             const control = document.getElementById('uk-custom-radar-colour-control');
             const editor = document.getElementById('uk-custom-radar-editor');
@@ -9503,9 +10251,13 @@ async function calculateWindyRadarAccumulationMap() {
         }
         function rebuildUkRadarOnly() {
             const select = document.getElementById('radarLayer');
-            if (['windy-radar'].includes(select?.value) && !select.disabled && document.getElementById('radarToggle')?.checked !== false) {
-                clearRadarLayers();
-                plotLayerIfNecessary(select.value, radarOptions, getCurrentSliderTimestamp(), 'radar');
+            if (['windy-radar', 'opera-dbzh'].includes(select?.value) && !select.disabled && document.getElementById('radarToggle')?.checked !== false) {
+                if (select.value === 'opera-dbzh' && radarLayer?._isOperaDbzhLayer && typeof radarLayer._schedule === 'function') {
+                    refreshOperaRadarColourScale();
+                } else {
+                    clearRadarLayers();
+                    plotLayerIfNecessary(select.value, radarOptions, getCurrentSliderTimestamp(), 'radar');
+                }
             }
             if (typeof updateLegend === 'function') updateLegend();
         }
@@ -9516,6 +10268,37 @@ async function calculateWindyRadarAccumulationMap() {
             updateUkCustomRadarColorScaleControlVisibility();
             rebuildUkRadarOnly();
         }
+        function updateRadarPalettePreview() {
+            const preview = document.getElementById('radar-palette-preview');
+            if (!preview) return;
+            preview.innerHTML = '';
+            getUkRadarTargetLevels().forEach(level => {
+                const span = document.createElement('span');
+                const rgba = level.rgba;
+                span.style.background = `rgba(${rgba[0]},${rgba[1]},${rgba[2]},${rgba[3] / 255})`;
+                preview.appendChild(span);
+            });
+        }
+        function applyRadarPalettePreset(presetName, options = {}) {
+            const resolved = RADAR_PALETTE_PRESETS[presetName] ? presetName : 'turbo';
+            activeRadarPalettePreset = resolved;
+            UK_CUSTOM_RADAR_COLOR_TEMPLATE = RADAR_PALETTE_PRESETS[resolved];
+            if (options.keepOverrides !== true) ukCustomRadarLevelOverrides = {};
+            try {
+                localStorage.setItem('radar-palette-preset', resolved);
+                if (options.keepOverrides !== true) localStorage.removeItem('uk-custom-radar-level-overrides');
+            } catch (e) { }
+            const selector = document.getElementById('radar-palette-select');
+            if (selector) selector.value = resolved;
+            const container = document.getElementById('uk-custom-radar-colour-inputs');
+            if (container) { container.innerHTML = ''; container.dataset.built = '0'; }
+            buildUkCustomRadarColorInputs();
+            updateRadarPalettePreview();
+            operaWindyColourLutCache = null;
+            operaWindyColourLutSignature = '';
+            if (options.rebuild !== false) rebuildUkRadarOnly();
+        }
+
         function buildUkCustomRadarColorInputs() {
             const container = document.getElementById('uk-custom-radar-colour-inputs');
             if (!container || container.dataset.built === '1') return;
@@ -9532,7 +10315,9 @@ async function calculateWindyRadarAccumulationMap() {
                 input.addEventListener('input', () => {
                     ukCustomRadarLevelOverrides[String(index)] = input.value;
                     try { localStorage.setItem('uk-custom-radar-level-overrides', JSON.stringify(ukCustomRadarLevelOverrides)); } catch (e) { }
+                    updateRadarPalettePreview();
                     if (radarLayer && radarLayer.redraw && isUkCustomRadarActiveForCurrentSelection()) radarLayer.redraw();
+                    if (radarLayer?._isOperaDbzhLayer) refreshOperaRadarColourScale();
                 });
                 input.addEventListener('change', rebuildUkRadarOnly);
                 container.appendChild(label);
@@ -9546,6 +10331,7 @@ async function calculateWindyRadarAccumulationMap() {
             const container = document.getElementById('uk-custom-radar-colour-inputs');
             if (container) { container.innerHTML = ''; container.dataset.built = '0'; }
             buildUkCustomRadarColorInputs();
+            updateRadarPalettePreview();
             rebuildUkRadarOnly();
         }
         function initialiseUkCustomRadarColourControls() {
@@ -9553,6 +10339,9 @@ async function calculateWindyRadarAccumulationMap() {
                 // The enabled flag is forced on for Windy Radar; only palette overrides remain user-configurable.
                 ukCustomRadarColorScaleEnabled = true;
                 localStorage.setItem('uk-custom-radar-colour-enabled', '1');
+                activeRadarPalettePreset = localStorage.getItem('radar-palette-preset') || 'turbo';
+                if (!RADAR_PALETTE_PRESETS[activeRadarPalettePreset]) activeRadarPalettePreset = 'turbo';
+                UK_CUSTOM_RADAR_COLOR_TEMPLATE = RADAR_PALETTE_PRESETS[activeRadarPalettePreset];
                 ukCustomRadarLevelOverrides = JSON.parse(localStorage.getItem('uk-custom-radar-level-overrides') || '{}') || {};
             } catch (e) {
                 ukCustomRadarColorScaleEnabled = true;
@@ -9560,7 +10349,10 @@ async function calculateWindyRadarAccumulationMap() {
             }
             const toggle = document.getElementById('uk-custom-radar-colour-toggle');
             if (toggle) toggle.checked = true;
+            const selector = document.getElementById('radar-palette-select');
+            if (selector) selector.value = activeRadarPalettePreset;
             buildUkCustomRadarColorInputs();
+            updateRadarPalettePreview();
             updateUkCustomRadarColorScaleControlVisibility();
         }
         document.addEventListener('DOMContentLoaded', initialiseUkCustomRadarColourControls);
@@ -10254,7 +11046,15 @@ async function calculateWindyRadarAccumulationMap() {
             const warningSelect = document.getElementById('warningLayerSelect');
 
             // Attach change handlers for layer dropdowns
-            if (radarSelect) radarSelect.addEventListener('change', radarLayerTypeHandler);
+            if (radarSelect) {
+                radarSelect.addEventListener('change', radarLayerTypeHandler);
+                radarSelect.addEventListener('change', () => {
+                    if (radarSelect.value === 'opera-dbzh') prefetchOperaFrameForTimestamp(getCurrentSliderTimestamp());
+                });
+                radarSelect.addEventListener('pointerenter', () => {
+                    if (radarSelect.value === 'opera-dbzh') prefetchOperaFrameForTimestamp(getCurrentSliderTimestamp());
+                }, { passive: true });
+            }
             if (satelliteSelect) satelliteSelect.addEventListener('change', satelliteLayerTypeHandler);
             if (isobarSelect) isobarSelect.addEventListener('change', isobarLayerTypeHandler);
             if (windSelect) windSelect.addEventListener('change', windLayerTypeHandler);
@@ -10282,12 +11082,24 @@ async function calculateWindyRadarAccumulationMap() {
             // Time slider
             if (timeSlider) {
                 timeSlider.addEventListener('input', handleTimeSliderChange);
+                timeSlider.addEventListener('input', () => {
+                    const timestamp = getCurrentSliderTimestamp();
+                    pendingDebouncedWeatherTimestamp = timestamp;
+                    if (document.getElementById('radarLayer')?.value === 'opera-dbzh') {
+                        prefetchOperaFrameForTimestamp(timestamp);
+                    }
+                }, { passive: true });
             }
 
             // === CRITICAL: Force initial plot of all currently enabled layers ===
             updateLegend();
             const initialTimestamp = timeSlider ? getCurrentSliderTimestamp() : Date.now();
 
+            // Begin OPERA download and projection geometry in parallel before the initial
+            // full weather update if OPERA is already the selected radar source.
+            if (radarSelect?.value === 'opera-dbzh' && document.getElementById('radarToggle')?.checked) {
+                prefetchOperaFrameForTimestamp(initialTimestamp);
+            }
             // Force immediate execution (bypasses debounce delay)
             triggerMapUpdate(initialTimestamp, true);
 
