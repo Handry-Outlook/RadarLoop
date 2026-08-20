@@ -3138,6 +3138,106 @@
             background:var(--hoco-risk-color,#55dfbd)!important;
             border-color:rgba(0,0,0,.35)!important;
         }
+
+        /* Auto HOCO calendar: simple availability green, no risk computation. */
+        #control-panel #hoco-control-section .outlook-calendar-day.available {
+            background:#12483f!important;color:#fff!important;
+        }
+        #control-panel #hoco-control-section .outlook-calendar-day.available:hover {
+            background:#176052!important;
+        }
+        #control-panel #hoco-control-section .outlook-calendar-day.available::after {
+            background:#40e0bd!important;border-color:#092d27!important;
+        }
+        /* Keep the Auto card at exactly the same outer width in both states. */
+        #forecast-legends-host,
+        #control-panel #hoco-metadata-legend,
+        #control-panel #hoco-metadata-legend.collapsed,
+        #control-panel #hoco-metadata-legend:not(.collapsed),
+        #control-panel #published-outlook-control-section {
+            width:100%!important;max-width:100%!important;min-width:0!important;
+            box-sizing:border-box!important;margin-left:0!important;margin-right:0!important;
+        }
+        #control-panel #hoco-metadata-legend { contain:inline-size!important;overflow:hidden!important; }
+        #control-panel #hoco-metadata-legend .hoco-content,
+        #control-panel #hoco-metadata-legend #hoco-control-section,
+        #control-panel #hoco-metadata-legend .outlook-calendar,
+        #control-panel #hoco-metadata-legend .published-opacity-control {
+            width:100%!important;max-width:100%!important;min-width:0!important;box-sizing:border-box!important;
+        }
+
+        /* Definitive card resize fix: reserve scrollbar space and avoid percentage-width plus padding calculations. */
+        #control-panel {
+            scrollbar-gutter:stable!important;
+        }
+        #forecast-legends-host {
+            display:block!important;
+            width:auto!important;
+            max-width:none!important;
+            min-width:0!important;
+            margin:0!important;
+            padding:0 6px!important;
+            box-sizing:border-box!important;
+            overflow:visible!important;
+        }
+        #control-panel #hoco-metadata-legend,
+        #control-panel #hoco-metadata-legend.collapsed,
+        #control-panel #hoco-metadata-legend:not(.collapsed),
+        #control-panel #published-outlook-control-section {
+            display:block!important;
+            width:auto!important;
+            max-width:none!important;
+            min-width:0!important;
+            margin:0 0 10px!important;
+            box-sizing:border-box!important;
+            contain:none!important;
+            overflow:hidden!important;
+        }
+        #control-panel #hoco-metadata-legend .hoco-content,
+        #control-panel #hoco-metadata-legend #hoco-control-section,
+        #control-panel #hoco-metadata-legend .outlook-calendar,
+        #control-panel #hoco-metadata-legend .published-opacity-control,
+        #control-panel #hoco-metadata-legend .published-outlook-primary-row,
+        #control-panel #published-outlook-control-section .published-outlook-primary-row {
+            width:auto!important;
+            max-width:none!important;
+            min-width:0!important;
+            box-sizing:border-box!important;
+        }
+        #control-panel #hoco-metadata-legend .hoco-content[style],
+        #control-panel #hoco-metadata-legend #hoco-control-section[style] {
+            width:auto!important;
+            max-width:none!important;
+        }
+
+        /* Auto HOCO now uses the exact Manual Outlook card shell and collapse method. */
+        #control-panel #hoco-metadata-legend.section.published-outlook-card.compact,
+        #control-panel #published-outlook-control-section.section.published-outlook-card.compact {
+            width:100%!important;max-width:100%!important;min-width:0!important;
+            margin:0 0 10px!important;padding:0!important;box-sizing:border-box!important;
+            overflow:hidden!important;position:static!important;inset:auto!important;
+        }
+        #control-panel #hoco-metadata-legend .published-outlook-heading,
+        #control-panel #published-outlook-control-section .published-outlook-heading {
+            width:auto!important;max-width:none!important;box-sizing:border-box!important;
+        }
+        #control-panel #hoco-options[hidden],
+        #control-panel #published-outlook-options[hidden] { display:none!important; }
+        #control-panel #hoco-options:not([hidden]),
+        #control-panel #published-outlook-options:not([hidden]) { display:block!important; }
+        #control-panel #hoco-metadata-legend.collapsed,
+        #control-panel #hoco-metadata-legend:not(.collapsed) {
+            width:100%!important;max-width:100%!important;
+        }
+
+        #control-panel #hoco-options[hidden] { display:none!important; }
+        #control-panel #hoco-options:not([hidden]) { display:block!important; }
+
+        #control-panel #hoco-options[hidden],
+        #control-panel #hoco-metadata-legend #hoco-options[hidden],
+        #control-panel #hoco-metadata-legend .hoco-content#hoco-options[hidden] {
+            display:none!important;
+        }
     </style>
 
 <style id="met-office-warning-popup-layout-fix">
@@ -3858,7 +3958,7 @@
 
         <div class="section published-outlook-card compact" id="published-outlook-control-section">
             <div class="published-outlook-heading">
-                <div><h4>Manual Handry Outlook</h4><small>Published convective outlook</small></div>
+                <div><h4>Manual HOCO</h4><small>Manually published HOCO thunderstorm forecast</small></div>
                 <button type="button" id="published-outlook-collapse" aria-label="Expand published outlook" aria-expanded="false">+</button>
             </div>
             <div class="published-outlook-primary-row">
@@ -4305,18 +4405,15 @@
         <button onclick="confirmAutoTimeFilter(false)">No</button>
     </div>
     <div id="overlay" class="overlay" style="display: none;"></div>
-    <div id="hoco-metadata-legend"
-        style="display:none; position: fixed; top: 80px; right: 20px; background: rgba(0,0,0,0.9); color: white; padding: 12px; border-radius: 8px; z-index: 1000; font-family: 'Inter', sans-serif; border: 1px solid #3a4785; box-shadow: 0 4px 15px rgba(0,0,0,0.5); min-width: 250px; transition: all 0.3s ease;">
-
-        <div
-            style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; padding-bottom: 5px; margin-bottom: 8px;">
-            <div class="hoco-title-copy"><div class="hoco-card-title">Auto HOCO Thunderstorm Forecast</div><small>Automated convective outlook</small></div>
+    <div id="hoco-metadata-legend" class="section published-outlook-card compact">
+        <div class="published-outlook-heading">
+            <div class="hoco-title-copy"><div class="hoco-card-title">Auto HOCO</div><small>Automated HOCO thunderstorm forecast</small></div>
             <div class="hoco-card-actions">
-                <button id="hoco-toggle-btn" type="button" onclick="toggleHocoLegend()" aria-label="Expand Auto HOCO settings" aria-expanded="false">+</button>
+                <button id="hoco-toggle-btn" type="button" aria-label="Expand Auto HOCO settings" aria-expanded="false">+</button>
             </div>
         </div>
 
-        <div class="hoco-content">
+        <div class="hoco-content" id="hoco-options" hidden style="display:none">
             <div style="font-size: 11px; line-height: 1.6; opacity: 0.9; font-family: 'Inter', sans-serif;">
 
                 <div style="margin-bottom: 4px;">
@@ -6807,8 +6904,6 @@
             let host=document.getElementById('forecast-legends-host');
             if(!host){host=document.createElement('div');host.id='forecast-legends-host';panel.prepend(host);}
             hoco.style.display='block';
-            hoco.classList.add('collapsed');
-            if(window.manualOutlookActive) hoco.classList.add('auto-suppressed');hoco.style.display='block';
             host.appendChild(hoco);
             host.appendChild(manual);
             const autoSettings=document.getElementById('hoco-control-section');
@@ -6818,6 +6913,7 @@
             if(autoPrimary) hoco.insertBefore(autoPrimary,hocoContent);
             if(autoSummary) hoco.insertBefore(autoSummary,hocoContent);
             if(autoSettings && hocoContent) hocoContent.appendChild(autoSettings);
+            setAutoHocoOptionsOpen(false);
         }
         function syncRadarLoopToArchivedOutlook(item) {
             const start=outlookDate(item?.validFrom), end=outlookDate(item?.validTo);
@@ -6847,7 +6943,7 @@
             if(slider){slider.min='0';slider.max=String(durationMinutes);slider.value=String(durationMinutes);}
             if(typeof applyFilter==='function') applyFilter();
             else if(typeof updateHistory==='function') updateHistory();
-            if(note){note.hidden=false;note.textContent=`Timeline set to forecast validity. Showing all loaded lightning from ${start.toLocaleString('en-GB')} to ${end.toLocaleString('en-GB')}${archiveTimelineSliderDragged?'':' with lightning lifetime matched to the outlook duration'}.`;}
+            
         }
         function updatePublishedDetail(item) {
             const meta=document.getElementById('published-outlook-meta');
@@ -7020,13 +7116,12 @@
             const y=hocoCalendarMonth.getFullYear(),m=hocoCalendarMonth.getMonth(),grid=document.getElementById('hoco-calendar-grid');if(!grid)return;
             document.getElementById('hoco-calendar-month').textContent=hocoCalendarMonth.toLocaleDateString('en-GB',{month:'long',year:'numeric'});grid.innerHTML='';
             const keys=new Set(hocoCalendarEntries.map(x=>x.validKey));const first=new Date(y,m,1),offset=(first.getDay()+6)%7,start=new Date(y,m,1-offset);
-            for(let i=0;i<42;i++){const d=new Date(start);d.setDate(start.getDate()+i);const k=hocoKey(d),b=document.createElement('button');b.type='button';b.className='outlook-calendar-day';b.textContent=d.getDate();if(d.getMonth()!==m)b.classList.add('outside');if(keys.has(k)){const dayEntries=hocoCalendarEntries.filter(x=>x.validKey===k),highest=Math.max(0,...dayEntries.map(x=>Number(x.maxRisk)||0));b.classList.add('available');b.style.setProperty('--hoco-risk-color',hocoCalendarColor(highest));b.title=`${k}: highest Auto HOCO risk ${Math.round(highest)}% across ${dayEntries.length} run${dayEntries.length===1?'':'s'}`;b.onclick=()=>{hocoCalendarMonth=new Date(d);populateHocoRunSelect(k);};}if(k===selectedHocoDateKey)b.classList.add('selected');grid.appendChild(b);}
+            for(let i=0;i<42;i++){const d=new Date(start);d.setDate(start.getDate()+i);const k=hocoKey(d),b=document.createElement('button');b.type='button';b.className='outlook-calendar-day';b.textContent=d.getDate();if(d.getMonth()!==m)b.classList.add('outside');if(keys.has(k)){const dayEntries=hocoCalendarEntries.filter(x=>x.validKey===k);b.classList.add('available');b.title=`${k}: Auto HOCO available (${dayEntries.length} run${dayEntries.length===1?'':'s'})`;b.onclick=()=>{hocoCalendarMonth=new Date(d);populateHocoRunSelect(k);};}if(k===selectedHocoDateKey)b.classList.add('selected');grid.appendChild(b);}
         }
         async function fetchHocoData(){
             try{const snap=await db.collection('hoco_requests').where('type','==','automated').orderBy('createdAt','desc').get();const seen=new Set();hocoCalendarEntries=[];
                 snap.forEach(doc=>{const x=doc.data(),created=x.createdAt?.toDate?.();if(!created)return;for(let day=0;day<3;day++){if(!String(x.id||doc.id).includes(`Day${day}`))continue;const base=new Date(created);base.setSeconds(0,0);const valid=new Date(base);valid.setDate(valid.getDate()+day);const token=`${base.getTime()}|${day}`;if(seen.has(token))continue;seen.add(token);hocoCalendarEntries.push({baseSeconds:Math.floor(base.getTime()/1000),day,validKey:hocoKey(valid),createdLabel:created.toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}),geojson:x.geojson||x.geoJSON||null,geojsonUrl:x.geojsonUrl||null,maxRisk:Number.isFinite(Number(x.maxRisk??x.highestRisk))?Number(x.maxRisk??x.highestRisk):undefined});}});
                 const today=hocoKey(new Date()),latest=hocoCalendarEntries[0];const key=hocoCalendarEntries.some(x=>x.validKey===today)?today:latest?.validKey;if(key){hocoCalendarMonth=new Date(`${key}T12:00:00`);populateHocoRunSelect(key);}else renderHocoCalendar();
-                hydrateHocoCalendarRisks();
             }catch(e){console.error('Fetch Error:',e);}
         }
         /**
@@ -7069,15 +7164,12 @@
                     moveForecastLegendsToPanelTop();
                     const hocoLegend=document.getElementById('hoco-metadata-legend');
                     hocoLegend.style.display='block';
-                    if(!window.manualOutlookActive) hocoLegend.classList.remove('auto-suppressed');
-                    hocoLegend.classList.add('collapsed');
+                    setAutoHocoOptionsOpen(false);
                     const hocoBtn=document.getElementById('hoco-toggle-btn');if(hocoBtn){hocoBtn.textContent='+';hocoBtn.setAttribute('aria-expanded','false');}
 
                     const res = await fetch(freshUrl, { mode: 'cors' });
                     const geojsonData = await res.json();
                     const validKey=hocoCalendarEntries.find(x=>x.baseSeconds===Number(baseSeconds)&&x.day===Number(day))?.validKey||selectedHocoDateKey;
-                    const loadedRisk=hocoRiskFromGeoJSON(geojsonData);
-                    hocoCalendarEntries.filter(x=>x.validKey===validKey&&x.baseSeconds===Number(baseSeconds)&&x.day===Number(day)).forEach(x=>x.maxRisk=loadedRisk);
                     renderHocoCalendar();
                     syncAutoHocoTimeline(data,validKey);
 
@@ -7154,17 +7246,26 @@
         /**
  * Toggles the visibility of the HOCO legend content
  */
-        function toggleHocoLegend() {
-            const legend=document.getElementById('hoco-metadata-legend');
+        function setAutoHocoOptionsOpen(open) {
+            const options=document.getElementById('hoco-options');
             const btn=document.getElementById('hoco-toggle-btn');
-            const willExpand=legend.classList.contains('collapsed');
-            legend.classList.toggle('collapsed',!willExpand);
-            btn.textContent=willExpand?'−':'+';
-            btn.setAttribute('aria-expanded',String(willExpand));
-            btn.setAttribute('aria-label',willExpand?'Collapse Auto HOCO settings':'Expand Auto HOCO settings');
+            if(!options || !btn) return;
+            options.hidden=!open;
+            options.setAttribute('aria-hidden',String(!open));
+            options.style.setProperty('display',open?'block':'none','important');
+            btn.textContent=open?'−':'+';
+            btn.setAttribute('aria-expanded',String(open));
+            btn.setAttribute('aria-label',open?'Collapse Auto HOCO settings':'Expand Auto HOCO settings');
+            if(open && typeof renderHocoCalendar==='function') renderHocoCalendar();
+        }
+        function toggleHocoLegend(event) {
+            if(event){event.preventDefault();event.stopPropagation();}
+            const btn=document.getElementById('hoco-toggle-btn');
+            setAutoHocoOptionsOpen(btn?.getAttribute('aria-expanded')!=='true');
         }
         // Initialization Listener
         window.addEventListener('DOMContentLoaded', () => {
+            const autoHocoButton=document.getElementById('hoco-toggle-btn');if(autoHocoButton){autoHocoButton.addEventListener('click',toggleHocoLegend,{capture:true});}setAutoHocoOptionsOpen(false);
             document.getElementById('hoco-run-select')?.addEventListener('change',e=>{const [base,day]=e.target.value.split('|');if(base)loadHocoByTimestampAndDay(base,Number(day));});
             document.getElementById('hoco-prev-month')?.addEventListener('click',()=>{hocoCalendarMonth.setMonth(hocoCalendarMonth.getMonth()-1);renderHocoCalendar();});
             document.getElementById('hoco-next-month')?.addEventListener('click',()=>{hocoCalendarMonth.setMonth(hocoCalendarMonth.getMonth()+1);renderHocoCalendar();});
