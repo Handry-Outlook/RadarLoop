@@ -2608,6 +2608,15 @@
 .met-office-warning-scroll::-webkit-scrollbar-thumb { background: #999; border-radius: 8px; border: 2px solid #f1f1f1; }
 </style>
 
+
+<style id="satellite-animation-no-flash-style">
+.leaflet-tile-pane .satellite-fast-tile,
+.leaflet-overlay-pane .satellite-fast-tile {
+    transition: none !important;
+    will-change: auto;
+}
+</style>
+
 </head>
 <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-M5QDT7XR39"></script>
@@ -7794,13 +7803,38 @@
                     newLayer._windyRadarRequestedTimestamp = timestamp;
                     newLayer._windyRadarTileUrl = finalUrl;
                 }
+                // During satellite animation, add the candidate invisibly. This prevents
+                // Leaflet's empty tile container from briefly exposing the base map.
+                if (layerKey === 'satellite' && newLayer.setOpacity) newLayer.setOpacity(0);
                 newLayer.addTo(map);
                 if (guardedSwap) weatherLayerCandidates[layerKey].add(newLayer);
 
                 const layerLoadedPromise = new Promise(resolve => {
-                    const timeout = setTimeout(() => resolve(true), layerType === 'opera-dbzh' ? 90 : (layerKey === 'satellite' ? 320 : (newLayer instanceof L.GridLayer ? 500 : 350)));
-                    newLayer.once('load', () => { clearTimeout(timeout); resolve(true); });
-                    newLayer.once('error', () => { clearTimeout(timeout); resolve(false); });
+                    let settled = false;
+                    const finish = value => {
+                        if (settled) return;
+                        settled = true;
+                        clearTimeout(timeout);
+                        newLayer.off('load', onReady);
+                        newLayer.off('error', onError);
+                        resolve(value);
+                    };
+                    const onReady = () => finish(true);
+                    const onError = () => {
+                        // A single failed WMS tile must not blank the frame. Other visible
+                        // tiles and the retry loader may still complete successfully.
+                        if (layerKey !== 'satellite') finish(false);
+                    };
+                    const timeoutMs = layerKey === 'satellite' ? 30000 : (layerType === 'opera-dbzh' ? 90 : (newLayer instanceof L.GridLayer ? 500 : 350));
+                    // If a satellite frame cannot complete, reject only the candidate.
+                    // The fully rendered previous frame remains untouched on screen.
+                    const timeout = setTimeout(() => finish(layerKey !== 'satellite'), timeoutMs);
+                    // Do not commit on the first tile. Doing so exposes holes where
+                    // the rest of the new 256x256 WMS tiles have not arrived yet. Wait for
+                    // Leaflet's complete layer load event, which means every requested
+                    // viewport tile has either loaded or completed its retry lifecycle.
+                    newLayer.on('load', onReady);
+                    newLayer.on('error', onError);
                 });
 
                 const success = await layerLoadedPromise;
@@ -7841,15 +7875,27 @@
                     if (guardedSwap) {
                         weatherLayerCandidates[layerKey].delete(newLayer);
                         removeStaleWeatherCandidates(layerKey, newLayer);
-                        // Radar/satellite use an atomic one-layer commit. Once the new
-                        // frame is accepted, the previous timestamp is removed at once.
-                        if (layerToDispose && layerToDispose !== newLayer && map.hasLayer(layerToDispose)) {
+                        if (layerKey === 'satellite') {
+                            // The new frame has delivered a real tile. Reveal it first, then
+                            // retire the prior timestamp on the next paint. At least one complete
+                            // satellite image therefore covers the map throughout the handover.
+                            if (newLayer.setOpacity) newLayer.setOpacity(currentOpacity);
+                            else if (newLayer.getElement?.()) newLayer.getElement().style.opacity = currentOpacity;
+                            const oldSatellite = layerToDispose;
+                            requestAnimationFrame(() => {
+                                // The replacement is complete and opaque before the old
+                                // layer is removed, so the base map is never exposed.
+                                if (oldSatellite && oldSatellite !== newLayer && map.hasLayer(oldSatellite)) {
+                                    map.removeLayer(oldSatellite);
+                                }
+                            });
+                        } else if (layerToDispose && layerToDispose !== newLayer && map.hasLayer(layerToDispose)) {
                             map.removeLayer(layerToDispose);
                         }
                         layerToDispose = null;
                     }
 
-                    // Ensure opacity is applied to the DOM element (double check)
+                    // Ensure opacity is applied to the committed layer.
                     if (newLayer.getElement && newLayer.getElement()) {
                         newLayer.getElement().style.opacity = currentOpacity;
                     } else if (newLayer.setOpacity) {
@@ -13333,11 +13379,20 @@ async function calculateWindyRadarAccumulationMap() {
                 updateZIndex();
                 lastZIndexUpdateTime = Date.now();
             }
-            updateLegend();
+            // Legend DOM reconstruction is unnecessary on every animation frame.
+            if (!isPlaying || Date.now() - (window.__lastAnimationLegendUpdate || 0) > 1200) {
+                updateLegend();
+                window.__lastAnimationLegendUpdate = Date.now();
+            }
 
             // Weather/radar tile layer checks are also expensive. Throttle them separately.
-            if (!isPlaying || Date.now() - lastWeatherLayerUpdateTime > ANIMATION_WEATHER_INTERVAL_MS) {
-                lastWeatherLayerUpdateTime = Date.now();
+            // Each committed animation position is already quantised to five minutes.
+            // Send every committed frame to the fast radar/satellite path, without the
+            // older 1.2-3.5 second throttle that caused visible 20-minute jumps.
+            lastWeatherLayerUpdateTime = Date.now();
+            if (isPlaying && typeof window.fastRadarSatelliteSliderUpdate === 'function') {
+                window.fastRadarSatelliteSliderUpdate(end.getTime());
+            } else {
                 updateMapLayers(end.getTime());
             }
 
@@ -14890,38 +14945,58 @@ async function calculateWindyRadarAccumulationMap() {
             isPlaying = true;
             window.__radarLoopAnimationStartedAt = Date.now();
             const slider = document.getElementById('history-slider');
-            let currentValue = parseFloat(slider.value);
-            const maxValue = parseFloat(slider.max);
-            const speed = parseFloat(document.getElementById('speed-slider').value); // Minutes per second
-            let lastFrameTime = performance.now();
-            let lastMapUpdateTime = 0;
+            const maxValue = Number(slider.max) || 0;
+            const stepMinutes = 5;
+            const requestedSpeed = Math.max(1, Number(document.getElementById('speed-slider').value) || 5);
+            let committedValue = Math.floor((Number(slider.value) || 0) / stepMinutes) * stepMinutes;
+            let accumulatedMinutes = 0;
+            let lastTick = performance.now();
+            let frameCommitBusy = false;
 
-            function animate(currentTime) {
+            if (typeof weatherAdjacentPrefetchToken !== 'undefined') weatherAdjacentPrefetchToken++;
+            clearTimeout(heatmapOverlayThrottle);
+            clearTimeout(nowcastThrottle);
+
+            function commitNextFiveMinuteFrame() {
+                if (frameCommitBusy || !isPlaying) return false;
+                const nextValue = Math.min(maxValue, committedValue + stepMinutes);
+                if (nextValue <= committedValue) return false;
+                frameCommitBusy = true;
+                committedValue = nextValue;
+                slider.value = committedValue;
+
+                // Commit exactly one chronological five-minute frame. Never jump to
+                // the latest accumulated position when rendering is temporarily busy.
+                requestAnimationFrame(() => {
+                    try {
+                        updateHistory();
+                    } finally {
+                        // Give Leaflet one paint opportunity before the next frame can
+                        // be committed. This keeps 00, 05, 10, 15... in sequence.
+                        requestAnimationFrame(() => { frameCommitBusy = false; });
+                    }
+                });
+                return true;
+            }
+
+            function animate(now) {
                 if (!isPlaying) return;
+                const elapsedSeconds = Math.min(0.25, Math.max(0, (now - lastTick) / 1000));
+                lastTick = now;
+                accumulatedMinutes += requestedSpeed * elapsedSeconds;
 
-                const deltaTime = (currentTime - lastFrameTime) / 1000;
-                lastFrameTime = currentTime;
-                currentValue += speed * deltaTime;
+                // Consume only one five-minute interval at a time. Any backlog remains
+                // queued rather than being collapsed into a 10, 15 or 20-minute jump.
+                if (accumulatedMinutes >= stepMinutes && !frameCommitBusy) {
+                    if (commitNextFiveMinuteFrame()) accumulatedMinutes -= stepMinutes;
+                }
 
-                if (currentValue >= maxValue) {
-                    currentValue = maxValue;
-                    slider.value = currentValue;
-                    updateHistory();
+                if (committedValue >= maxValue) {
                     stopAnimation();
                     return;
                 }
-
-                slider.value = currentValue;
-
-                // Slider remains smooth, but expensive map/nowcast/weather work is capped.
-                if (currentTime - lastMapUpdateTime >= ANIMATION_MAP_INTERVAL_MS) {
-                    lastMapUpdateTime = currentTime;
-                    updateHistory();
-                }
-
                 animationInterval = requestAnimationFrame(animate);
             }
-
             animationInterval = requestAnimationFrame(animate);
         }
 
@@ -16931,7 +17006,7 @@ async function calculateWindyRadarAccumulationMap() {
             ]).then(() => {
                 if (serial !== requestSerial) return;
                 // Prefetch adjacent frames only after the requested frame is on screen.
-                if (typeof scheduleAdjacentWeatherFramePrefetch === 'function') {
+                if (!isPlaying && typeof scheduleAdjacentWeatherFramePrefetch === 'function') {
                     const defs = [
                         { key:'radar', select:'radarLayer', toggle:'radarToggle', options:radarOptions },
                         { key:'satellite', select:'satelliteLayerSelect', toggle:'satelliteToggle', options:satelliteOptions }
@@ -16939,13 +17014,13 @@ async function calculateWindyRadarAccumulationMap() {
                     scheduleAdjacentWeatherFramePrefetch(timestamp, defs);
                 }
             });
-        }, 55);
+        }, isPlaying ? 0 : 55);
 
         // Less time-sensitive overlays refresh after the user pauses, so they cannot
         // compete with radar/satellite for bandwidth while the slider is moving.
         clearTimeout(settleTimer);
         settleTimer = setTimeout(() => {
-            if (serial === requestSerial && typeof updateMapLayers === 'function') updateMapLayers(timestamp);
+            if (serial === requestSerial && !isPlaying && typeof updateMapLayers === 'function') updateMapLayers(timestamp);
         }, 650);
     };
 
