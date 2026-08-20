@@ -2572,6 +2572,559 @@
             background: rgba(0, 0, 0, .08);
         }
         .radar-palette-preview span { flex: 1 1 0; min-width: 1px; }
+
+        /* Published Handry Outlook controls */
+        .outlook-status { font-size: 12px; line-height: 1.45; color: #cbd5e1; margin: 8px 0; }
+        .outlook-status.live { color: #86efac; }
+        .outlook-status.error { color: #fca5a5; }
+        .outlook-date-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+        .outlook-date-dots { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; max-height: 92px; overflow-y: auto; }
+        .outlook-date-chip { border: 1px solid rgba(255,255,255,.18); border-left: 7px solid var(--risk-color,#94a3b8); background: rgba(255,255,255,.06); color: #e5e7eb; border-radius: 7px; padding: 5px 8px; font-size: 11px; cursor: pointer; }
+        .outlook-date-chip.active { outline: 2px solid #fff; background: rgba(255,255,255,.14); }
+        .outlook-legend { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; font-size:10px; color:#d1d5db; }
+        .outlook-legend span::before { content:''; width:9px; height:9px; border-radius:2px; display:inline-block; background:var(--c); margin-right:4px; }
+
+        .published-outlook-card{border-radius:16px;overflow:hidden;padding:0!important;background:#f8fafc!important;color:#172033!important;border:1px solid #cbd5e1!important}
+        .published-outlook-heading{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #dbe4ef;background:#f8fafc}
+        .published-outlook-heading h4{margin:0!important;color:#172033!important;font-size:16px!important}
+        .published-outlook-heading button{border:0;background:transparent;color:#172033;font-size:20px;cursor:pointer}
+        .published-outlook-primary-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(150px,.9fr);gap:10px;align-items:center;padding:14px 16px}
+        .published-check{display:flex;gap:8px;align-items:center;font-size:13px;font-weight:800;line-height:1.35}
+        .published-check input{width:18px;height:18px;accent-color:#6047ff;flex:0 0 auto}
+        #published-outlook-version{min-width:0;background:#fff;color:#172033;border:1px solid #cbd5e1;border-radius:10px;padding:9px}
+        #published-outlook-options{padding:0 16px 16px}
+        .outlook-calendar{border:1px solid #d7e0ed;border-radius:14px;overflow:hidden;background:#fff}
+        .outlook-calendar-header{height:48px;display:grid;grid-template-columns:44px 1fr 44px;align-items:center;text-align:center;background:#f1f5f9;border-bottom:1px solid #e2e8f0}
+        .outlook-calendar-header button{border:0;background:transparent;color:#172033;font-size:22px;cursor:pointer}
+        .outlook-calendar-weekdays,.outlook-calendar-grid{display:grid;grid-template-columns:repeat(7,1fr)}
+        .outlook-calendar-weekdays span{text-align:center;padding:8px 2px 5px;color:#64748b;font-size:10px;font-weight:800}
+        .outlook-calendar-day{position:relative;min-height:42px;border:0;background:#fff;color:#334155;font-size:13px;cursor:default}
+        .outlook-calendar-day.available{background:color-mix(in srgb,var(--risk-color) 58%,white);cursor:pointer;color:#172033}
+        .outlook-calendar-day.available::after{content:'';position:absolute;width:8px;height:8px;border-radius:50%;background:var(--risk-color);right:7px;bottom:6px;border:1px solid rgba(0,0,0,.25)}
+        .outlook-calendar-day.selected{outline:3px solid #111;outline-offset:-3px;font-weight:900}
+        .outlook-calendar-day.outside{color:#cbd5e1;background:#f8fafc}
+        .published-outlook-meta{color:#64748b;font-size:12px;margin:10px 0}
+        .published-outlook-discussion{background:#fff;color:#172033;border-radius:10px;padding:10px;max-height:150px;overflow:auto;white-space:pre-wrap;font-size:12px;line-height:1.5;border:1px solid #e2e8f0}
+        .published-outlook-link{display:inline-block;margin:10px 0;color:#2563eb;font-size:12px;font-weight:800;text-decoration:none;overflow-wrap:anywhere}
+        .published-opacity-control{margin-top:2px}
+        .outlook-status{color:#64748b!important}.outlook-status.live{color:#15803d!important}.outlook-status.error{color:#b91c1c!important}
+        @media(max-width:520px){.published-outlook-primary-row{grid-template-columns:1fr}.outlook-calendar-day{min-height:38px}}
+
+        /* Published outlook visual polish: isolate this light card from RadarLoop's global dark button styles. */
+        #published-outlook-control-section {
+            --po-ink:#17223b; --po-muted:#667085; --po-line:#d8e1ee;
+            --po-panel:#ffffff; --po-soft:#f4f7fb; --po-accent:#5b4bff;
+            color:var(--po-ink)!important; background:var(--po-panel)!important;
+            box-shadow:0 8px 24px rgba(15,23,42,.16);
+        }
+        #published-outlook-control-section * { box-sizing:border-box; }
+        #published-outlook-options[hidden] { display:none!important; }
+        #published-outlook-control-section .published-outlook-heading { background:#fff!important; }
+        #published-outlook-control-section .published-outlook-heading h4,
+        #published-outlook-control-section .published-check,
+        #published-outlook-control-section .label-text { color:var(--po-ink)!important; }
+        #published-outlook-control-section .published-outlook-heading button {
+            color:#475467!important; background:transparent!important; border:0!important;
+            width:32px;height:32px;border-radius:8px!important;padding:0!important;
+        }
+        #published-outlook-control-section .published-outlook-heading button:hover { background:#eef2f7!important; }
+        #published-outlook-control-section .published-outlook-primary-row {
+            background:#fff!important; border-bottom:1px solid #edf1f6;
+        }
+        #published-outlook-control-section #published-outlook-version {
+            background:#fff!important;color:var(--po-ink)!important;border:1px solid #bdc9d9!important;
+            box-shadow:0 1px 2px rgba(15,23,42,.04);font-size:12px!important;
+        }
+        #published-outlook-control-section .outlook-calendar {
+            background:#fff!important;border-color:var(--po-line)!important;
+            box-shadow:0 1px 3px rgba(15,23,42,.05);
+        }
+        #published-outlook-control-section .outlook-calendar-header { background:#eef3f9!important; }
+        #published-outlook-control-section .outlook-calendar-header strong { color:var(--po-ink)!important;font-size:15px; }
+        #published-outlook-control-section .outlook-calendar-header button {
+            color:#344054!important;background:transparent!important;border:0!important;
+            border-radius:8px!important;margin:5px!important;padding:0!important;
+        }
+        #published-outlook-control-section .outlook-calendar-header button:hover { background:#dde6f1!important; }
+        #published-outlook-control-section .outlook-calendar-weekdays { background:#f8fafc!important; }
+        #published-outlook-control-section .outlook-calendar-weekdays span { color:#667085!important; }
+        #published-outlook-control-section .outlook-calendar-grid { gap:1px;background:#e7edf5!important; }
+        #published-outlook-control-section .outlook-calendar-day {
+            min-width:0!important;min-height:42px!important;margin:0!important;padding:0!important;
+            border:0!important;border-radius:0!important;background:#fff!important;color:#344054!important;
+            box-shadow:none!important;font-weight:500!important;
+        }
+        #published-outlook-control-section .outlook-calendar-day:hover { background:#f1f5f9!important; }
+        #published-outlook-control-section .outlook-calendar-day.outside {
+            color:#b8c2d1!important;background:#f8fafc!important;
+        }
+        #published-outlook-control-section .outlook-calendar-day.available {
+            background:color-mix(in srgb,var(--risk-color) 30%,white)!important;
+            color:#101828!important;font-weight:700!important;
+        }
+        #published-outlook-control-section .outlook-calendar-day.available:hover {
+            background:color-mix(in srgb,var(--risk-color) 43%,white)!important;
+        }
+        #published-outlook-control-section .outlook-calendar-day.selected {
+            outline:3px solid #1d2939!important;outline-offset:-3px!important;
+            z-index:2;
+        }
+        #published-outlook-control-section .outlook-calendar-day.available::after {
+            width:7px;height:7px;right:6px;bottom:5px;border:1px solid rgba(15,23,42,.28);
+        }
+        #published-outlook-control-section .outlook-legend { gap:5px!important; }
+        #published-outlook-control-section .outlook-legend span {
+            color:#17223b!important;background:color-mix(in srgb,var(--c) 30%,white)!important;
+            border:1px solid color-mix(in srgb,var(--c) 65%,#94a3b8)!important;
+            padding:4px 7px;border-radius:999px;font-weight:800;font-size:10px;
+        }
+        #published-outlook-control-section .outlook-legend span::before { background:var(--c)!important; }
+        #published-outlook-control-section .published-outlook-meta { color:#667085!important; }
+        #published-outlook-control-section .published-outlook-discussion {
+            background:#f8fafc!important;color:#24324a!important;border-color:#dce4ef!important;
+        }
+        #published-outlook-control-section .published-outlook-link { color:#4f46e5!important; }
+        #published-outlook-control-section .published-opacity-control {
+            background:#f2f5f9!important;border:1px solid #dce4ef!important;color:var(--po-ink)!important;
+            border-radius:12px!important;
+        }
+        #published-outlook-control-section .published-opacity-control .opacity-value { color:#344054!important; }
+        #published-outlook-control-section input[type="range"] { accent-color:var(--po-accent); }
+        #published-outlook-control-section .outlook-status { color:#667085!important; }
+
+        /* Dark-mode palette for the published outlook card. */
+        body.dark-mode #published-outlook-control-section {
+            --po-ink:#f8fafc; --po-muted:#aebbd0; --po-line:#445066;
+            --po-panel:#202938; --po-soft:#273244; --po-accent:#8b7cff;
+            color:var(--po-ink)!important;background:var(--po-panel)!important;
+            border-color:#435066!important;box-shadow:0 10px 26px rgba(0,0,0,.34);
+        }
+        body.dark-mode #published-outlook-control-section .published-outlook-heading,
+        body.dark-mode #published-outlook-control-section .published-outlook-primary-row {
+            background:#202938!important;border-color:#354258!important;
+        }
+        body.dark-mode #published-outlook-control-section .published-outlook-heading h4,
+        body.dark-mode #published-outlook-control-section .published-check,
+        body.dark-mode #published-outlook-control-section .label-text { color:#f8fafc!important; }
+        body.dark-mode #published-outlook-control-section .published-outlook-heading button {
+            color:#dbe5f3!important;background:transparent!important;
+        }
+        body.dark-mode #published-outlook-control-section .published-outlook-heading button:hover { background:#344157!important; }
+        body.dark-mode #published-outlook-control-section #published-outlook-version {
+            background:#2b3649!important;color:#f8fafc!important;border-color:#53627a!important;
+        }
+        body.dark-mode #published-outlook-control-section .outlook-calendar {
+            background:#202938!important;border-color:#46536a!important;box-shadow:none;
+        }
+        body.dark-mode #published-outlook-control-section .outlook-calendar-header {
+            background:#2b3649!important;border-color:#46536a!important;
+        }
+        body.dark-mode #published-outlook-control-section .outlook-calendar-header strong { color:#f8fafc!important; }
+        body.dark-mode #published-outlook-control-section .outlook-calendar-header button { color:#e6edf7!important; }
+        body.dark-mode #published-outlook-control-section .outlook-calendar-header button:hover { background:#3b4960!important; }
+        body.dark-mode #published-outlook-control-section .outlook-calendar-weekdays { background:#253044!important; }
+        body.dark-mode #published-outlook-control-section .outlook-calendar-weekdays span { color:#b9c5d7!important; }
+        body.dark-mode #published-outlook-control-section .outlook-calendar-grid { background:#46536a!important; }
+        body.dark-mode #published-outlook-control-section .outlook-calendar-day {
+            background:#202938!important;color:#e7edf6!important;
+        }
+        body.dark-mode #published-outlook-control-section .outlook-calendar-day:hover { background:#324056!important; }
+        body.dark-mode #published-outlook-control-section .outlook-calendar-day.outside {
+            color:#748198!important;background:#1b2330!important;
+        }
+        body.dark-mode #published-outlook-control-section .outlook-calendar-day.available {
+            background:color-mix(in srgb,var(--risk-color) 46%,#202938)!important;color:#fff!important;
+        }
+        body.dark-mode #published-outlook-control-section .outlook-calendar-day.available:hover {
+            background:color-mix(in srgb,var(--risk-color) 60%,#202938)!important;
+        }
+        body.dark-mode #published-outlook-control-section .outlook-calendar-day.selected {
+            outline-color:#fff!important;
+        }
+        body.dark-mode #published-outlook-control-section .outlook-legend span {
+            color:#f8fafc!important;background:color-mix(in srgb,var(--c) 30%,#202938)!important;
+            border-color:color-mix(in srgb,var(--c) 65%,#526078)!important;
+        }
+        body.dark-mode #published-outlook-control-section .published-outlook-meta,
+        body.dark-mode #published-outlook-control-section .outlook-status { color:#b3bfd1!important; }
+        body.dark-mode #published-outlook-control-section .published-outlook-discussion {
+            background:#273244!important;color:#edf2f8!important;border-color:#46536a!important;
+        }
+        body.dark-mode #published-outlook-control-section .published-outlook-link { color:#a9b6ff!important; }
+        body.dark-mode #published-outlook-control-section .published-opacity-control {
+            background:#273244!important;border-color:#46536a!important;color:#f8fafc!important;
+        }
+        body.dark-mode #published-outlook-control-section .published-opacity-control .opacity-value { color:#e6edf7!important; }
+
+        /* Forecast legends live at the top of the left control panel, not over the map. */
+        #forecast-legends-host { display:grid; gap:10px; margin-bottom:12px; }
+        #control-panel #hoco-metadata-legend {
+            position:static!important; inset:auto!important; display:none; min-width:0!important; width:100%!important;
+            margin:0!important; z-index:auto!important; box-shadow:0 5px 16px rgba(0,0,0,.22)!important;
+        }
+        #control-panel #hoco-metadata-legend .hoco-content { display:block; }
+        #control-panel #published-outlook-control-section { margin:0!important; }
+        .archive-sync-note { margin-top:7px; color:#60a5fa; font-size:11px; font-weight:700; }
+
+        /* Compact forecast cards reduce initial LHS information density. */
+        #forecast-legends-host { gap:8px!important; }
+        #published-outlook-control-section.compact { border-radius:12px!important; }
+        #published-outlook-control-section .published-outlook-heading { padding:10px 12px!important; }
+        #published-outlook-control-section .published-outlook-heading h4 { font-size:14px!important; }
+        #published-outlook-control-section .published-outlook-heading small { display:block;color:#7a879a;font-size:10px;margin-top:2px; }
+        body.dark-mode #published-outlook-control-section .published-outlook-heading small { color:#9eabc0; }
+        #published-outlook-control-section .published-outlook-primary-row { grid-template-columns:auto minmax(0,1fr)!important;padding:9px 12px!important; }
+        #published-outlook-control-section .published-check { white-space:nowrap;font-size:12px!important; }
+        #published-outlook-control-section .published-check input { width:16px!important;height:16px!important; }
+        #published-outlook-control-section #published-outlook-version { padding:7px!important;height:34px;white-space:nowrap;text-overflow:ellipsis; }
+        .published-outlook-compact-summary { padding:0 12px 10px;color:#667085;font-size:11px;line-height:1.4; }
+        body.dark-mode .published-outlook-compact-summary { color:#aebbd0; }
+        #published-outlook-options { padding:8px 12px 12px!important;border-top:1px solid #e4eaf2; }
+        body.dark-mode #published-outlook-options { border-color:#39465b; }
+        .published-outlook-secondary-button { width:100%;padding:8px 10px!important;margin:6px 0!important;border-radius:8px!important;background:#eef2f7!important;color:#344054!important;border:1px solid #d6deea!important;font-size:11px!important;font-weight:800; }
+        body.dark-mode .published-outlook-secondary-button { background:#2c384b!important;color:#e6edf7!important;border-color:#46546b!important; }
+        #published-outlook-calendar-shell { margin-top:6px; }
+        .published-outlook-advanced { margin-top:5px;font-size:11px;color:#667085; }
+        .published-outlook-advanced summary { cursor:pointer;font-weight:800;padding:7px 2px; }
+        body.dark-mode .published-outlook-advanced { color:#b8c4d6; }
+        #control-panel #hoco-metadata-legend { order:-10; }
+        #control-panel #published-outlook-control-section { order:-9; }
+        #control-panel #hoco-metadata-legend.collapsed { padding:9px 10px!important;min-height:42px; }
+        #control-panel #hoco-metadata-legend.collapsed .hoco-content { display:none!important; }
+
+        /* Keep both HOCO cards inside the LHS panel width. */
+        #forecast-legends-host,
+        #forecast-legends-host > *,
+        #control-panel #hoco-metadata-legend,
+        #control-panel #hoco-control-section,
+        #control-panel #published-outlook-control-section {
+            width:100%!important; max-width:100%!important; min-width:0!important;
+            box-sizing:border-box!important;
+        }
+        #control-panel #hoco-metadata-legend { overflow:hidden!important; }
+        #control-panel #hoco-metadata-legend > div,
+        #control-panel #hoco-metadata-legend .hoco-content { max-width:100%!important; min-width:0!important; }
+        #control-panel #hoco-metadata-legend a { max-width:100%!important; white-space:normal!important; overflow-wrap:anywhere; }
+        #control-panel #hoco-metadata-legend .hoco-color-scale { width:100%!important; max-width:100%!important; }
+        #control-panel #hoco-control-section {
+            margin:0!important; padding:12px!important; border-radius:12px!important;
+            order:-8; overflow:hidden!important;
+        }
+        #control-panel #hoco-control-section h4 { margin:0 0 10px!important;font-size:14px!important;line-height:1.35; }
+        #control-panel #hoco-control-section .layer-control { width:100%!important;max-width:100%!important;margin-left:0!important;margin-right:0!important; }
+        #control-panel #hoco-control-section select { width:100%!important;max-width:100%!important;min-width:0!important; }
+        #control-panel #hoco-control-section .button-group { display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px!important; }
+        #control-panel #hoco-control-section .button-group button { width:100%!important;min-width:0!important;padding:8px 4px!important; }
+        #control-panel #hoco-control-section .opacity-control { min-width:0!important;width:100%!important; }
+        #control-panel #hoco-control-section .opacity-control input[type="range"] { min-width:0!important;width:100%!important; }
+
+        /* Unified HOCO cards: Auto and Manual share one compact legend-card language. */
+        #forecast-legends-host { gap:10px!important; }
+        #control-panel #hoco-metadata-legend,
+        #control-panel #published-outlook-control-section {
+            background:rgba(3,7,8,.96)!important;color:#f8fafc!important;
+            border:1px solid #6654b5!important;border-radius:12px!important;
+            box-shadow:0 6px 18px rgba(0,0,0,.28)!important;
+        }
+        #control-panel #published-outlook-control-section .published-outlook-heading,
+        #control-panel #published-outlook-control-section .published-outlook-primary-row {
+            background:transparent!important;border-color:#374151!important;
+        }
+        #control-panel #published-outlook-control-section .published-outlook-heading h4 {
+            color:#55dfbd!important;text-transform:uppercase;font-size:14px!important;line-height:1.25;
+        }
+        #control-panel #published-outlook-control-section .published-outlook-heading small { color:#9ca3af!important; }
+        #control-panel #published-outlook-control-section .published-outlook-heading button {
+            color:#55dfbd!important;background:transparent!important;
+        }
+        #control-panel #published-outlook-control-section .published-check,
+        #control-panel #published-outlook-control-section .label-text { color:#f8fafc!important; }
+        #control-panel #published-outlook-control-section #published-outlook-version {
+            background:#171d26!important;color:#f8fafc!important;border-color:#4b5563!important;
+        }
+        #control-panel #published-outlook-control-section .published-outlook-compact-summary,
+        #control-panel #published-outlook-control-section .outlook-status,
+        #control-panel #published-outlook-control-section .published-outlook-meta { color:#cbd5e1!important; }
+        #control-panel #published-outlook-options { border-color:#374151!important; }
+        #control-panel #published-outlook-control-section .outlook-calendar { border-color:#475569!important;background:#111827!important; }
+        #control-panel #published-outlook-control-section .outlook-calendar-header { background:#1f2937!important;border-color:#475569!important; }
+        #control-panel #published-outlook-control-section .outlook-calendar-header strong { color:#f8fafc!important; }
+        #control-panel #published-outlook-control-section .outlook-calendar-weekdays { background:#172033!important; }
+        #control-panel #published-outlook-control-section .outlook-calendar-grid { background:#465166!important; }
+        #control-panel #published-outlook-control-section .outlook-calendar-day { background:#111827!important;color:#e5e7eb!important; }
+        #control-panel #published-outlook-control-section .outlook-calendar-day.outside { background:#0b1220!important;color:#64748b!important; }
+        #control-panel #published-outlook-control-section .outlook-calendar-day.available { background:color-mix(in srgb,var(--risk-color) 48%,#111827)!important;color:#fff!important; }
+        #control-panel #published-outlook-control-section .outlook-calendar-day.selected { outline-color:#fff!important; }
+        #control-panel #published-outlook-control-section .published-outlook-discussion,
+        #control-panel #published-outlook-control-section .published-opacity-control { background:#171d26!important;color:#f8fafc!important;border-color:#475569!important; }
+        #control-panel #hoco-control-section {
+            background:transparent!important;border:0!important;box-shadow:none!important;
+            margin:12px 0 0!important;padding:12px 0 0!important;border-top:1px solid #374151!important;
+        }
+        #control-panel #hoco-control-section h4 { display:none!important; }
+        #control-panel #hoco-control-section .layer-control { background:#171d26!important;border-color:#475569!important;color:#f8fafc!important; }
+        #control-panel #hoco-control-section .label-text { color:#f8fafc!important; }
+        #control-panel #hoco-control-section select { background:#171d26!important;color:#f8fafc!important;border-color:#4b5563!important; }
+        #control-panel #hoco-control-section .button-group button { background:#202632!important;color:#f8fafc!important;border-color:#4b5563!important; }
+        #control-panel #hoco-control-section .button-group button.active { background:#3f63da!important;border-color:#6685ef!important; }
+        #control-panel #hoco-metadata-legend.collapsed #hoco-control-section { display:none!important; }
+
+        /* Final HOCO card visibility and typography corrections. */
+        #forecast-legends-host,
+        #forecast-legends-host button,
+        #forecast-legends-host input,
+        #forecast-legends-host select,
+        #forecast-legends-host textarea {
+            font-family:Inter,Arial,sans-serif!important;
+            letter-spacing:normal!important;
+            font-style:normal!important;
+        }
+        #control-panel #hoco-metadata-legend {
+            display:block!important;
+            visibility:visible!important;
+            opacity:1!important;
+        }
+        #control-panel #hoco-metadata-legend.collapsed {
+            display:block!important;
+        }
+        #control-panel #hoco-metadata-legend.collapsed .hoco-content {
+            display:none!important;
+        }
+        #control-panel #hoco-metadata-legend .hoco-content {
+            width:100%!important;
+        }
+        #control-panel #published-outlook-control-section,
+        #control-panel #published-outlook-control-section * {
+            font-family:Inter,Arial,sans-serif!important;
+        }
+        #control-panel #published-outlook-control-section .published-outlook-heading h4 {
+            font-weight:800!important;
+            font-size:14px!important;
+            line-height:1.25!important;
+            text-transform:uppercase!important;
+        }
+        #control-panel #published-outlook-control-section .published-check,
+        #control-panel #published-outlook-control-section #published-outlook-version,
+        #control-panel #published-outlook-control-section .published-outlook-compact-summary {
+            font-size:12px!important;
+            font-weight:600!important;
+            line-height:1.4!important;
+        }
+
+        /* Consistent Auto and Manual HOCO card controls. */
+        #forecast-legends-host { font-family:Inter,Arial,sans-serif!important; }
+        #control-panel #hoco-metadata-legend,
+        #control-panel #published-outlook-control-section { padding:0!important; }
+        #control-panel #hoco-metadata-legend > div:first-child,
+        #control-panel #published-outlook-control-section .published-outlook-heading {
+            min-height:58px;padding:12px 14px!important;margin:0!important;
+            border-bottom:1px solid #374151!important;
+        }
+        .hoco-card-title,
+        #control-panel #published-outlook-control-section .published-outlook-heading h4 {
+            color:#55dfbd!important;font-family:Inter,Arial,sans-serif!important;
+            font-size:14px!important;font-weight:800!important;line-height:1.25!important;
+            letter-spacing:0!important;text-transform:uppercase!important;margin:0!important;
+        }
+        .hoco-card-actions { display:flex;align-items:center;gap:8px;flex:0 0 auto; }
+        .hoco-enable-switch { display:flex!important;align-items:center;gap:5px;color:#dbe5f1!important;font-size:10px!important;font-weight:700!important;white-space:nowrap; }
+        .hoco-enable-switch input { width:16px!important;height:16px!important;accent-color:#55dfbd; }
+        #hoco-toggle-btn,#published-outlook-collapse { width:30px!important;height:30px!important;padding:0!important;font-size:20px!important; }
+        #control-panel #hoco-metadata-legend .hoco-content,
+        #control-panel #published-outlook-options { padding:12px!important; }
+        #control-panel #published-outlook-control-section .published-outlook-primary-row { padding:10px 12px!important; }
+        #control-panel #published-outlook-control-section .published-opacity-control,
+        #control-panel #published-outlook-control-section .published-opacity-control * {
+            font-family:Inter,Arial,sans-serif!important;font-size:12px!important;font-weight:600!important;
+        }
+        #control-panel #published-outlook-control-section .published-opacity-control .label-text { font-size:12px!important;font-weight:700!important; }
+        #control-panel #published-outlook-control-section .published-opacity-control .opacity-value { min-width:38px;text-align:right; }
+        #control-panel #hoco-metadata-legend.auto-suppressed { display:block!important; }
+
+        /* Stable and symmetrical Auto/Manual HOCO headers. */
+        #control-panel #hoco-metadata-legend { display:block!important; }
+        #control-panel #hoco-metadata-legend.auto-suppressed { display:block!important; }
+        #control-panel #hoco-metadata-legend > div:first-child,
+        #control-panel #published-outlook-control-section .published-outlook-heading {
+            display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;
+            align-items:center!important;gap:10px!important;min-height:58px!important;
+            padding:12px 14px!important;
+        }
+        .hoco-card-actions { display:flex!important;align-items:center!important;gap:10px!important; }
+        .hoco-enable-switch { display:flex!important;align-items:center!important;gap:6px!important;margin:0!important; }
+        .hoco-enable-switch span { color:#f8fafc!important;font:700 11px/1.2 Inter,Arial,sans-serif!important; }
+        .hoco-enable-switch input,
+        #published-outlook-toggle { width:17px!important;height:17px!important;margin:0!important; }
+        #hoco-toggle-btn,#published-outlook-collapse {
+            display:grid!important;place-items:center!important;width:30px!important;height:30px!important;
+            margin:0!important;padding:0!important;border:0!important;background:transparent!important;
+            color:#55dfbd!important;font:400 22px/1 Inter,Arial,sans-serif!important;cursor:pointer!important;
+        }
+        #hoco-toggle-btn:hover,#published-outlook-collapse:hover { background:rgba(85,223,189,.1)!important;border-radius:6px!important; }
+        #control-panel #hoco-metadata-legend.collapsed .hoco-content { display:none!important; }
+        #control-panel #hoco-metadata-legend:not(.collapsed) .hoco-content { display:block!important; }
+        #control-panel #hoco-metadata-legend.auto-suppressed .hoco-card-title::after {
+            content:'Manual outlook active · Auto layer off';display:block;color:#94a3b8;
+            font:500 10px/1.35 Inter,Arial,sans-serif;text-transform:none;margin-top:4px;
+        }
+        #control-panel #published-outlook-control-section .published-outlook-heading > div:first-child { min-width:0; }
+        #control-panel #published-outlook-control-section .published-outlook-heading { border-bottom:1px solid #374151!important; }
+
+#hoco-control-section{padding:12px!important}.auto-hoco-primary-row{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center;margin-bottom:10px}.auto-hoco-primary-row select{width:100%;min-width:0}.auto-hoco-calendar{border:1px solid #475569;border-radius:10px;overflow:hidden;margin-bottom:10px}.auto-hoco-calendar .outlook-calendar-day.available{background:rgba(85,223,189,.26)!important}.auto-hoco-calendar .outlook-calendar-day.available::after{background:#55dfbd!important}.auto-hoco-opacity,.auto-hoco-opacity *{font-family:Inter,Arial,sans-serif!important}.hoco-enable-switch{display:flex!important;align-items:center;gap:6px;white-space:nowrap}.hoco-enable-switch input{width:17px!important;height:17px!important}.hoco-enable-switch span{font:700 12px Inter,Arial,sans-serif!important}
+
+        /* Final compact Auto HOCO card: same width, spacing and palette as Manual Outlook. */
+        #forecast-legends-host { width:100%!important;max-width:100%!important;overflow:hidden!important;padding:0 6px!important; }
+        #control-panel #hoco-metadata-legend,
+        #control-panel #published-outlook-control-section {
+            width:100%!important;max-width:100%!important;min-width:0!important;margin:0!important;
+            box-sizing:border-box!important;overflow:hidden!important;
+            background:#05090a!important;border:1px solid #7c3aed!important;border-radius:14px!important;
+        }
+        #control-panel #hoco-metadata-legend > div:first-child,
+        #control-panel #published-outlook-control-section .published-outlook-heading {
+            min-height:58px!important;padding:11px 13px!important;display:grid!important;
+            grid-template-columns:minmax(0,1fr) auto!important;gap:10px!important;align-items:center!important;
+            background:#05090a!important;border-bottom:1px solid #334155!important;
+        }
+        #control-panel #hoco-metadata-legend .hoco-card-title,
+        #control-panel #published-outlook-control-section .published-outlook-heading h4 {
+            color:#40e0bd!important;font:800 14px/1.25 Inter,Arial,sans-serif!important;
+            letter-spacing:0!important;text-transform:uppercase!important;
+        }
+        #control-panel #hoco-metadata-legend .hoco-card-actions { display:flex!important;align-items:center!important;gap:8px!important; }
+        #control-panel #hoco-metadata-legend .hoco-enable-switch { display:none!important; }
+        #control-panel #hoco-metadata-legend .hoco-content { padding:0!important;width:100%!important;max-width:100%!important;overflow:hidden!important; }
+        #control-panel #hoco-metadata-legend .hoco-content > div:first-child,
+        #control-panel #hoco-metadata-legend .hoco-content > a { margin-left:12px!important;margin-right:12px!important;max-width:calc(100% - 24px)!important; }
+        #control-panel #hoco-metadata-legend .hoco-color-scale { width:100%!important;max-width:100%!important; }
+        #control-panel #hoco-control-section { padding:12px!important;margin:10px 0 0!important;width:100%!important;max-width:100%!important;box-sizing:border-box!important; }
+        #control-panel #hoco-control-section .auto-hoco-primary-row {
+            display:grid!important;grid-template-columns:minmax(105px,auto) minmax(0,1fr)!important;
+            gap:10px!important;align-items:center!important;margin-bottom:10px!important;
+        }
+        #control-panel #hoco-control-section .hoco-enable-switch { display:flex!important;align-items:center!important;gap:6px!important;min-width:0!important; }
+        #control-panel #hoco-control-section .hoco-enable-switch span { color:#f8fafc!important;font:700 12px/1.25 Inter,Arial,sans-serif!important; }
+        #control-panel #hoco-control-section #hoco-run-select { width:100%!important;min-width:0!important;max-width:100%!important;background:#171d26!important;color:#fff!important;border:1px solid #475569!important;border-radius:10px!important;padding:8px 10px!important; }
+        #control-panel #hoco-control-section .auto-hoco-calendar { background:#0b1118!important;border-color:#334155!important;border-radius:10px!important; }
+        #control-panel #hoco-control-section .outlook-calendar-header { background:#172033!important;border-color:#334155!important; }
+        #control-panel #hoco-control-section .outlook-calendar-header strong { color:#e5edf7!important; }
+        #control-panel #hoco-control-section .outlook-calendar-header button { background:transparent!important;color:#cbd5e1!important; }
+        #control-panel #hoco-control-section .outlook-calendar-weekdays { background:#101722!important; }
+        #control-panel #hoco-control-section .outlook-calendar-weekdays span { color:#94a3b8!important; }
+        #control-panel #hoco-control-section .outlook-calendar-grid { background:#263244!important;gap:1px!important; }
+        #control-panel #hoco-control-section .outlook-calendar-day { background:#111827!important;color:#e5e7eb!important;border:0!important;border-radius:0!important;margin:0!important;min-width:0!important; }
+        #control-panel #hoco-control-section .outlook-calendar-day.outside { background:#0b1220!important;color:#64748b!important; }
+        #control-panel #hoco-control-section .outlook-calendar-day.available { background:#12483f!important;color:#f8fafc!important; }
+        #control-panel #hoco-control-section .outlook-calendar-day.available:hover { background:#176052!important; }
+        #control-panel #hoco-control-section .outlook-calendar-day.selected { outline:2px solid #40e0bd!important;outline-offset:-2px!important; }
+        #control-panel #hoco-control-section .outlook-calendar-day.available::after { background:#40e0bd!important;border-color:#092d27!important; }
+        #control-panel #hoco-control-section .auto-hoco-opacity { background:#171d26!important;border-color:#334155!important;border-radius:10px!important; }
+        #control-panel #hoco-control-section .auto-hoco-opacity,
+        #control-panel #hoco-control-section .auto-hoco-opacity * { font-family:Inter,Arial,sans-serif!important;color:#f8fafc!important; }
+        @media(max-width:420px){#forecast-legends-host{padding:0 3px!important}#control-panel #hoco-control-section .auto-hoco-primary-row{grid-template-columns:1fr!important}.hoco-enable-switch{justify-content:flex-start!important}}
+
+        /* Rechecked final consistency: Auto uses the Manual Outlook component system. */
+        #forecast-legends-host { width:100%!important;max-width:100%!important;padding:0 6px!important;overflow:hidden!important; }
+        #control-panel #hoco-metadata-legend,
+        #control-panel #published-outlook-control-section {
+            width:100%!important;max-width:100%!important;min-width:0!important;margin:0!important;
+            padding:0!important;box-sizing:border-box!important;overflow:hidden!important;
+            background:#05090a!important;border:1px solid #7c3aed!important;border-radius:14px!important;
+        }
+        #control-panel #hoco-metadata-legend > div:first-child,
+        #control-panel #published-outlook-control-section .published-outlook-heading {
+            display:grid!important;grid-template-columns:minmax(0,1fr) 30px!important;align-items:center!important;
+            gap:10px!important;min-height:58px!important;padding:11px 13px!important;margin:0!important;
+            background:#05090a!important;border-bottom:1px solid #334155!important;
+        }
+        .hoco-title-copy,.published-outlook-heading>div:first-child{min-width:0!important}
+        .hoco-card-title,#published-outlook-control-section .published-outlook-heading h4{
+            margin:0!important;color:#40e0bd!important;font:800 14px/1.25 Inter,Arial,sans-serif!important;
+            text-transform:uppercase!important;letter-spacing:0!important;
+        }
+        .hoco-title-copy small,#published-outlook-control-section .published-outlook-heading small{
+            display:block!important;margin-top:3px!important;color:#9ca3af!important;font:500 11px/1.3 Inter,Arial,sans-serif!important;
+        }
+        #hoco-toggle-btn,#published-outlook-collapse{
+            display:grid!important;place-items:center!important;width:30px!important;height:30px!important;
+            margin:0!important;padding:0!important;border:0!important;background:transparent!important;
+            color:#40e0bd!important;font:400 22px/1 Inter,Arial,sans-serif!important;
+        }
+        /* Both primary control rows stay visible while the cards are collapsed. */
+        #control-panel #hoco-metadata-legend>.published-outlook-primary-row,
+        #control-panel #published-outlook-control-section>.published-outlook-primary-row{
+            display:grid!important;grid-template-columns:minmax(105px,auto) minmax(0,1fr)!important;
+            gap:10px!important;align-items:center!important;padding:10px 12px!important;
+            background:#05090a!important;border-bottom:1px solid #334155!important;
+        }
+        #control-panel .published-check{
+            display:flex!important;align-items:center!important;gap:7px!important;min-width:0!important;
+            color:#f8fafc!important;font:700 12px/1.25 Inter,Arial,sans-serif!important;white-space:nowrap!important;
+        }
+        #control-panel .published-check input{width:17px!important;height:17px!important;margin:0!important;accent-color:#675cf4!important}
+        #control-panel #hoco-run-select,#control-panel #published-outlook-version{
+            width:100%!important;max-width:100%!important;min-width:0!important;height:38px!important;
+            padding:8px 10px!important;border:1px solid #475569!important;border-radius:10px!important;
+            background:#171d26!important;color:#fff!important;font:600 12px/1.2 Inter,Arial,sans-serif!important;
+            text-overflow:ellipsis!important;
+        }
+        #control-panel #hoco-compact-summary,#control-panel #published-outlook-compact-summary{
+            padding:8px 12px 10px!important;margin:0!important;color:#cbd5e1!important;
+            background:#05090a!important;font:600 11px/1.4 Inter,Arial,sans-serif!important;
+        }
+        #control-panel #hoco-metadata-legend .hoco-content{padding:0!important;width:100%!important;max-width:100%!important;overflow:hidden!important}
+        #control-panel #hoco-control-section{padding:12px!important;margin:0!important;width:100%!important;max-width:100%!important;box-sizing:border-box!important;border:0!important}
+        /* Calendars share the exact same shell, header, grid, cells and spacing. */
+        #control-panel .outlook-calendar{
+            width:100%!important;max-width:100%!important;margin:0 0 10px!important;overflow:hidden!important;
+            border:1px solid #475569!important;border-radius:10px!important;background:#0b1118!important;
+        }
+        #control-panel .outlook-calendar-header{background:#172033!important;border-bottom:1px solid #334155!important}
+        #control-panel .outlook-calendar-header strong{color:#e5edf7!important;font:700 13px Inter,Arial,sans-serif!important}
+        #control-panel .outlook-calendar-header button{background:transparent!important;color:#cbd5e1!important;border:0!important}
+        #control-panel .outlook-calendar-weekdays{background:#101722!important}
+        #control-panel .outlook-calendar-weekdays span{color:#94a3b8!important;font:700 10px Inter,Arial,sans-serif!important}
+        #control-panel .outlook-calendar-grid{background:#263244!important;gap:1px!important}
+        #control-panel .outlook-calendar-day{min-width:0!important;min-height:40px!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;background:#111827!important;color:#e5e7eb!important;font:600 12px Inter,Arial,sans-serif!important}
+        #control-panel .outlook-calendar-day.outside{background:#0b1220!important;color:#64748b!important}
+        #control-panel .outlook-calendar-day.available{color:#fff!important}
+        #control-panel .outlook-calendar-day.selected{outline:2px solid #40e0bd!important;outline-offset:-2px!important}
+        /* Both opacity controls use the exact same disclosure and form styles. */
+        #control-panel .published-outlook-advanced{margin-top:6px!important;color:#cbd5e1!important;font:600 11px Inter,Arial,sans-serif!important}
+        #control-panel .published-outlook-advanced summary{padding:7px 2px!important;cursor:pointer!important}
+        #control-panel .published-opacity-control{
+            margin-top:5px!important;padding:10px!important;border:1px solid #334155!important;border-radius:10px!important;
+            background:#171d26!important;color:#f8fafc!important;font-family:Inter,Arial,sans-serif!important;
+        }
+        #control-panel .published-opacity-control .label-text{color:#f8fafc!important;font:700 12px Inter,Arial,sans-serif!important}
+        #control-panel .published-opacity-control .opacity-control{display:grid!important;grid-template-columns:minmax(0,1fr) 42px!important;gap:9px!important;align-items:center!important;width:100%!important}
+        #control-panel .published-opacity-control input[type=range]{width:100%!important;min-width:0!important;accent-color:#675cf4!important}
+        #control-panel .published-opacity-control .opacity-value{color:#f8fafc!important;text-align:right!important;font:700 12px Inter,Arial,sans-serif!important}
+        @media(max-width:420px){#forecast-legends-host{padding:0 3px!important}#control-panel #hoco-metadata-legend>.published-outlook-primary-row,#control-panel #published-outlook-control-section>.published-outlook-primary-row{grid-template-columns:1fr!important}.published-check{justify-content:flex-start!important}}
+
+        /* Final cleanup requested: no suppression caption, no opacity overflow. */
+        #control-panel #hoco-metadata-legend.auto-suppressed .hoco-card-title::after { content:none!important; display:none!important; }
+        #control-panel #hoco-metadata-legend .published-opacity-control,
+        #control-panel #hoco-metadata-legend .published-opacity-control *,
+        #control-panel #hoco-control-section .published-opacity-control,
+        #control-panel #hoco-control-section .published-opacity-control * { box-sizing:border-box!important; }
+        #control-panel #hoco-control-section .published-opacity-control {
+            width:calc(100% - 2px)!important;max-width:calc(100% - 2px)!important;
+            margin-left:1px!important;margin-right:1px!important;padding:9px!important;overflow:hidden!important;
+        }
+        #control-panel #hoco-control-section .published-opacity-control .opacity-control {
+            width:100%!important;max-width:100%!important;grid-template-columns:minmax(0,1fr) 36px!important;gap:7px!important;
+        }
+        #control-panel #hoco-control-section .published-opacity-control input[type="range"] {
+            width:100%!important;max-width:100%!important;min-width:0!important;margin:0!important;padding:0!important;
+        }
+        #control-panel #hoco-control-section .published-opacity-control .opacity-value { min-width:0!important;width:36px!important; }
+        .radar-advanced-details { margin-top:8px;border:1px solid rgba(128,128,128,.3);border-radius:10px;overflow:hidden; }
+        .radar-advanced-details>summary { cursor:pointer;padding:10px 12px;font:700 12px Inter,Arial,sans-serif;list-style:none; }
+        .radar-advanced-details>summary::-webkit-details-marker { display:none; }
+        .radar-advanced-details>summary::after { content:'+';float:right;font-size:18px;line-height:12px; }
+        .radar-advanced-details[open]>summary::after { content:'−'; }
+        .radar-advanced-details>.uk-custom-radar-editor { border:0!important;border-top:1px solid rgba(128,128,128,.25)!important;border-radius:0!important;margin:0!important; }
     </style>
 
 <style id="met-office-warning-popup-layout-fix">
@@ -2784,7 +3337,7 @@
                         oninput="updateLayerOpacities()">
 
                 </div>
-                <div class="uk-custom-radar-editor" id="uk-custom-radar-editor" style="display: none;">
+                <details class="radar-advanced-details" id="uk-custom-radar-editor-details"><summary>Global High Resolution / OPERA colour scale</summary><div class="uk-custom-radar-editor" id="uk-custom-radar-editor" style="display: none;">
                     <div class="uk-custom-radar-editor-title">Global High Resolution / OPERA mm/h colour scale</div>
                     <label class="radar-palette-select-label" for="radar-palette-select">Preset colour scheme</label>
                     <select id="radar-palette-select" class="radar-palette-select" onchange="applyRadarPalettePreset(this.value)">
@@ -2806,8 +3359,8 @@
                     <div id="uk-custom-radar-colour-inputs" class="uk-custom-radar-colour-inputs"></div>
                     <button type="button" class="uk-custom-radar-reset" onclick="resetUkCustomRadarColorScale()">Reset
                         custom colours</button>
-                </div>
-                <div class="uk-custom-radar-editor" id="windy-radar-accumulation-panel" style="display:none;">
+                </div></details>
+                <details class="radar-advanced-details" id="windy-radar-accumulation-panel-details"><summary>Estimated radar rainfall accumulation map</summary><div class="uk-custom-radar-editor" id="windy-radar-accumulation-panel" style="display:none;">
                     <div class="uk-custom-radar-editor-title">Estimated radar rainfall accumulation map</div>
                     <div class="uk-custom-radar-editor-help">Calculate an accumulated rainfall raster for the current
                         view. Plot hides the current radar until Unplot is pressed. While plotted, clicking the map
@@ -2829,7 +3382,7 @@
                         <div id="windy-accum-progress-text" class="windy-accum-progress-text">Preparing accumulation
                             map…</div>
                     </div>
-                </div>
+                </div></details>
             </div>
 
             <!-- Satellite Layer - On -->
@@ -3289,43 +3842,58 @@
             </div>
 
         </div>
+
+        <div class="section published-outlook-card compact" id="published-outlook-control-section">
+            <div class="published-outlook-heading">
+                <div><h4>MANUAL HOCO</h4><small>Manual HOCO thunderstorm forecast</small></div>
+                <button type="button" id="published-outlook-collapse" aria-label="Expand published outlook" aria-expanded="false">+</button>
+            </div>
+            <div class="published-outlook-primary-row">
+                <label class="published-check"><input type="checkbox" id="published-outlook-toggle" checked><span>Show outlook</span></label>
+                <select id="published-outlook-version" aria-label="Issued outlook version"><option value="">No published outlook</option></select>
+            </div>
+            <div id="published-outlook-compact-summary" class="published-outlook-compact-summary">Loading latest outlook...</div>
+            <div id="published-outlook-options" hidden>
+                <div id="published-outlook-status" class="outlook-status">Loading published outlooks...</div>
+                <div id="published-outlook-calendar-shell">
+                    <div class="outlook-calendar" aria-label="Published outlook calendar">
+                        <div class="outlook-calendar-header"><button type="button" id="outlook-prev-month" aria-label="Previous month">‹</button><strong id="outlook-calendar-month">Month</strong><button type="button" id="outlook-next-month" aria-label="Next month">›</button></div>
+                        <div class="outlook-calendar-weekdays"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
+                        <div id="outlook-calendar-grid" class="outlook-calendar-grid"></div>
+                    </div>
+                    <div class="outlook-legend"><span style="--c:#67c6ac">Low</span><span style="--c:#ffea00">Slight</span><span style="--c:#ff7a21">Enhanced</span><span style="--c:#f91522">Moderate</span><span style="--c:#b23cc7">High</span></div>
+                </div>
+                <div id="published-outlook-meta" class="published-outlook-meta"></div><div id="published-outlook-archive-sync" class="archive-sync-note" hidden></div>
+                <button type="button" id="published-outlook-discussion-toggle" class="published-outlook-secondary-button" aria-expanded="false">View discussion</button>
+                <div id="published-outlook-discussion" class="published-outlook-discussion" hidden>Select an issued outlook to view its discussion.</div>
+                <a id="published-outlook-detail-link" class="published-outlook-link" href="#" target="_blank" rel="noopener noreferrer" hidden>Open dedicated forecast page ↗</a>
+                <details class="published-outlook-advanced">
+                    <summary>Display settings</summary>
+                    <div class="layer-control neutral-control published-opacity-control">
+                        <div class="top-row"><div class="label-group"><span class="label-text">Outlook fill opacity</span></div></div>
+                        <div class="opacity-control"><input type="range" id="published-outlook-opacity" min="0" max="1" step="0.01" value="0.12"><span class="opacity-value">12%</span></div>
+                    </div>
+                </details>
+            </div>
+        </div>
         <div class="section" id="hoco-control-section">
-            <h4>🌩️ Auto HOCO Thunderstorm Forecast</h4>
-
-            <!-- HOCO Creation Date Dropdown -->
-            <div class="layer-control neutral-control" style="margin-bottom: 10px;">
-                <div class="top-row">
-                    <div class="label-group">
-                        <span class="label-text">Creation Date</span>
-                        <span class="tooltip">Select Auto Handry Outlook Convective Outlook</span>
-                    </div>
-                </div>
-                <select id="hoco-date-select" onchange="loadRunIntoMap(this.value, 0)">
-                    <option value="" disabled selected>Loading HOCO runs...</option>
-                    <!-- Firebase dates will be populated here -->
-                </select>
+            <div class="published-outlook-primary-row auto-hoco-primary-row">
+                <label class="published-check"><input type="checkbox" id="hoco-layer-toggle"><span>Show outlook</span></label>
+                <select id="hoco-run-select" aria-label="Auto HOCO run"><option value="">No Auto HOCO run</option></select>
             </div>
-
-            <!-- Forecast Day Buttons -->
-            <div class="button-group" style="margin-bottom: 10px;">
-                <button id="hoco-day-0" onclick="setHocoForecastDay(0)">Day 0</button>
-                <button id="hoco-day-1" onclick="setHocoForecastDay(1)">Day 1</button>
-                <button id="hoco-day-2" onclick="setHocoForecastDay(2)">Day 2</button>
+            <div id="hoco-compact-summary" class="published-outlook-compact-summary">Select a forecast date and run.</div>
+            <div class="outlook-calendar auto-hoco-calendar">
+                <div class="outlook-calendar-header"><button type="button" id="hoco-prev-month">‹</button><strong id="hoco-calendar-month">Month</strong><button type="button" id="hoco-next-month">›</button></div>
+                <div class="outlook-calendar-weekdays"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
+                <div id="hoco-calendar-grid" class="outlook-calendar-grid"></div>
             </div>
-
-            <!-- Opacity Slider -->
-            <div class="layer-control neutral-control">
-                <div class="top-row">
-                    <div class="label-group">
-                        <span class="label-text">HOCO Layer Opacity</span>
-                    </div>
+            <details class="published-outlook-advanced auto-hoco-advanced">
+                <summary>Display settings</summary>
+                <div class="layer-control neutral-control published-opacity-control auto-hoco-opacity">
+                    <div class="top-row"><div class="label-group"><span class="label-text">Outlook fill opacity</span></div></div>
+                    <div class="opacity-control"><input type="range" id="hoco-opacity" min="0" max="1" step="0.01" value="0.10" oninput="updateHocoOpacity(this.value);this.nextElementSibling.textContent=Math.round(this.value*100)+'%'"><span class="opacity-value">10%</span></div>
                 </div>
-                <div class="opacity-control">
-                    <input type="range" id="hoco-opacity" min="0" max="1" step="0.05" value="0.1"
-                        oninput="updateHocoOpacity(this.value); this.parentElement.querySelector('.opacity-value').innerText = Math.round(this.value * 100) + '%'">
-                    <span class="opacity-value">10%</span>
-                </div>
-            </div>
+            </details>
         </div>
         <div class="section">
             <h4>➕ Extras & Nowcasting</h4>
@@ -3729,13 +4297,10 @@
 
         <div
             style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; padding-bottom: 5px; margin-bottom: 8px;">
-            <div style="color: #66c2a4; font-weight: bold; font-size: 13px; text-transform: uppercase;">
-                HOCO Thunderstorm Forecast
+            <div class="hoco-title-copy"><div class="hoco-card-title">Auto HOCO</div><small>Automated HOCO thunderstorm forecast</small></div>
+            <div class="hoco-card-actions">
+                <button id="hoco-toggle-btn" type="button" onclick="toggleHocoLegend()" aria-label="Expand Auto HOCO settings" aria-expanded="false">+</button>
             </div>
-            <button id="hoco-toggle-btn" onclick="toggleHocoLegend()"
-                style="background: none; border: none; color: #bbb; cursor: pointer; font-size: 16px; line-height: 1; padding: 0 5px; transition: color 0.2s;">
-                ✕
-            </button>
         </div>
 
         <div class="hoco-content">
@@ -6069,6 +6634,255 @@
         // Add this line to create a global storage reference
         const storage = firebase.storage();
 
+
+        // Separate Firebase app containing manually published Handry Outlook forecasts.
+        const publishedOutlookApp = firebase.initializeApp({
+            apiKey: "AIzaSyD2lgPAtAYksA4guBCITLq_4RkBpavcXjs",
+            authDomain: "genweather-f9a45.firebaseapp.com",
+            projectId: "genweather-f9a45",
+            storageBucket: "genweather-f9a45.firebasestorage.app",
+            messagingSenderId: "682497500954",
+            appId: "1:682497500954:web:54c400f45cd9b8b6cf2ea3"
+        }, 'published-handry-outlook');
+        const publishedOutlookDb = publishedOutlookApp.firestore();
+        let publishedOutlooks = [];
+        let selectedPublishedOutlookId = null;
+        let publishedOutlookFill = L.layerGroup().addTo(map);
+        let publishedOutlookOutline = L.layerGroup().addTo(map);
+        window.manualOutlookActive = false;
+
+        if (!map.getPane('publishedOutlookFillPane')) map.createPane('publishedOutlookFillPane', map.getPane('overlayPane'));
+        map.getPane('publishedOutlookFillPane').style.zIndex = 145; // satellite < fill < radar
+        map.getPane('publishedOutlookFillPane').style.pointerEvents = 'none';
+        if (!map.getPane('publishedOutlookOutlinePane')) map.createPane('publishedOutlookOutlinePane');
+        map.getPane('publishedOutlookOutlinePane').style.zIndex = 2002; // outline above radar and HOCO
+        map.getPane('publishedOutlookOutlinePane').style.pointerEvents = 'none';
+        const publishedFillRenderer = L.canvas({ pane:'publishedOutlookFillPane', padding:0.35 });
+        const publishedOutlineRenderer = L.canvas({ pane:'publishedOutlookOutlinePane', padding:0.35 });
+        const PUBLISHED_RISKS = {
+            1:{name:'Low',color:'#67c6ac'}, 2:{name:'Slight',color:'#ffea00'},
+            3:{name:'Enhanced',color:'#ff7a21'}, 4:{name:'Moderate',color:'#f91522'},
+            5:{name:'High',color:'#b23cc7'}, 6:{name:'Severe',color:'#111111'}
+        };
+        const outlookDateKey = value => {
+            const d = value instanceof Date ? value : new Date(value);
+            return Number.isNaN(d.getTime()) ? '' : `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        };
+        const outlookDate = value => { const d = value?.toDate ? value.toDate() : new Date(value); return Number.isNaN(d.getTime()) ? null : d; };
+        function outlookRank(feature) {
+            const p=feature?.properties||{}; const text=String(p.risk ?? p.user_risk ?? '').toUpperCase();
+            if (p.isSevere || p.severe || p.user_severe || text.includes('SEVERE') || Number(p.rank ?? p.user_rank)===6) return 6;
+            if (text.includes('HIGH')) return 5; if (text.includes('MODERATE')) return 4; if (text.includes('ENHANCED')) return 3; if (text.includes('SLIGHT')) return 2; if (text.includes('LOW')) return 1;
+            return Math.max(0,Math.min(5,Number(p.rank ?? p.user_rank ?? 0)||0));
+        }
+        function parsePublishedGeojson(item) { try { return typeof item.geoJSON==='string' ? JSON.parse(item.geoJSON) : item.geoJSON; } catch(e) { return null; } }
+        function highestPublishedRank(item) { return Math.max(0,...(parsePublishedGeojson(item)?.features||[]).map(outlookRank).filter(rank => rank >= 1 && rank <= 5)); }
+        function publishedIssueTime(item) { return outlookDate(item.issuedAt)?.getTime() || outlookDate(item.validFrom)?.getTime() || 0; }
+        function latestPublished(items) { return items.slice().sort((a,b)=>publishedIssueTime(b)-publishedIssueTime(a) || Number(b.issueVersion||0)-Number(a.issueVersion||0))[0]||null; }
+        function setPublishedStatus(text,tone='') { const el=document.getElementById('published-outlook-status'); if(el){el.textContent=text; el.className=`outlook-status ${tone}`;} }
+        let autoHocoUserEnabled = false;
+        function applyAutoHocoVisibility() {
+            const toggle=document.getElementById('hoco-layer-toggle');
+            const shouldShow=!!toggle?.checked && !window.manualOutlookActive;
+            if(typeof hocoLayerGroup!=='undefined' && hocoLayerGroup){
+                if(shouldShow){ if(!map.hasLayer(hocoLayerGroup)) hocoLayerGroup.addTo(map); }
+                else if(map.hasLayer(hocoLayerGroup)) map.removeLayer(hocoLayerGroup);
+            }
+        }
+        function setHocoSuppressed(suppressed) {
+            window.manualOutlookActive = suppressed;
+            const legend=document.getElementById('hoco-metadata-legend');
+            const toggle=document.getElementById('hoco-layer-toggle');
+            if(suppressed){
+                if(toggle) toggle.checked=false;
+                if(legend){legend.classList.add('auto-suppressed');legend.style.display='block';}
+            } else {
+                if(legend){legend.classList.remove('auto-suppressed');legend.style.display='block';}
+            }
+            applyAutoHocoVisibility();
+        }
+        function clearPublishedOutlook() { publishedOutlookFill.clearLayers(); publishedOutlookOutline.clearLayers(); selectedPublishedOutlookId=null; setHocoSuppressed(false); }
+        function renderPublishedOutlook(item) {
+            clearPublishedOutlook();
+            if (!item || !document.getElementById('published-outlook-toggle')?.checked) return;
+            const geo=parsePublishedGeojson(item); if(!geo?.features?.length){setPublishedStatus('Selected outlook has no usable geometry.','error');return;}
+            const opacity=Number(document.getElementById('published-outlook-opacity')?.value||0.12);
+            const polygons=geo.features.filter(f=>f?.geometry && /Polygon/.test(f.geometry.type));
+            L.geoJSON({type:'FeatureCollection',features:polygons.filter(f=>outlookRank(f)!==6)}, {
+                pane:'publishedOutlookFillPane', renderer:publishedFillRenderer, interactive:false,
+                style:f=>({fillColor:(PUBLISHED_RISKS[outlookRank(f)]||PUBLISHED_RISKS[1]).color,fillOpacity:opacity,stroke:false,weight:0})
+            }).addTo(publishedOutlookFill);
+            L.geoJSON({type:'FeatureCollection',features:polygons}, {
+                pane:'publishedOutlookOutlinePane', renderer:publishedOutlineRenderer, interactive:false,
+                style:f=>{const r=outlookRank(f),m=PUBLISHED_RISKS[r]||PUBLISHED_RISKS[1];return {fill:false,fillOpacity:0,color:m.color,opacity:0.98,weight:r===6?3.5:2.2};}
+            }).addTo(publishedOutlookOutline);
+            selectedPublishedOutlookId=item.id;
+            const start=outlookDate(item.validFrom), end=outlookDate(item.validTo), now=Date.now();
+            const validNow=!!(start&&end&&start.getTime()<=now&&end.getTime()>=now);
+            setHocoSuppressed(validNow);
+            setPublishedStatus(`${PUBLISHED_RISKS[highestPublishedRank(item)]?.name||'Published'} outlook · Version ${item.issueVersion||1} · issued ${outlookDate(item.issuedAt||item.validFrom)?.toLocaleString('en-GB')||'unknown'}`,validNow?'live':'');
+        }
+        function populatePublishedVersions(dateKey, preferredId) {
+            const select=document.getElementById('published-outlook-version');
+            const versions=publishedOutlooks.filter(x=>outlookDateKey(x.validFrom)===dateKey).sort((a,b)=>publishedIssueTime(b)-publishedIssueTime(a)||Number(b.issueVersion||0)-Number(a.issueVersion||0));
+            select.innerHTML='';
+            versions.forEach((item,i)=>{const o=document.createElement('option');o.value=item.id;o.textContent=`${i===0?'Latest · ':''}Version ${item.issueVersion||1} · ${outlookDate(item.issuedAt||item.validFrom)?.toLocaleString('en-GB')||''}`;select.appendChild(o);});
+            const chosen=versions.find(x=>x.id===preferredId)||versions[0]||null;
+            if(chosen){select.value=chosen.id;renderPublishedOutlook(chosen);updatePublishedDetail(chosen);publishedCalendarMonth=outlookDate(chosen.validFrom)||publishedCalendarMonth;renderPublishedCalendar();} else {select.innerHTML='<option value="">No outlook issued for this date</option>';clearPublishedOutlook();updatePublishedDetail(null);setPublishedStatus('No published outlook for this date.');renderPublishedCalendar();}
+        }
+        function buildPublishedDateCalendar(activeKey) { renderPublishedCalendar(); }
+        function selectLatestPublishedForMapTime() {
+            const t=Number(currentFilterTimestamp)||Date.now();
+            const active=publishedOutlooks.filter(x=>{const a=outlookDate(x.validFrom),b=outlookDate(x.validTo);return a&&b&&a.getTime()<=t&&b.getTime()>=t;});
+            const chosen=latestPublished(active)||latestPublished(publishedOutlooks); if(!chosen)return;
+            const key=outlookDateKey(chosen.validFrom);publishedCalendarMonth=outlookDate(chosen.validFrom)||publishedCalendarMonth;buildPublishedDateCalendar(key);populatePublishedVersions(key,chosen.id);
+        }
+        async function fetchPublishedOutlooks() {
+            try {
+                const snap=await publishedOutlookDb.collection('forecasts_v2').get();
+                publishedOutlooks=[];snap.forEach(d=>{const x=d.data();if(x.geoJSON && x.validFrom && x.validTo && x.isActive!==false) publishedOutlooks.push({id:d.id,...x});});
+                if(!publishedOutlooks.length){setPublishedStatus('No published convective outlooks are available.');return;}
+                selectLatestPublishedForMapTime();
+            } catch(e){console.error('Published outlook load error',e);setPublishedStatus('Published outlook feed unavailable.','error');}
+        }
+
+        let publishedCalendarMonth = new Date();
+
+        let lastArchiveTimelineOutlookId = null;
+        let archiveTimelineSliderDragged = false;
+        let initialTimelineSnapshot = null;
+        let archiveTimelineApplied = false;
+        function captureInitialTimelineSnapshot() {
+            if(initialTimelineSnapshot) return;
+            const slider=document.getElementById('history-slider');
+            const startInput=document.getElementById('start-time');
+            const endInput=document.getElementById('end-time');
+            const lifespan=document.getElementById('lightning-lifespan');
+            initialTimelineSnapshot={
+                sliderMin:slider?.min ?? '0', sliderMax:slider?.max ?? '360', sliderValue:slider?.value ?? '360',
+                startValue:startInput?.value ?? '', endValue:endInput?.value ?? '',
+                lifespanValue:lifespan?.value ?? '3', showAllStrikesValue:showAllStrikes,
+                customStart:customFilterStart, customEnd:customFilterEnd, filterMode:lastFilterMode
+            };
+        }
+        function restoreInitialTimelineForCurrentOutlook() {
+            if(!initialTimelineSnapshot || !archiveTimelineApplied) return;
+            const slider=document.getElementById('history-slider');
+            const startInput=document.getElementById('start-time');
+            const endInput=document.getElementById('end-time');
+            const lifespan=document.getElementById('lightning-lifespan');
+            if(slider){slider.min=initialTimelineSnapshot.sliderMin;slider.max=initialTimelineSnapshot.sliderMax;slider.value=initialTimelineSnapshot.sliderValue;}
+            if(startInput)startInput.value=initialTimelineSnapshot.startValue;
+            if(endInput)endInput.value=initialTimelineSnapshot.endValue;
+            if(lifespan)lifespan.value=initialTimelineSnapshot.lifespanValue;
+            showAllStrikes=initialTimelineSnapshot.showAllStrikesValue;
+            customFilterStart=initialTimelineSnapshot.customStart;
+            customFilterEnd=initialTimelineSnapshot.customEnd;
+            lastFilterMode=initialTimelineSnapshot.filterMode;
+            isFilterApplied=false;
+            archiveTimelineApplied=false;
+            lastArchiveTimelineOutlookId=null;
+            const remove=document.getElementById('remove-filter');if(remove)remove.style.display='none';
+            if(typeof updateHistory==='function') updateHistory();
+            const note=document.getElementById('published-outlook-archive-sync');if(note){note.hidden=false;note.textContent='Current active outlook selected. Timeline returned to the initial live setting.';}
+        }
+        function moveForecastLegendsToPanelTop() {
+            const panel=document.getElementById('control-panel');
+            const hoco=document.getElementById('hoco-metadata-legend');
+            const manual=document.getElementById('published-outlook-control-section');
+            if(!panel || !hoco || !manual) return;
+            let host=document.getElementById('forecast-legends-host');
+            if(!host){host=document.createElement('div');host.id='forecast-legends-host';panel.prepend(host);}
+            hoco.style.display='block';
+            hoco.classList.add('collapsed');
+            if(window.manualOutlookActive) hoco.classList.add('auto-suppressed');hoco.style.display='block';
+            host.appendChild(hoco);
+            host.appendChild(manual);
+            const autoSettings=document.getElementById('hoco-control-section');
+            const hocoContent=hoco.querySelector('.hoco-content');
+            const autoPrimary=autoSettings?.querySelector('.auto-hoco-primary-row');
+            const autoSummary=autoSettings?.querySelector('#hoco-compact-summary');
+            if(autoPrimary) hoco.insertBefore(autoPrimary,hocoContent);
+            if(autoSummary) hoco.insertBefore(autoSummary,hocoContent);
+            if(autoSettings && hocoContent) hocoContent.appendChild(autoSettings);
+        }
+        function syncRadarLoopToArchivedOutlook(item) {
+            const start=outlookDate(item?.validFrom), end=outlookDate(item?.validTo);
+            const note=document.getElementById('published-outlook-archive-sync');
+            if(!start || !end || start>=end){if(note)note.hidden=true;return;}
+            const now=Date.now();
+            if(start.getTime()>now){if(note)note.hidden=true;return;} // Future outlook: never alter timeline.
+            if(start.getTime()<=now && end.getTime()>=now){restoreInitialTimelineForCurrentOutlook();return;} // Current active outlook: restore live defaults after archive browsing.
+            if(end.getTime()>=now){return;}
+            if(lastArchiveTimelineOutlookId===item.id) return;
+            captureInitialTimelineSnapshot();
+            lastArchiveTimelineOutlookId=item.id;
+            archiveTimelineApplied=true;
+            const startInput=document.getElementById('start-time'), endInput=document.getElementById('end-time');
+            const localValue=d=>{const pad=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;};
+            if(startInput)startInput.value=localValue(start);
+            if(endInput)endInput.value=localValue(end);
+            // Exact forecast-window mode: display every loaded strike between validFrom and validTo.
+            showAllStrikes=false;
+            const allToggle=document.getElementById('view-mode');if(allToggle)allToggle.checked=false;
+            customFilterStart=start;customFilterEnd=end;lastFilterMode='inputs';
+            const durationMinutes=Math.max(5,Math.round((end-start)/60000));
+            const durationHours=durationMinutes/60;
+            const lifespan=document.getElementById('lightning-lifespan');
+            if(lifespan && !archiveTimelineSliderDragged){lifespan.value=String(Number(durationHours.toFixed(2)));}
+            const slider=document.getElementById('history-slider');
+            if(slider){slider.min='0';slider.max=String(durationMinutes);slider.value=String(durationMinutes);}
+            if(typeof applyFilter==='function') applyFilter();
+            else if(typeof updateHistory==='function') updateHistory();
+            if(note){note.hidden=false;note.textContent=`Timeline set to forecast validity. Showing all loaded lightning from ${start.toLocaleString('en-GB')} to ${end.toLocaleString('en-GB')}${archiveTimelineSliderDragged?'':' with lightning lifetime matched to the outlook duration'}.`;}
+        }
+        function updatePublishedDetail(item) {
+            const meta=document.getElementById('published-outlook-meta');
+            const discussion=document.getElementById('published-outlook-discussion');
+            const link=document.getElementById('published-outlook-detail-link');
+            if(!item){meta.textContent='';discussion.textContent='Select an issued outlook to view its discussion.';link.hidden=true;return;}
+            const issued=outlookDate(item.issuedAt||item.validFrom);
+            meta.textContent=`${outlookDateKey(item.validFrom)} · Version ${item.issueVersion||1} · ${issued?issued.toLocaleString('en-GB'):'Unknown issue time'}`;
+            const compact=document.getElementById('published-outlook-compact-summary');
+            if(compact){const rank=highestPublishedRank(item), risk=PUBLISHED_RISKS[rank]?.name||'Published';compact.textContent=`${risk} · Valid ${outlookDate(item.validFrom)?.toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})||''} to ${outlookDate(item.validTo)?.toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})||''}`;}
+            discussion.textContent=item.description||'No convective discussion was supplied with this outlook.';
+            link.href=`https://handry-outlook.github.io/Thunderstorms/forecast-detail.html?id=${encodeURIComponent(item.id)}#`;
+            link.title=link.href; link.hidden=false;
+            syncRadarLoopToArchivedOutlook(item);
+        }
+        function renderPublishedCalendar() {
+            const y=publishedCalendarMonth.getFullYear(),m=publishedCalendarMonth.getMonth();
+            document.getElementById('outlook-calendar-month').textContent=publishedCalendarMonth.toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+            const grid=document.getElementById('outlook-calendar-grid');grid.innerHTML='';
+            const byDate=new Map();publishedOutlooks.forEach(x=>{const k=outlookDateKey(x.validFrom);if(k){const a=byDate.get(k)||[];a.push(x);byDate.set(k,a);}});
+            const first=new Date(y,m,1),offset=(first.getDay()+6)%7,start=new Date(y,m,1-offset);
+            for(let i=0;i<42;i++){
+                const d=new Date(start);d.setDate(start.getDate()+i);const k=outlookDateKey(d),items=byDate.get(k)||[],latest=latestPublished(items),rank=latest?highestPublishedRank(latest):0;
+                const b=document.createElement('button');b.type='button';b.className='outlook-calendar-day';b.textContent=d.getDate();
+                if(d.getMonth()!==m)b.classList.add('outside');
+                if(latest){b.classList.add('available');b.style.setProperty('--risk-color',(PUBLISHED_RISKS[rank]||{color:'#94a3b8'}).color);b.title=`${k}: ${(PUBLISHED_RISKS[rank]||{name:'Issued'}).name}, ${items.length} version${items.length===1?'':'s'}`;b.onclick=()=>{publishedCalendarMonth=new Date(d);renderPublishedCalendar();populatePublishedVersions(k);};}
+                if(selectedPublishedOutlookId&&outlookDateKey(publishedOutlooks.find(x=>x.id===selectedPublishedOutlookId)?.validFrom)===k)b.classList.add('selected');
+                grid.appendChild(b);
+            }
+        }
+        function setPublishedOptionsVisible(show){const o=document.getElementById('published-outlook-options');const b=document.getElementById('published-outlook-collapse');if(!o)return;if(!show){o.hidden=true;if(b){b.textContent='+';b.setAttribute('aria-expanded','false');}}}
+        window.addEventListener('DOMContentLoaded',()=>{
+            document.getElementById('published-outlook-toggle')?.addEventListener('change',e=>{setPublishedOptionsVisible(e.target.checked);if(e.target.checked)selectLatestPublishedForMapTime();else{clearPublishedOutlook();setPublishedStatus('Published outlook hidden.');}});
+            document.getElementById('published-outlook-version')?.addEventListener('change',e=>{const item=publishedOutlooks.find(x=>x.id===e.target.value);renderPublishedOutlook(item);updatePublishedDetail(item);renderPublishedCalendar();});
+            document.getElementById('published-outlook-opacity')?.addEventListener('input',e=>{e.target.nextElementSibling.textContent=`${Math.round(e.target.value*100)}%`;renderPublishedOutlook(publishedOutlooks.find(x=>x.id===selectedPublishedOutlookId));});
+            document.getElementById('outlook-prev-month')?.addEventListener('click',()=>{publishedCalendarMonth.setMonth(publishedCalendarMonth.getMonth()-1);renderPublishedCalendar();});
+            document.getElementById('outlook-next-month')?.addEventListener('click',()=>{publishedCalendarMonth.setMonth(publishedCalendarMonth.getMonth()+1);renderPublishedCalendar();});
+            document.getElementById('published-outlook-collapse')?.addEventListener('click',e=>{const o=document.getElementById('published-outlook-options');if(!document.getElementById('published-outlook-toggle')?.checked)return;o.hidden=!o.hidden;e.currentTarget.textContent=o.hidden?'+':'−';e.currentTarget.setAttribute('aria-expanded',String(!o.hidden));if(!o.hidden){document.getElementById('published-outlook-calendar-shell').hidden=false;renderPublishedCalendar();}});
+            document.getElementById('published-outlook-discussion-toggle')?.addEventListener('click',e=>{const d=document.getElementById('published-outlook-discussion');d.hidden=!d.hidden;e.currentTarget.textContent=d.hidden?'View discussion':'Hide discussion';e.currentTarget.setAttribute('aria-expanded',String(!d.hidden));});
+            moveForecastLegendsToPanelTop();
+            const autoToggle=document.getElementById('hoco-layer-toggle');
+            autoToggle?.addEventListener('change',()=>{autoHocoUserEnabled=autoToggle.checked;applyAutoHocoVisibility();});
+            const archiveSlider=document.getElementById('history-slider');
+            archiveSlider?.addEventListener('pointerdown',()=>{archiveTimelineSliderDragged=true;},{passive:true});
+            archiveSlider?.addEventListener('keydown',()=>{archiveTimelineSliderDragged=true;});
+            setPublishedOptionsVisible(true); document.getElementById('published-outlook-options').hidden=true; renderPublishedCalendar(); setTimeout(captureInitialTimelineSnapshot,250); setTimeout(fetchPublishedOutlooks,500);
+        });
+
         let hocoLayerGroup = L.layerGroup().addTo(map);
         let currentHocoDay = null;
 
@@ -6129,61 +6943,37 @@
                 }
             });
         }
-        async function fetchHocoData() {
-            const dateSelect = document.getElementById('hoco-date-select');
-            try {
-                const querySnapshot = await db.collection("hoco_requests")
-                    .where("type", "==", "automated")
-                    .orderBy("createdAt", "desc")
-                    .get();
-
-                const uniqueRuns = new Map();
-
-                querySnapshot.forEach((doc) => {
-                    const data = doc.data();
-                    const dateObj = data.createdAt.toDate();
-
-                    // Key based on YYYY-MM-DD-HH-mm (ignoring seconds)
-                    const minuteKey = `${dateObj.getFullYear()}-${dateObj.getMonth()}-${dateObj.getDate()}-${dateObj.getHours()}-${dateObj.getMinutes()}`;
-
-                    if (!uniqueRuns.has(minuteKey)) {
-                        const displayDate = dateObj.toLocaleString('en-GB', {
-                            day: '2-digit', month: '2-digit', year: 'numeric',
-                            hour: '2-digit', minute: '2-digit'
-                        });
-
-                        // We store the date object reset to 0 seconds to use as a baseline for the range search
-                        const baseDate = new Date(dateObj);
-                        baseDate.setSeconds(0);
-                        baseDate.setMilliseconds(0);
-
-                        uniqueRuns.set(minuteKey, {
-                            display: displayDate,
-                            baseSeconds: Math.floor(baseDate.getTime() / 1000)
-                        });
-                    }
-                });
-
-                dateSelect.innerHTML = '';
-                uniqueRuns.forEach((run) => {
-                    const option = document.createElement('option');
-                    option.value = run.baseSeconds; // Store the start of that minute
-                    option.textContent = run.display;
-                    dateSelect.appendChild(option);
-                });
-
-                if (uniqueRuns.size > 0) {
-                    setHocoForecastDay(0);
-                }
-            } catch (e) { console.error("Fetch Error:", e); }
+        let hocoCalendarMonth=new Date();
+        let hocoCalendarEntries=[];
+        let selectedHocoDateKey='';
+        const hocoKey=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        function populateHocoRunSelect(key){
+            selectedHocoDateKey=key;const select=document.getElementById('hoco-run-select');
+            const entries=hocoCalendarEntries.filter(x=>x.validKey===key).sort((a,b)=>b.baseSeconds-a.baseSeconds);
+            select.innerHTML='';entries.forEach((x,i)=>{const o=document.createElement('option');o.value=`${x.baseSeconds}|${x.day}`;o.textContent=`${i===0?'Latest · ':''}${x.createdLabel}`;select.appendChild(o);});
+            const summary=document.getElementById('hoco-compact-summary');
+            if(!entries.length){select.innerHTML='<option value="">No Auto HOCO run</option>';if(summary)summary.textContent='No automated outlook available for this date.';}else{select.value=`${entries[0].baseSeconds}|${entries[0].day}`;if(summary)summary.textContent=`Latest Auto HOCO run · ${entries[0].createdLabel}`;loadHocoByTimestampAndDay(entries[0].baseSeconds,entries[0].day);}
+            renderHocoCalendar();
         }
-
+        function renderHocoCalendar(){
+            const y=hocoCalendarMonth.getFullYear(),m=hocoCalendarMonth.getMonth(),grid=document.getElementById('hoco-calendar-grid');if(!grid)return;
+            document.getElementById('hoco-calendar-month').textContent=hocoCalendarMonth.toLocaleDateString('en-GB',{month:'long',year:'numeric'});grid.innerHTML='';
+            const keys=new Set(hocoCalendarEntries.map(x=>x.validKey));const first=new Date(y,m,1),offset=(first.getDay()+6)%7,start=new Date(y,m,1-offset);
+            for(let i=0;i<42;i++){const d=new Date(start);d.setDate(start.getDate()+i);const k=hocoKey(d),b=document.createElement('button');b.type='button';b.className='outlook-calendar-day';b.textContent=d.getDate();if(d.getMonth()!==m)b.classList.add('outside');if(keys.has(k)){b.classList.add('available');b.onclick=()=>{hocoCalendarMonth=new Date(d);populateHocoRunSelect(k);};}if(k===selectedHocoDateKey)b.classList.add('selected');grid.appendChild(b);}
+        }
+        async function fetchHocoData(){
+            try{const snap=await db.collection('hoco_requests').where('type','==','automated').orderBy('createdAt','desc').get();const seen=new Set();hocoCalendarEntries=[];
+                snap.forEach(doc=>{const x=doc.data(),created=x.createdAt?.toDate?.();if(!created)return;for(let day=0;day<3;day++){if(!String(x.id||doc.id).includes(`Day${day}`))continue;const base=new Date(created);base.setSeconds(0,0);const valid=new Date(base);valid.setDate(valid.getDate()+day);const token=`${base.getTime()}|${day}`;if(seen.has(token))continue;seen.add(token);hocoCalendarEntries.push({baseSeconds:Math.floor(base.getTime()/1000),day,validKey:hocoKey(valid),createdLabel:created.toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})});}});
+                const today=hocoKey(new Date()),latest=hocoCalendarEntries[0];const key=hocoCalendarEntries.some(x=>x.validKey===today)?today:latest?.validKey;if(key){hocoCalendarMonth=new Date(`${key}T12:00:00`);populateHocoRunSelect(key);}else renderHocoCalendar();
+            }catch(e){console.error('Fetch Error:',e);}
+        }
         /**
          * Step 2: Search the ENTIRE MINUTE to find the specific Day doc
          */
         /**
  * Loads the specific Day and populates the metadata legend
  */async function loadHocoByTimestampAndDay(baseSeconds, day) {
+            if (window.manualOutlookActive) return;
             const startRange = new firebase.firestore.Timestamp(parseInt(baseSeconds), 0);
             const endRange = new firebase.firestore.Timestamp(parseInt(baseSeconds) + 60, 0);
 
@@ -6215,7 +7005,12 @@
                     document.getElementById('hoco-create-date').textContent = creationDate;
                     document.getElementById('hoco-start-time').textContent = data.startTime || "N/A";
                     document.getElementById('hoco-end-time').textContent = data.endTime || "N/A";
-                    document.getElementById('hoco-metadata-legend').style.display = 'block';
+                    moveForecastLegendsToPanelTop();
+                    const hocoLegend=document.getElementById('hoco-metadata-legend');
+                    hocoLegend.style.display='block';
+                    if(!window.manualOutlookActive) hocoLegend.classList.remove('auto-suppressed');
+                    hocoLegend.classList.add('collapsed');
+                    const hocoBtn=document.getElementById('hoco-toggle-btn');if(hocoBtn){hocoBtn.textContent='+';hocoBtn.setAttribute('aria-expanded','false');}
 
                     const res = await fetch(freshUrl, { mode: 'cors' });
                     const geojsonData = await res.json();
@@ -6248,6 +7043,7 @@
         `);
                         }
                     }).addTo(hocoLayerGroup);
+                    applyAutoHocoVisibility();
                 }
 
             } catch (error) {
@@ -6287,28 +7083,20 @@
  * Toggles the visibility of the HOCO legend content
  */
         function toggleHocoLegend() {
-            const legend = document.getElementById('hoco-metadata-legend');
-            const btn = document.getElementById('hoco-toggle-btn');
-
-            if (legend.classList.contains('collapsed')) {
-                // Expand
-                legend.classList.remove('collapsed');
-                btn.innerHTML = '✕';
-                btn.style.color = '#bbb';
-            } else {
-                // Collapse
-                legend.classList.add('collapsed');
-                btn.innerHTML = '+';
-                btn.style.color = '#66c2a4'; // Highlight the plus so it's visible
-            }
+            const legend=document.getElementById('hoco-metadata-legend');
+            const btn=document.getElementById('hoco-toggle-btn');
+            const willExpand=legend.classList.contains('collapsed');
+            legend.classList.toggle('collapsed',!willExpand);
+            btn.textContent=willExpand?'−':'+';
+            btn.setAttribute('aria-expanded',String(willExpand));
+            btn.setAttribute('aria-label',willExpand?'Collapse Auto HOCO settings':'Expand Auto HOCO settings');
         }
         // Initialization Listener
         window.addEventListener('DOMContentLoaded', () => {
-            const dateSelect = document.getElementById('hoco-date-select');
-            if (dateSelect) {
-                dateSelect.onchange = (e) => handleHocoDateChange(e.target.value);
-            }
-            setTimeout(fetchHocoData, 1200);
+            document.getElementById('hoco-run-select')?.addEventListener('change',e=>{const [base,day]=e.target.value.split('|');if(base)loadHocoByTimestampAndDay(base,Number(day));});
+            document.getElementById('hoco-prev-month')?.addEventListener('click',()=>{hocoCalendarMonth.setMonth(hocoCalendarMonth.getMonth()-1);renderHocoCalendar();});
+            document.getElementById('hoco-next-month')?.addEventListener('click',()=>{hocoCalendarMonth.setMonth(hocoCalendarMonth.getMonth()+1);renderHocoCalendar();});
+            setTimeout(fetchHocoData,1200);
         });
         // ==========================================
         // 2. HELPER FUNCTIONS
@@ -17038,5 +17826,20 @@ async function calculateWindyRadarAccumulationMap() {
 })();
 </script>
 
+
+<script>
+(() => {
+    function bindRadarAdvancedPanel(panelId) {
+        const panel=document.getElementById(panelId);
+        const details=document.getElementById(panelId+'-details');
+        if(!panel||!details)return;
+        const sync=()=>{details.style.display=panel.style.display==='none'?'none':'block';};
+        new MutationObserver(sync).observe(panel,{attributes:true,attributeFilter:['style','class']});
+        sync();
+    }
+    const install=()=>{bindRadarAdvancedPanel('uk-custom-radar-editor');bindRadarAdvancedPanel('windy-radar-accumulation-panel');};
+    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
+})();
+</script>
 </body>
 </html>
