@@ -2573,6 +2573,41 @@
         }
         .radar-palette-preview span { flex: 1 1 0; min-width: 1px; }
     </style>
+
+<style id="met-office-warning-popup-layout-fix">
+.met-office-popup .leaflet-popup-content-wrapper {
+    background: #fff !important;
+    padding: 0 !important;
+    border-radius: 11px !important;
+    overflow: hidden !important;
+    box-shadow: 0 9px 30px rgba(0,0,0,.32) !important;
+}
+.met-office-popup .leaflet-popup-content {
+    margin: 0 !important;
+    width: auto !important;
+    background: #fff !important;
+}
+.met-office-popup .leaflet-popup-tip {
+    background: #fff !important;
+}
+.met-office-popup .leaflet-popup-close-button {
+    top: 7px !important;
+    right: 8px !important;
+    width: 28px !important;
+    height: 28px !important;
+    line-height: 26px !important;
+    border-radius: 50% !important;
+    background: rgba(255,255,255,.92) !important;
+    color: #111 !important;
+    font-size: 22px !important;
+    font-weight: 800 !important;
+    z-index: 20 !important;
+}
+.met-office-warning-scroll::-webkit-scrollbar { width: 9px; }
+.met-office-warning-scroll::-webkit-scrollbar-track { background: #f1f1f1; }
+.met-office-warning-scroll::-webkit-scrollbar-thumb { background: #999; border-radius: 8px; border: 2px solid #f1f1f1; }
+</style>
+
 </head>
 <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-M5QDT7XR39"></script>
@@ -4260,6 +4295,7 @@
                     if (!select || select.disabled || (toggle && !toggle.checked) || !select.value || select.value === 'none') continue;
                     const config = def.options[select.value];
                     if (!config) continue;
+                    if (config.type === 'wms-xyz') continue;
                     const interval = Math.max(60000, Number(config.interval) || 300000);
                     for (const direction of [-1, 1]) {
                         const neighbourTimestamp = targetTimestamp + direction * interval;
@@ -6652,13 +6688,13 @@
             const isWindyRadarLayer = layerTypeKey === 'windy-radar';
             let minTime = new Date(Date.now() - (isWindyRadarLayer ? WINDY_RADAR_ARCHIVE_LOOKBACK_MS : sixDaysInMs));
 
-            let maxAttempts = layerConfig.type === 'image' ? 4 : 288;
+            let maxAttempts = layerConfig.type === 'image' ? 4 : (layerConfig.type === 'wms-xyz' ? 13 : 288);
             let isHistoricalView = currentFilterTimestamp && (Date.now() - currentFilterTimestamp) > recentTimeThreshold;
             let currentTimeCheck = new Date(date);
             if (isHistoricalView) {
                 maxAttempts = 3;
             } else {
-                maxAttempts = layerConfig.type === 'image' ? 4 : 288;
+                maxAttempts = layerConfig.type === 'image' ? 4 : (layerConfig.type === 'wms-xyz' ? 13 : 288);
             }
 
             if (layerConfig.type === 'opera-scalar') {
@@ -6725,6 +6761,43 @@
                         tileUrl = normaliseWindyRadarLiveUrl(tileUrl);
                         if (isWindyRadarFrameArchiveOnly(tileUrl)) tileUrl = windyRadarArchiveUrl(tileUrl);
                     }
+                    // EUMETSAT WMS does not expose CORS headers, so fetch() cannot
+                    // validate it from a local HTML file. Probe one representative tile
+                    // with a normal <img> request instead. This supports two behaviours:
+                    // 1. retry a just-published timestamp through brief 404/502 responses;
+                    // 2. return null after those retries so the outer timestamp loop tries
+                    //    the previous 15-minute frame until the latest available image is found.
+                    if (layerConfig.type === 'wms-xyz' || layerTypeKey === 'eumetsat-geocolor') {
+                        const probeUrl = tileUrl.replace('{bbox}', '39.375,-11.25,45,-5.625');
+                        const retryDelays = [0, 500, 1300];
+                        for (let probeAttempt = 0; probeAttempt < retryDelays.length; probeAttempt++) {
+                            if (retryDelays[probeAttempt]) {
+                                await new Promise(resolve => setTimeout(resolve, retryDelays[probeAttempt]));
+                            }
+                            const available = await new Promise(resolve => {
+                                const image = new Image();
+                                let settled = false;
+                                const finish = value => {
+                                    if (settled) return;
+                                    settled = true;
+                                    clearTimeout(timeout);
+                                    image.onload = null;
+                                    image.onerror = null;
+                                    resolve(value);
+                                };
+                                const timeout = setTimeout(() => finish(false), 9000);
+                                image.onload = () => finish(image.naturalWidth > 0 && image.naturalHeight > 0);
+                                image.onerror = () => finish(false);
+                                const join = probeUrl.includes('?') ? '&' : '?';
+                                image.src = `${probeUrl}${join}_availability_probe=${Date.now()}_${probeAttempt}`;
+                            });
+                            if (available) {
+                                lastValidTileUrls[layerTypeKey] = tileUrl;
+                                return tileUrl;
+                            }
+                        }
+                        return null;
+                    }
                     const checkUrl = tileUrl.replace(
                         /(\{z\}\/\{x\}\/\{y\}|z=\{z\}&x=\{x\}&y=\{y\}|\{bbox\})/,   // ← ADD {bbox}
                         match => match.startsWith('{z}') ? '5/16/11' : match === '{bbox}' ? '39.375,-11.25,45,-5.625' : 'z=6&x=31&y=23'
@@ -6734,11 +6807,9 @@
                         try {
                             const validationUrl = isWindyRadarLayer ? addWindyRadarCacheBuster(checkUrl, `${checkTime.getTime()}-${Date.now()}`) : checkUrl;
                             const response = await weatherPerfFetch(validationUrl, { method: 'GET', cache: isWindyRadarLayer ? 'no-store' : 'force-cache' });
-                            if (response.ok) {
-                                return tileUrl;
-                            }
+                            if (response.ok) return tileUrl;
                         } catch (error) {
-                            // Ignore error
+                            // Non-WMS providers retain the normal validation behaviour.
                         }
                     }
                     return null;
@@ -7158,7 +7229,25 @@
             };
         }
 
+        const weatherLayerSwapGeneration = { radar: 0, satellite: 0 };
+        const weatherLayerCandidates = { radar: new Set(), satellite: new Set() };
+
+        function removeStaleWeatherCandidates(layerKey, keepLayer = null) {
+            const candidates = weatherLayerCandidates[layerKey];
+            if (!candidates) return;
+            for (const candidate of Array.from(candidates)) {
+                if (candidate === keepLayer) continue;
+                try { if (map.hasLayer(candidate)) map.removeLayer(candidate); } catch (e) { }
+                candidates.delete(candidate);
+            }
+        }
+
         async function plotMainLayer(finalUrl, layerType, timestamp, layerKey, windyRadarContext = '') {
+            const guardedSwap = layerKey === 'radar' || layerKey === 'satellite';
+            const swapGeneration = guardedSwap ? ++weatherLayerSwapGeneration[layerKey] : 0;
+            // A new slider request owns this layer immediately. Remove unfinished
+            // candidates from older timestamps before they can linger or finish late.
+            if (guardedSwap) removeStaleWeatherCandidates(layerKey);
             if (typeof WEATHER_PERF !== 'undefined' && WEATHER_PERF.mapInteracting) {
                 scheduleWeatherLayerUpdate(timestamp, 'plot-paused-during-map-interaction');
                 return;
@@ -7544,21 +7633,58 @@
                             const { x, y, z } = coords;
                             const totalTiles = Math.pow(2, z);
 
-                            // Calculate exact longitude bounds (minLon, maxLon)
                             const lon1 = (x / totalTiles) * 360 - 180;
                             const lon2 = ((x + 1) / totalTiles) * 360 - 180;
-
-                            // Calculate exact latitude bounds (maxLat, minLat)
-                            // Note: 'y' increases from North (0) to South in Web Mercator
                             const lat1 = Math.atan(Math.sinh(Math.PI * (1 - 2 * y / totalTiles))) * 180 / Math.PI;
                             const lat2 = Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 1) / totalTiles))) * 180 / Math.PI;
-
                             const fmt = v => (v === 0 || Object.is(v, -0)) ? '0' : parseFloat(v.toFixed(7));
-
-                            // Format for WMS 1.3.0 (EPSG:4326 usually expects minLat, minLon, maxLat, maxLon)
                             const bbox = `${fmt(lat2)}%2C${fmt(lon1)}%2C${fmt(lat1)}%2C${fmt(lon2)}`;
-
                             return finalUrl.replace('{bbox}', bbox);
+                        },
+
+                        // EUMETSAT can briefly return 404 while a valid frame/tile is being
+                        // published. Keep the tile pending and retry the exact same URL rather
+                        // than letting Leaflet permanently mark it as failed.
+                        createTile(coords, done) {
+                            const tile = document.createElement('img');
+                            tile.alt = '';
+                            tile.setAttribute('role', 'presentation');
+                            // Intentionally omit img.crossOrigin. The WMS can be displayed
+                            // cross-origin, but it cannot be read by canvas/fetch without CORS.
+                            const baseUrl = this.getTileUrl(coords);
+                            const retryDelays = [350, 800, 1500, 2600, 4200, 6500];
+                            let attempt = 0;
+                            let finished = false;
+                            let retryTimer = null;
+
+                            const finish = error => {
+                                if (finished) return;
+                                finished = true;
+                                if (retryTimer) clearTimeout(retryTimer);
+                                tile.onload = null;
+                                tile.onerror = null;
+                                done(error || null, tile);
+                            };
+                            const request = () => {
+                                if (finished) return;
+                                tile.onload = () => finish(null);
+                                tile.onerror = () => {
+                                    if (attempt >= retryDelays.length) {
+                                        finish(new Error('EUMETSAT WMS tile unavailable after publication-delay retries'));
+                                        return;
+                                    }
+                                    const delay = retryDelays[attempt++];
+                                    retryTimer = setTimeout(() => {
+                                        // Cache buster is only added after a failed response so a
+                                        // transient 404 cannot remain cached by the browser/proxy.
+                                        const join = baseUrl.includes('?') ? '&' : '?';
+                                        tile.src = `${baseUrl}${join}_eumetsat_retry=${Date.now()}_${attempt}`;
+                                    }, delay);
+                                };
+                                tile.src = baseUrl;
+                            };
+                            request();
+                            return tile;
                         }
                     });
                     newLayer = new EumetsatWMSLayer('', {
@@ -7570,7 +7696,7 @@
                         updateWhenIdle: false,
                         updateWhenZooming: false,
                         keepBuffer: isMobileWeatherDevice() ? 3 : 6,
-                        crossOrigin: true,
+                        crossOrigin: false,
                         className: 'seamless-layer satellite-fast-tile',
                         weatherManaged: true
                     });
@@ -7669,6 +7795,7 @@
                     newLayer._windyRadarTileUrl = finalUrl;
                 }
                 newLayer.addTo(map);
+                if (guardedSwap) weatherLayerCandidates[layerKey].add(newLayer);
 
                 const layerLoadedPromise = new Promise(resolve => {
                     const timeout = setTimeout(() => resolve(true), layerType === 'opera-dbzh' ? 90 : (layerKey === 'satellite' ? 320 : (newLayer instanceof L.GridLayer ? 500 : 350)));
@@ -7680,9 +7807,18 @@
 
                 const currentType = (document.getElementById(`${layerKey}LayerSelect`) || document.getElementById(`${layerKey}Layer`))?.value || 'none';
 
+                // Reject any result that finished after a newer slider request.
+                // This is the key protection against mixed timestamps on screen.
+                if (guardedSwap && swapGeneration !== weatherLayerSwapGeneration[layerKey]) {
+                    if (newLayer && map.hasLayer(newLayer)) map.removeLayer(newLayer);
+                    weatherLayerCandidates[layerKey].delete(newLayer);
+                    return;
+                }
+
                 // Safety check: if user switched layer type while loading
                 if (currentType !== layerType || (timestamp !== null && lastPlottedTimestamp === timestamp)) {
                     if (newLayer && map.hasLayer(newLayer)) map.removeLayer(newLayer);
+                    if (guardedSwap) weatherLayerCandidates[layerKey].delete(newLayer);
                     return;
                 }
 
@@ -7700,6 +7836,17 @@
                         case 'observation': observationLayer = newLayer; lastObservationTimestamp = timestamp || lastObservationTimestamp; lastObservationType = layerType; break;
                         case 'nowcast': NowcastLayer = newLayer; lastNowcastTimestamp = timestamp || lastNowcastTimestamp; lastNowcastType = layerType; break;
                         case 'warning': warningLayer = newLayer; lastWarningTimestamp = timestamp || lastWarningTimestamp; lastWarningType = layerType; break;
+                    }
+
+                    if (guardedSwap) {
+                        weatherLayerCandidates[layerKey].delete(newLayer);
+                        removeStaleWeatherCandidates(layerKey, newLayer);
+                        // Radar/satellite use an atomic one-layer commit. Once the new
+                        // frame is accepted, the previous timestamp is removed at once.
+                        if (layerToDispose && layerToDispose !== newLayer && map.hasLayer(layerToDispose)) {
+                            map.removeLayer(layerToDispose);
+                        }
+                        layerToDispose = null;
                     }
 
                     // Ensure opacity is applied to the DOM element (double check)
@@ -7723,10 +7870,12 @@
                     lastValidTileUrls[layerType] = finalUrl;
                 } else {
                     if (newLayer && map.hasLayer(newLayer)) map.removeLayer(newLayer);
+                    if (guardedSwap && newLayer) weatherLayerCandidates[layerKey].delete(newLayer);
                 }
             } catch (error) {
                 console.error(`Error plotting ${layerKey}:`, error);
                 if (newLayer && map.hasLayer(newLayer)) map.removeLayer(newLayer);
+                if (guardedSwap && newLayer) weatherLayerCandidates[layerKey].delete(newLayer);
             } finally {
                 // Reset animation flags
                 if (layerKey === 'satellite') isSatelliteAnimating = false;
@@ -7810,8 +7959,12 @@
                 updateLegend();
                 return;
             }
-            updateMapLayers(timestamp);
-        }, 100);
+            if (typeof window.fastRadarSatelliteSliderUpdate === 'function') {
+                window.fastRadarSatelliteSliderUpdate(timestamp);
+            } else {
+                updateMapLayers(timestamp);
+            }
+        }, 70);
         /**
          * Main function to coordinate updating the map layers.
          * @param {number} timestamp - The target timestamp from the slider/current time.
@@ -7868,6 +8021,9 @@
                     continue;
                 }
                 const layerType = select.value;
+                // Met Office warnings are loaded by warningLayerTypeHandler so their
+                // fill and clickable outline can live in different panes.
+                if (def.key === 'warning' && layerType === 'ukmo-detail-warning') continue;
                 const layerConfig = def.options[layerType];
                 if (!layerConfig) continue;
                 const frameKey = getWeatherLayerFrameKey(def.key, layerType, layerConfig, targetTimestamp);
@@ -14989,7 +15145,7 @@ async function calculateWindyRadarAccumulationMap() {
                         // Determine custom styling based on impact level
                         let customStrokeColor = 'red'; // Default border color for hull
                         let customStrokeWeight = 2;       // Default border weight for hull
-                        let forecastStrokeWeight = 1;     // Default border weight for forecasts
+                        let forecastStrokeWeight = 2.25;  // Clear forecast outline
 
                         if (potentialImpact.includes('LEVEL 5 - EXTREME') || potentialImpact.includes('LEVEL 4 - HIGH')) {
                             // Apply special styling for high-risk alerts
@@ -15009,7 +15165,7 @@ async function calculateWindyRadarAccumulationMap() {
                                     const latLngs = forecast.polygon.map(p => [p[1], p[0]]);
 
                                     const timeDecayFactor = 1.0 - (forecast.timeMinutes / 80);
-                                    const finalStrokeOpacity = baseOpacity * timeDecayFactor;
+                                    const finalStrokeOpacity = Math.max(0.58, baseOpacity * Math.max(0.72, timeDecayFactor));
                                     const finalFillOpacity = baseOpacity * timeDecayFactor * 0.3;
 
                                     L.polygon(latLngs, {
@@ -16002,7 +16158,7 @@ async function calculateWindyRadarAccumulationMap() {
 
                 let customStrokeColor = 'red';
                 let customStrokeWeight = 3;
-                let forecastStrokeWeight = 2;
+                let forecastStrokeWeight = 2.5;
 
                 if (potentialImpact.includes('LEVEL 5') || potentialImpact.includes('LEVEL 4')) {
                     customStrokeColor = '#8A2BE2'; // Purple alert
@@ -16033,7 +16189,7 @@ async function calculateWindyRadarAccumulationMap() {
                                 renderer: nowcastOutlineRenderer,
                                 color: customStrokeColor !== 'black' ? customStrokeColor : confidenceColor,
                                 weight: forecastStrokeWeight,
-                                opacity: baseOpacity * timeDecay,
+                                opacity: Math.max(0.58, baseOpacity * Math.max(0.72, timeDecay)),
                                 fillColor: confidenceColor,
                                 fillOpacity: 0,
                                 dashArray: '5, 5'
@@ -16434,6 +16590,376 @@ async function calculateWindyRadarAccumulationMap() {
         startUkLightningImmediately();
     }
     window.addEventListener('load', startUkLightningImmediately, { once: true });
+})();
+</script>
+
+
+<script id="requested-interaction-and-refresh-fixes">
+(() => {
+    'use strict';
+
+    function ready(fn) {
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn, { once: true });
+        else fn();
+    }
+
+    ready(() => {
+        if (typeof map === 'undefined' || !map) return;
+
+        // Rainfall pointer is deliberately inactive for normal clicks. A Leaflet
+        // dblclick event already represents two clicks at approximately the same point.
+        if (typeof handleWindyRadarMapClick === 'function') map.off('click', handleWindyRadarMapClick);
+        if (map.doubleClickZoom) map.doubleClickZoom.disable();
+        map.off('dblclick.rainfall');
+        map.on('dblclick', e => {
+            if (e.originalEvent) {
+                L.DomEvent.preventDefault(e.originalEvent);
+                L.DomEvent.stopPropagation(e.originalEvent);
+            }
+            if (typeof handleWindyRadarMapClick === 'function') handleWindyRadarMapClick(e);
+        });
+
+        // Separate warning panes: visible fill below radar, visible/clickable outline above radar.
+        if (!map.getPane('warningFillPane')) map.createPane('warningFillPane', map.getPane('overlayPane'));
+        if (!map.getPane('warningOutlinePane')) map.createPane('warningOutlinePane');
+        if (!map.getPane('warningHitPane')) map.createPane('warningHitPane');
+        map.getPane('warningFillPane').style.zIndex = '135';
+        map.getPane('warningFillPane').style.pointerEvents = 'none';
+        map.getPane('warningOutlinePane').style.zIndex = '560';
+        map.getPane('warningOutlinePane').style.pointerEvents = 'none';
+        // Invisible full-polygon interaction surface. It sits above radar, satellite,
+        // labels and nowcast canvases, while the visible outline remains at z=560.
+        map.getPane('warningHitPane').style.zIndex = '2100';
+        map.getPane('warningHitPane').style.pointerEvents = 'auto';
+    });
+
+    const first = (p, names, fallback = 'Not provided') => {
+        const entries = Object.entries(p || {});
+        for (const name of names) {
+            const wanted = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const hit = entries.find(([key, value]) => key.toLowerCase().replace(/[^a-z0-9]/g, '') === wanted && value !== null && value !== '');
+            if (hit) return hit[1];
+        }
+        return fallback;
+    };
+    const esc = value => String(value ?? 'Not provided').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const fmt = value => {
+        if (!value || value === 'Not provided') return 'Not provided';
+        const d = new Date(value);
+        return Number.isNaN(d.getTime()) ? esc(value) : d.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
+    };
+    function warningDetailsHtml(raw) {
+        const type = first(raw, ['weathertype','warningtype','event','type']);
+        const severity = first(raw, ['warninglevel','severity','level']);
+        const from = first(raw, ['validfromdate','validfrom','onset','starttime']);
+        const to = first(raw, ['validtodate','validto','expires','endtime']);
+        const headline = first(raw, ['warningheadline','headline','title','description']);
+        const impacts = first(raw, ['whattoexpect','expectedimpacts','impacts','instruction']);
+        const details = first(raw, ['warningfurtherdetails','furtherdetails','details','description']);
+        const issued = first(raw, ['issueddatestring','issueddate','issued','sent','createddate']);
+        const impactRaw = first(raw, ['warningimpact','impact','impactlevel','impact_level'], 0);
+        const likelihoodRaw = first(raw, ['warninglikelihood','likelihood','likelihoodlevel','likelihood_level'], 0);
+        const colour = ({yellow:'#FFD700', amber:'#FF8C00', red:'#D32F2F'})[String(severity).toLowerCase()] || '#FFD700';
+
+        const normaliseMatrixValue = value => {
+            const numeric = parseInt(value, 10);
+            if (Number.isFinite(numeric) && numeric >= 1 && numeric <= 4) return numeric;
+            const text = String(value || '').toLowerCase();
+            if (/very\s*low|minimal|minor/.test(text)) return 1;
+            if (/low|limited/.test(text)) return 2;
+            if (/medium|moderate|possible/.test(text)) return 3;
+            if (/high|severe|very\s*likely|likely/.test(text)) return 4;
+            return 0;
+        };
+        const impact = normaliseMatrixValue(impactRaw);
+        const likelihood = normaliseMatrixValue(likelihoodRaw);
+        // Matrix orientation follows the Met Office presentation:
+        // horizontal X axis = impact (very low to high),
+        // vertical Y axis = likelihood (unlikely to very likely).
+        // Each array row is a likelihood level from 1 to 4; each column is impact 1 to 4.
+        const matrixColours = [
+            ['#d9d9d9','#d9d9d9','#fff200','#fff200'],
+            ['#d9d9d9','#d9d9d9','#fff200','#ff9800'],
+            ['#d9d9d9','#fff200','#ff9800','#ff9800'],
+            ['#d9d9d9','#fff200','#ff9800','#e00000']
+        ];
+        let matrixCells = '';
+        for (let rowLikelihood = 4; rowLikelihood >= 1; rowLikelihood--) {
+            matrixCells += `<div style="font-size:10px;font-weight:700;color:#555;text-align:right;padding-right:5px;align-self:center;">${rowLikelihood}</div>`;
+            for (let columnImpact = 1; columnImpact <= 4; columnImpact++) {
+                const active = likelihood === rowLikelihood && impact === columnImpact;
+                matrixCells += `<div title="Likelihood ${rowLikelihood}, impact ${columnImpact}" style="position:relative;width:31px;height:29px;border-radius:2px;background:${matrixColours[rowLikelihood-1][columnImpact-1]};border:1px solid #333;box-sizing:border-box;opacity:${active || !impact || !likelihood ? 1 : .72};">${active ? '<span style="position:absolute;left:8px;top:2px;font-size:20px;font-weight:900;color:#111;line-height:1;">✓</span>' : ''}</div>`;
+            }
+        }
+        const matrixNote = impact && likelihood
+            ? `Selected assessment: likelihood ${likelihood}, impact ${impact}`
+            : 'The provider did not supply recognisable impact and likelihood values for this warning.';
+
+        return `<div style="width:min(390px,calc(100vw - 70px));max-height:min(68vh,610px);display:flex;flex-direction:column;font-family:Inter,Arial,sans-serif;line-height:1.45;color:#222;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 8px 28px rgba(0,0,0,.28);border:1px solid #d8d8d8;">
+          <div style="flex:0 0 auto;background:${colour};padding:12px 16px;border-bottom:1px solid rgba(0,0,0,.15);">
+            <div style="font-size:10px;font-weight:900;letter-spacing:1px;color:rgba(0,0,0,.68);">MET OFFICE WARNING</div>
+            <div style="font-size:18px;font-weight:850;color:#111;">${esc(type)} (${esc(severity)})</div>
+          </div>
+          <div class="met-office-warning-scroll" style="flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;background:#fff;padding:0;scrollbar-width:thin;">
+            <section style="padding:11px 16px;background:#fff9e6;border-bottom:1px solid #e7e7e7;">
+              <div style="font-size:10px;font-weight:850;text-transform:uppercase;color:#666;margin-bottom:3px;">Active period</div>
+              <div style="font-weight:650;">${fmt(from)} to ${fmt(to)}</div>
+            </section>
+            <section style="padding:13px 16px;background:#fff;border-bottom:1px solid #ececec;">
+              <div style="font-size:10px;font-weight:850;text-transform:uppercase;color:#666;margin-bottom:4px;">Headline</div>
+              <div style="font-size:14px;font-weight:700;white-space:pre-wrap;overflow-wrap:anywhere;">${esc(headline)}</div>
+            </section>
+            <section style="padding:14px 16px;background:#fff;border-bottom:1px solid #ececec;">
+              <div style="font-size:11px;font-weight:850;text-transform:uppercase;color:#555;margin-bottom:10px;">Impact and likelihood matrix</div>
+              <div style="display:flex;justify-content:center;">
+                <div>
+                  <div style="display:grid;grid-template-columns:22px repeat(4,31px);gap:4px;align-items:center;">
+                    ${matrixCells}
+                    <div></div><div style="font-size:10px;text-align:center;font-weight:700;">1</div><div style="font-size:10px;text-align:center;font-weight:700;">2</div><div style="font-size:10px;text-align:center;font-weight:700;">3</div><div style="font-size:10px;text-align:center;font-weight:700;">4</div>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;margin:5px 0 0 26px;width:136px;font-size:9px;color:#666;"><span>Very low</span><span>High</span></div>
+                  <div style="font-size:10px;font-weight:800;color:#555;text-align:center;margin-top:2px;margin-left:22px;">IMPACT →</div>
+                  <div style="font-size:10px;font-weight:800;color:#555;transform:rotate(-90deg);position:absolute;margin-left:-39px;margin-top:-92px;">LIKELIHOOD →</div>
+                </div>
+              </div>
+              <div style="font-size:10px;color:#666;text-align:center;margin-top:10px;">${esc(matrixNote)}</div>
+            </section>
+            <section style="padding:13px 16px;background:#fff;border-bottom:1px solid #ececec;">
+              <div style="font-size:10px;font-weight:850;text-transform:uppercase;color:#666;margin-bottom:5px;">Expected impacts</div>
+              <div style="white-space:pre-wrap;overflow-wrap:anywhere;">${esc(impacts)}</div>
+            </section>
+            <section style="padding:13px 16px;background:#fff;">
+              <div style="font-size:10px;font-weight:850;text-transform:uppercase;color:#666;margin-bottom:5px;">Further details</div>
+              <div style="white-space:pre-wrap;overflow-wrap:anywhere;">${esc(details)}</div>
+            </section>
+          </div>
+          <div style="flex:0 0 auto;padding:9px 16px;background:#f6f6f6;border-top:1px solid #ddd;color:#666;font-size:10px;"><strong>Issued:</strong> ${fmt(issued)}</div>
+        </div>`;
+    }
+
+    const originalWarningHandler = window.warningLayerTypeHandler;
+    window.warningLayerTypeHandler = async function () {
+        const select = document.getElementById('warningLayerSelect');
+        const toggle = document.getElementById('warningToggle');
+        if (!select || select.disabled || !toggle?.checked) {
+            if (typeof clearWarningLayers === 'function') clearWarningLayers();
+            return;
+        }
+        if (select.value !== 'ukmo-detail-warning') return originalWarningHandler?.apply(this, arguments);
+        if (typeof clearWarningLayers === 'function') clearWarningLayers();
+        const service = warningOptions['ukmo-detail-warning'].url;
+        const query = `${service}/query?where=1%3D1&outFields=*&returnGeometry=true&f=geojson`;
+        try {
+            const response = await fetch(query, { cache: 'no-store' });
+            if (!response.ok) throw new Error(`Met Office warnings HTTP ${response.status}`);
+            const geojson = await response.json();
+            const opacity = parseFloat(document.getElementById('warningOpacity')?.value || 0.7);
+            const colourFor = feature => ({yellow:'#FFD700', amber:'#FF8C00', red:'#D32F2F'})[String(first(feature.properties, ['warninglevel','severity','level'], 'yellow')).toLowerCase()] || '#FFD700';
+            const fill = L.geoJSON(geojson, { pane:'warningFillPane', interactive:false, style:f => ({color:'transparent',weight:0,fillColor:colourFor(f),fillOpacity:opacity}) });
+            const outline = L.geoJSON(geojson, {
+                pane:'warningOutlinePane',
+                interactive:false,
+                style:f => ({color:colourFor(f),weight:3,opacity:1,fill:false})
+            });
+
+            const openWarningDetails = (feature, latlng, sourceLayer) => {
+                if (!document.getElementById('warningToggle')?.checked) return;
+                const popup = L.popup({
+                    maxWidth:440,
+                    maxHeight:650,
+                    className:'met-office-popup',
+                    closeButton:true,
+                    autoPan:true,
+                    closeOnClick:true
+                })
+                    .setLatLng(latlng || sourceLayer.getBounds().getCenter())
+                    .setContent(warningDetailsHtml(feature.properties || {}));
+                popup.openOn(map);
+            };
+
+            // A separate transparent polygon makes the complete warning area clickable.
+            // Using an SVG renderer gives reliable polygon hit testing even when the
+            // visible warning fill is underneath the radar canvas/tile layers.
+            const warningHitRenderer = L.svg({ pane:'warningHitPane', padding:0.5 });
+            const hit = L.geoJSON(geojson, {
+                pane:'warningHitPane',
+                renderer:warningHitRenderer,
+                bubblingMouseEvents:false,
+                style:() => ({
+                    stroke:true,
+                    color:'#000000',
+                    weight:8,
+                    opacity:0,
+                    fill:true,
+                    fillColor:'#ffffff',
+                    fillOpacity:0.01,
+                    interactive:true
+                }),
+                onEachFeature:(feature, layer) => {
+                    layer.on('click', event => {
+                        if (event.originalEvent) {
+                            L.DomEvent.preventDefault(event.originalEvent);
+                            L.DomEvent.stopPropagation(event.originalEvent);
+                        }
+                        openWarningDetails(feature, event.latlng, layer);
+                    });
+                    layer.on('add', () => requestAnimationFrame(() => {
+                        const el = layer.getElement?.();
+                        if (!el) return;
+                        el.style.pointerEvents = 'auto';
+                        el.style.cursor = 'pointer';
+                        el.setAttribute('tabindex','0');
+                        el.setAttribute('role','button');
+                        el.setAttribute('aria-label','Open Met Office weather warning details');
+                        L.DomEvent.off(el, 'keydown.warningDetails');
+                        L.DomEvent.on(el, 'keydown.warningDetails', event => {
+                            if (event.key !== 'Enter' && event.key !== ' ') return;
+                            L.DomEvent.preventDefault(event);
+                            L.DomEvent.stopPropagation(event);
+                            openWarningDetails(feature, layer.getBounds().getCenter(), layer);
+                        });
+                    }));
+                }
+            });
+            warningLayer = L.layerGroup([fill, outline, hit]).addTo(map);
+            lastWarningType = select.value;
+            lastWarningTimestamp = Date.now();
+        } catch (error) {
+            console.error('Unable to load Met Office warning polygons:', error);
+            if (typeof originalWarningHandler === 'function') originalWarningHandler.apply(this, arguments);
+        }
+    };
+
+    // Enabling nowcast always moves to the latest timeline position and plots immediately.
+    window.toggleAllNowcast = function () {
+        const enabled = Boolean(document.getElementById('nowcast-toggle')?.checked);
+        if (!enabled) {
+            polygonNowcastLayer?.clearLayers?.(); nowcastLayer?.clearLayers?.();
+            if (typeof updateLegend === 'function') updateLegend();
+            return;
+        }
+        const slider = document.getElementById('history-slider');
+        if (slider) slider.value = slider.max;
+        lastFilterMode = 'slider'; customFilterStart = null; customFilterEnd = null;
+        lastNowcastCalcKey = null; lastNowcastCalcResult = [];
+        if (typeof updateHistory === 'function') updateHistory();
+        if (typeof updateNowcast === 'function') updateNowcast(currentFiltered || []);
+        else if (typeof toggleNowcast === 'function') toggleNowcast();
+        if (typeof updateLegend === 'function') updateLegend();
+    };
+
+    // New lightning data invalidates the nowcast cache and refreshes every active plot.
+    const originalMerge = window.mergeAndRenderLightning;
+    if (typeof originalMerge === 'function') window.mergeAndRenderLightning = function (incoming) {
+        const beforeCount = Array.isArray(strikeData) ? strikeData.length : 0;
+        const beforeLatest = beforeCount ? strikeData.reduce((m, s) => Math.max(m, s.time?.getTime?.() || 0), 0) : 0;
+        const result = originalMerge.apply(this, arguments);
+        const afterCount = Array.isArray(strikeData) ? strikeData.length : 0;
+        const afterLatest = afterCount ? strikeData.reduce((m, s) => Math.max(m, s.time?.getTime?.() || 0), 0) : 0;
+        if (afterCount !== beforeCount || afterLatest > beforeLatest) {
+            lastNowcastCalcKey = null; lastNowcastCalcResult = [];
+            if (document.getElementById('nowcast-toggle')?.checked && typeof updateNowcast === 'function') updateNowcast(currentFiltered || []);
+            const slider = document.getElementById('history-slider');
+            if (slider && slider.value === slider.max && typeof updateMapLayers === 'function') updateMapLayers(Date.now());
+        }
+        return result;
+    };
+})();
+</script>
+
+
+<script id="radar-satellite-slider-refresh-fix">
+(() => {
+    'use strict';
+    let sliderTimer = null;
+    let settleTimer = null;
+    let requestSerial = 0;
+
+    async function loadOneFast(layerKey, selectId, toggleId, optionsMap, timestamp, serial) {
+        const select = document.getElementById(selectId);
+        const toggle = document.getElementById(toggleId);
+        if (!select || select.disabled || (toggle && !toggle.checked) || !select.value || select.value === 'none') return;
+        const layerType = select.value;
+        let config = optionsMap[layerType];
+        if (!config) return;
+        if (layerKey === 'radar' && timestamp > Date.now() + 120000 && optionsMap['radar-nowcast-forecast']) {
+            config = optionsMap['radar-nowcast-forecast'];
+        }
+        try {
+            // URL discovery/validation for radar and satellite runs concurrently.
+            const url = await fetchTileUrl(timestamp, config, layerKey, layerType);
+            if (!url || serial !== requestSerial) return;
+            await plotMainLayer(url, layerType, timestamp, layerKey);
+        } catch (error) {
+            if (error?.name !== 'AbortError') console.warn(`Fast ${layerKey} slider frame skipped:`, error);
+        }
+    }
+
+    window.fastRadarSatelliteSliderUpdate = function(timestamp) {
+        const serial = ++requestSerial;
+        if (typeof weatherLayerSwapGeneration !== 'undefined') {
+            weatherLayerSwapGeneration.radar++;
+            weatherLayerSwapGeneration.satellite++;
+        }
+        if (typeof removeStaleWeatherCandidates === 'function') {
+            removeStaleWeatherCandidates('radar');
+            removeStaleWeatherCandidates('satellite');
+        }
+        currentFilterTimestamp = timestamp;
+        pendingWeatherLayerTimestamp = timestamp;
+        pendingDebouncedWeatherTimestamp = timestamp;
+
+        // Cancel obsolete validation work immediately. The currently displayed tiles
+        // stay visible until their replacements are ready, avoiding a blank flash.
+        if (typeof beginWeatherPerformanceGeneration === 'function') beginWeatherPerformanceGeneration();
+        if (typeof resetWeatherFrameKey === 'function') {
+            resetWeatherFrameKey('radar');
+            resetWeatherFrameKey('satellite');
+        }
+        lastRadarTimestamp = null;
+        lastSatelliteTimestamp = null;
+        lastRequestedRadarTimestamp = null;
+        lastRequestedSatelliteTimestamp = null;
+
+        clearTimeout(sliderTimer);
+        sliderTimer = setTimeout(() => {
+            // Start both provider requests together instead of waiting for every
+            // optional weather layer in the main coordinator.
+            Promise.allSettled([
+                loadOneFast('radar', 'radarLayer', 'radarToggle', radarOptions, timestamp, serial),
+                loadOneFast('satellite', 'satelliteLayerSelect', 'satelliteToggle', satelliteOptions, timestamp, serial)
+            ]).then(() => {
+                if (serial !== requestSerial) return;
+                // Prefetch adjacent frames only after the requested frame is on screen.
+                if (typeof scheduleAdjacentWeatherFramePrefetch === 'function') {
+                    const defs = [
+                        { key:'radar', select:'radarLayer', toggle:'radarToggle', options:radarOptions },
+                        { key:'satellite', select:'satelliteLayerSelect', toggle:'satelliteToggle', options:satelliteOptions }
+                    ];
+                    scheduleAdjacentWeatherFramePrefetch(timestamp, defs);
+                }
+            });
+        }, 55);
+
+        // Less time-sensitive overlays refresh after the user pauses, so they cannot
+        // compete with radar/satellite for bandwidth while the slider is moving.
+        clearTimeout(settleTimer);
+        settleTimer = setTimeout(() => {
+            if (serial === requestSerial && typeof updateMapLayers === 'function') updateMapLayers(timestamp);
+        }, 650);
+    };
+
+    function install() {
+        const slider = document.getElementById('history-slider');
+        if (!slider || slider.dataset.fastWeatherTiles === '1') return;
+        slider.dataset.fastWeatherTiles = '1';
+        const request = () => window.fastRadarSatelliteSliderUpdate(getCurrentSliderTimestamp());
+        // Capture phase starts the fast path before the heavier legacy listeners.
+        slider.addEventListener('input', request, { capture:true, passive:true });
+        slider.addEventListener('change', request, { capture:true, passive:true });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once:true });
+    else install();
 })();
 </script>
 
