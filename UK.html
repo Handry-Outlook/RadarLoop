@@ -3125,6 +3125,19 @@
         .radar-advanced-details>summary::after { content:'+';float:right;font-size:18px;line-height:12px; }
         .radar-advanced-details[open]>summary::after { content:'−'; }
         .radar-advanced-details>.uk-custom-radar-editor { border:0!important;border-top:1px solid rgba(128,128,128,.25)!important;border-radius:0!important;margin:0!important; }
+
+        /* Auto HOCO calendar dates use the highest risk found across every run/version for that valid day. */
+        #control-panel #hoco-control-section .outlook-calendar-day.available {
+            background:color-mix(in srgb,var(--hoco-risk-color,#55dfbd) 42%,#111827)!important;
+            color:#fff!important;
+        }
+        #control-panel #hoco-control-section .outlook-calendar-day.available:hover {
+            background:color-mix(in srgb,var(--hoco-risk-color,#55dfbd) 58%,#111827)!important;
+        }
+        #control-panel #hoco-control-section .outlook-calendar-day.available::after {
+            background:var(--hoco-risk-color,#55dfbd)!important;
+            border-color:rgba(0,0,0,.35)!important;
+        }
     </style>
 
 <style id="met-office-warning-popup-layout-fix">
@@ -6955,6 +6968,46 @@
         let hocoCalendarEntries=[];
         let selectedHocoDateKey='';
         const hocoKey=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        function hocoRiskFromGeoJSON(geojson){
+            const features=geojson?.features||[];
+            return Math.max(0,...features.map(f=>Number(f?.properties?.risk)).filter(Number.isFinite));
+        }
+        function hocoCalendarColor(risk){
+            return getHocoColor(Math.max(0,Math.min(99,Number(risk)||0)));
+        }
+        function parseHocoValidity(data,validKey){
+            const parse=(value,fallbackDate)=>{
+                if(value?.toDate)return value.toDate();
+                if(value instanceof Date)return value;
+                if(typeof value==='number')return new Date(value<1e12?value*1000:value);
+                const direct=new Date(value);if(!Number.isNaN(direct.getTime()))return direct;
+                const time=String(value||'').match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+                if(time&&fallbackDate){const d=new Date(fallbackDate);d.setHours(Number(time[1]),Number(time[2]),Number(time[3]||0),0);return d;}
+                return null;
+            };
+            const base=validKey?new Date(`${validKey}T00:00:00`):null;
+            let start=parse(data.startTime,base),end=parse(data.endTime,base);
+            if(!start&&base){start=new Date(base);start.setHours(6,0,0,0);}
+            if(!end&&base){end=new Date(base);end.setDate(end.getDate()+1);end.setHours(5,59,0,0);}
+            if(start&&end&&end<=start)end.setDate(end.getDate()+1);
+            return {start,end};
+        }
+        function syncAutoHocoTimeline(data,validKey){
+            const {start,end}=parseHocoValidity(data,validKey);
+            if(!start||!end)return;
+            syncRadarLoopToArchivedOutlook({id:`auto-hoco-${validKey}-${data.id||data.createdAt?.seconds||''}`,validFrom:start,validTo:end});
+        }
+        async function hydrateHocoCalendarRisks(){
+            const pending=hocoCalendarEntries.filter(x=>!Number.isFinite(x.maxRisk));
+            const worker=async entry=>{
+                try{
+                    let geo=entry.geojson||null;
+                    if(!geo&&entry.geojsonUrl){const ref=firebase.storage().refFromURL(entry.geojsonUrl);const url=await ref.getDownloadURL();const response=await fetch(url,{mode:'cors'});if(response.ok)geo=await response.json();}
+                    entry.maxRisk=hocoRiskFromGeoJSON(geo);
+                }catch(e){entry.maxRisk=0;console.warn('Auto HOCO calendar risk unavailable',entry.validKey,e);}
+            };
+            for(let i=0;i<pending.length;i+=4){await Promise.allSettled(pending.slice(i,i+4).map(worker));renderHocoCalendar();}
+        }
         function populateHocoRunSelect(key){
             selectedHocoDateKey=key;const select=document.getElementById('hoco-run-select');
             const entries=hocoCalendarEntries.filter(x=>x.validKey===key).sort((a,b)=>b.baseSeconds-a.baseSeconds);
@@ -6967,12 +7020,13 @@
             const y=hocoCalendarMonth.getFullYear(),m=hocoCalendarMonth.getMonth(),grid=document.getElementById('hoco-calendar-grid');if(!grid)return;
             document.getElementById('hoco-calendar-month').textContent=hocoCalendarMonth.toLocaleDateString('en-GB',{month:'long',year:'numeric'});grid.innerHTML='';
             const keys=new Set(hocoCalendarEntries.map(x=>x.validKey));const first=new Date(y,m,1),offset=(first.getDay()+6)%7,start=new Date(y,m,1-offset);
-            for(let i=0;i<42;i++){const d=new Date(start);d.setDate(start.getDate()+i);const k=hocoKey(d),b=document.createElement('button');b.type='button';b.className='outlook-calendar-day';b.textContent=d.getDate();if(d.getMonth()!==m)b.classList.add('outside');if(keys.has(k)){b.classList.add('available');b.onclick=()=>{hocoCalendarMonth=new Date(d);populateHocoRunSelect(k);};}if(k===selectedHocoDateKey)b.classList.add('selected');grid.appendChild(b);}
+            for(let i=0;i<42;i++){const d=new Date(start);d.setDate(start.getDate()+i);const k=hocoKey(d),b=document.createElement('button');b.type='button';b.className='outlook-calendar-day';b.textContent=d.getDate();if(d.getMonth()!==m)b.classList.add('outside');if(keys.has(k)){const dayEntries=hocoCalendarEntries.filter(x=>x.validKey===k),highest=Math.max(0,...dayEntries.map(x=>Number(x.maxRisk)||0));b.classList.add('available');b.style.setProperty('--hoco-risk-color',hocoCalendarColor(highest));b.title=`${k}: highest Auto HOCO risk ${Math.round(highest)}% across ${dayEntries.length} run${dayEntries.length===1?'':'s'}`;b.onclick=()=>{hocoCalendarMonth=new Date(d);populateHocoRunSelect(k);};}if(k===selectedHocoDateKey)b.classList.add('selected');grid.appendChild(b);}
         }
         async function fetchHocoData(){
             try{const snap=await db.collection('hoco_requests').where('type','==','automated').orderBy('createdAt','desc').get();const seen=new Set();hocoCalendarEntries=[];
-                snap.forEach(doc=>{const x=doc.data(),created=x.createdAt?.toDate?.();if(!created)return;for(let day=0;day<3;day++){if(!String(x.id||doc.id).includes(`Day${day}`))continue;const base=new Date(created);base.setSeconds(0,0);const valid=new Date(base);valid.setDate(valid.getDate()+day);const token=`${base.getTime()}|${day}`;if(seen.has(token))continue;seen.add(token);hocoCalendarEntries.push({baseSeconds:Math.floor(base.getTime()/1000),day,validKey:hocoKey(valid),createdLabel:created.toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})});}});
+                snap.forEach(doc=>{const x=doc.data(),created=x.createdAt?.toDate?.();if(!created)return;for(let day=0;day<3;day++){if(!String(x.id||doc.id).includes(`Day${day}`))continue;const base=new Date(created);base.setSeconds(0,0);const valid=new Date(base);valid.setDate(valid.getDate()+day);const token=`${base.getTime()}|${day}`;if(seen.has(token))continue;seen.add(token);hocoCalendarEntries.push({baseSeconds:Math.floor(base.getTime()/1000),day,validKey:hocoKey(valid),createdLabel:created.toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}),geojson:x.geojson||x.geoJSON||null,geojsonUrl:x.geojsonUrl||null,maxRisk:Number.isFinite(Number(x.maxRisk??x.highestRisk))?Number(x.maxRisk??x.highestRisk):undefined});}});
                 const today=hocoKey(new Date()),latest=hocoCalendarEntries[0];const key=hocoCalendarEntries.some(x=>x.validKey===today)?today:latest?.validKey;if(key){hocoCalendarMonth=new Date(`${key}T12:00:00`);populateHocoRunSelect(key);}else renderHocoCalendar();
+                hydrateHocoCalendarRisks();
             }catch(e){console.error('Fetch Error:',e);}
         }
         /**
@@ -7021,6 +7075,11 @@
 
                     const res = await fetch(freshUrl, { mode: 'cors' });
                     const geojsonData = await res.json();
+                    const validKey=hocoCalendarEntries.find(x=>x.baseSeconds===Number(baseSeconds)&&x.day===Number(day))?.validKey||selectedHocoDateKey;
+                    const loadedRisk=hocoRiskFromGeoJSON(geojsonData);
+                    hocoCalendarEntries.filter(x=>x.validKey===validKey&&x.baseSeconds===Number(baseSeconds)&&x.day===Number(day)).forEach(x=>x.maxRisk=loadedRisk);
+                    renderHocoCalendar();
+                    syncAutoHocoTimeline(data,validKey);
 
                     // Clear previous layers
                     hocoLayerGroup.clearLayers();
