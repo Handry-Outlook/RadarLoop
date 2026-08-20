@@ -2867,6 +2867,8 @@
         #control-panel #hoco-control-section select { background:#171d26!important;color:#f8fafc!important;border-color:#4b5563!important; }
         #control-panel #hoco-control-section .button-group button { background:#202632!important;color:#f8fafc!important;border-color:#4b5563!important; }
         #control-panel #hoco-control-section .button-group button.active { background:#3f63da!important;border-color:#6685ef!important; }
+        .forecast-strikes-button { width:100%;margin:8px 0;padding:9px 10px;border:1px solid #4b5563;border-radius:9px;background:#202632;color:#f8fafc;font:700 12px/1.35 Inter,Arial,sans-serif;cursor:pointer; }
+        .forecast-strikes-button:hover { background:#293244;border-color:#6685ef; }
         #control-panel #hoco-metadata-legend.collapsed #hoco-control-section { display:none!important; }
 
         /* Final HOCO card visibility and typography corrections. */
@@ -3977,6 +3979,7 @@
                     <div class="outlook-legend"><span style="--c:#67c6ac">Low</span><span style="--c:#ffea00">Slight</span><span style="--c:#ff7a21">Enhanced</span><span style="--c:#f91522">Moderate</span><span style="--c:#b23cc7">High</span></div>
                 </div>
                 <div id="published-outlook-meta" class="published-outlook-meta"></div><div id="published-outlook-archive-sync" class="archive-sync-note" hidden></div>
+                <button type="button" id="published-outlook-show-strikes" class="published-outlook-secondary-button forecast-strikes-button">Show all strikes in this forecast time period</button>
                 <button type="button" id="published-outlook-discussion-toggle" class="published-outlook-secondary-button" aria-expanded="false">View discussion</button>
                 <div id="published-outlook-discussion" class="published-outlook-discussion" hidden>Select an issued outlook to view its discussion.</div>
                 <a id="published-outlook-detail-link" class="published-outlook-link" href="#" target="_blank" rel="noopener noreferrer" hidden>Open dedicated forecast page ↗</a>
@@ -3995,6 +3998,7 @@
                 <select id="hoco-run-select" aria-label="Auto HOCO run"><option value="">No Auto HOCO run</option></select>
             </div>
             <div id="hoco-compact-summary" class="published-outlook-compact-summary">Select a forecast date and run.</div>
+            <button type="button" id="hoco-show-strikes" class="forecast-strikes-button">Show all strikes in this forecast time period</button>
             <div class="outlook-calendar auto-hoco-calendar">
                 <div class="outlook-calendar-header"><button type="button" id="hoco-prev-month">‹</button><strong id="hoco-calendar-month">Month</strong><button type="button" id="hoco-next-month">›</button></div>
                 <div class="outlook-calendar-weekdays"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
@@ -6983,6 +6987,8 @@
             document.getElementById('outlook-next-month')?.addEventListener('click',()=>{publishedCalendarMonth.setMonth(publishedCalendarMonth.getMonth()+1);renderPublishedCalendar();});
             document.getElementById('published-outlook-collapse')?.addEventListener('click',e=>{const o=document.getElementById('published-outlook-options');if(!document.getElementById('published-outlook-toggle')?.checked)return;o.hidden=!o.hidden;e.currentTarget.textContent=o.hidden?'+':'−';e.currentTarget.setAttribute('aria-expanded',String(!o.hidden));if(!o.hidden){document.getElementById('published-outlook-calendar-shell').hidden=false;renderPublishedCalendar();}});
             document.getElementById('published-outlook-discussion-toggle')?.addEventListener('click',e=>{const d=document.getElementById('published-outlook-discussion');d.hidden=!d.hidden;e.currentTarget.textContent=d.hidden?'View discussion':'Hide discussion';e.currentTarget.setAttribute('aria-expanded',String(!d.hidden));});
+            document.getElementById('published-outlook-show-strikes')?.addEventListener('click',e=>{const item=publishedOutlooks.find(x=>x.id===selectedPublishedOutlookId);if(!item){alert('Select a Manual HOCO forecast first.');return;}showStrikesForForecastWindow(outlookDate(item.validFrom),outlookDate(item.validTo),e.currentTarget);});
+            document.getElementById('hoco-show-strikes')?.addEventListener('click',e=>{if(!selectedAutoHocoWindow){alert('Select an Auto HOCO forecast first.');return;}showStrikesForForecastWindow(selectedAutoHocoWindow.start,selectedAutoHocoWindow.end,e.currentTarget);});
             moveForecastLegendsToPanelTop();
             const autoToggle=document.getElementById('hoco-layer-toggle');
             autoToggle?.addEventListener('change',()=>{
@@ -7063,6 +7069,8 @@
         let hocoCalendarMonth=new Date();
         let hocoCalendarEntries=[];
         let selectedHocoDateKey='';
+        let selectedAutoHocoWindow=null;
+        let forecastStrikeWindow=null;
         const hocoKey=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
         function hocoRiskFromGeoJSON(geojson){
             const features=geojson?.features||[];
@@ -7090,8 +7098,32 @@
         }
         function syncAutoHocoTimeline(data,validKey){
             const {start,end}=parseHocoValidity(data,validKey);
+            selectedAutoHocoWindow=(start&&end)?{start:new Date(start),end:new Date(end)}:null;
             if(!start||!end)return;
             syncRadarLoopToArchivedOutlook({id:`auto-hoco-${validKey}-${data.id||data.createdAt?.seconds||''}`,validFrom:start,validTo:end});
+        }
+        function localDateTimeValue(d){
+            const pad=n=>String(n).padStart(2,'0');
+            return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        }
+        function showStrikesForForecastWindow(startValue,endValue,button){
+            const start=new Date(startValue),validEnd=new Date(endValue),now=new Date();
+            if(Number.isNaN(start.getTime())||Number.isNaN(validEnd.getTime())||validEnd<=start){alert('This forecast does not have a valid time period.');return;}
+            const end=new Date(Math.min(validEnd.getTime(),now.getTime()));
+            if(end<start){alert('This forecast period has not started yet, so there are no strikes to show.');return;}
+            forecastStrikeWindow={start:new Date(start),end:new Date(end),validEnd:new Date(validEnd)};
+            showAllStrikes=false;
+            const allToggle=document.getElementById('view-mode');if(allToggle)allToggle.checked=false;
+            const startInput=document.getElementById('start-time'),endInput=document.getElementById('end-time');
+            if(startInput)startInput.value=localDateTimeValue(start);
+            if(endInput)endInput.value=localDateTimeValue(end);
+            customFilterStart=new Date(start);customFilterEnd=new Date(end);lastFilterMode='inputs';
+            applyFilter(true);
+            if(button){
+                const active=validEnd.getTime()>=now.getTime()&&start.getTime()<=now.getTime();
+                button.textContent=active?'Showing strikes from forecast start to now':'Showing all strikes in this forecast period';
+                setTimeout(()=>{button.textContent='Show all strikes in this forecast time period';},2600);
+            }
         }
         async function hydrateHocoCalendarRisks(){
             const pending=hocoCalendarEntries.filter(x=>!Number.isFinite(x.maxRisk));
@@ -14312,6 +14344,10 @@ async function calculateWindyRadarAccumulationMap() {
             const currentBounds = is3DMode ? map3D.getBounds() : map.getBounds();
 
             currentFiltered = strikeData.filter(s => {
+                if (forecastStrikeWindow) {
+                    const exactEnd=new Date(Math.min(forecastStrikeWindow.validEnd.getTime(),Date.now()));
+                    return s.time >= forecastStrikeWindow.start && s.time <= exactEnd;
+                }
                 if (showAllStrikes) {
                     return s.time >= new Date(end.getTime() - parseInt(document.getElementById('max-history-hours').value) * 3600 * 1000) && s.time <= end;
                 }
@@ -14366,6 +14402,7 @@ async function calculateWindyRadarAccumulationMap() {
         }
 
         function removeTimeFilter() {
+            forecastStrikeWindow = null;
             lastFilterMode = 'slider';
             customFilterStart = null;
             customFilterEnd = null;
@@ -14405,6 +14442,7 @@ async function calculateWindyRadarAccumulationMap() {
 
         function toggleAutoLatest() {
             if (document.getElementById('auto-latest').checked) {
+                forecastStrikeWindow = null;
                 const lifespanHours = parseFloat(document.getElementById('lightning-lifespan').value);
                 const now = new Date();
                 const start = new Date(now.getTime() - lifespanHours * 3600 * 1000);
@@ -15236,7 +15274,8 @@ async function calculateWindyRadarAccumulationMap() {
             updateLegend(); // Update visibility based on new state
         }
 
-        function applyFilter() {
+        function applyFilter(preserveForecastWindow = false) {
+            if (!preserveForecastWindow) forecastStrikeWindow = null;
             isFilterApplied = true;
             lastFilterMode = 'inputs';
             const start = new Date(document.getElementById('start-time').value);
@@ -15259,6 +15298,10 @@ async function calculateWindyRadarAccumulationMap() {
             const currentBounds = is3DMode ? map3D.getBounds() : map.getBounds();
 
             currentFiltered = strikeData.filter(s => {
+                if (forecastStrikeWindow) {
+                    const exactEnd=new Date(Math.min(forecastStrikeWindow.validEnd.getTime(),Date.now()));
+                    return s.time >= forecastStrikeWindow.start && s.time <= exactEnd;
+                }
                 if (showAllStrikes) {
                     return s.time >= new Date(end.getTime() - parseInt(document.getElementById('max-history-hours').value) * 3600 * 1000) && s.time <= end;
                 }
