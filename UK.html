@@ -3845,7 +3845,7 @@
 
         <div class="section published-outlook-card compact" id="published-outlook-control-section">
             <div class="published-outlook-heading">
-                <div><h4>MANUAL HOCO</h4><small>Manual HOCO thunderstorm forecast</small></div>
+                <div><h4>Manual Handry Outlook</h4><small>Published convective outlook</small></div>
                 <button type="button" id="published-outlook-collapse" aria-label="Expand published outlook" aria-expanded="false">+</button>
             </div>
             <div class="published-outlook-primary-row">
@@ -4297,7 +4297,7 @@
 
         <div
             style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; padding-bottom: 5px; margin-bottom: 8px;">
-            <div class="hoco-title-copy"><div class="hoco-card-title">Auto HOCO</div><small>Automated HOCO thunderstorm forecast</small></div>
+            <div class="hoco-title-copy"><div class="hoco-card-title">Auto HOCO Thunderstorm Forecast</div><small>Automated convective outlook</small></div>
             <div class="hoco-card-actions">
                 <button id="hoco-toggle-btn" type="button" onclick="toggleHocoLegend()" aria-label="Expand Auto HOCO settings" aria-expanded="false">+</button>
             </div>
@@ -6683,7 +6683,7 @@
         let autoHocoUserEnabled = false;
         function applyAutoHocoVisibility() {
             const toggle=document.getElementById('hoco-layer-toggle');
-            const shouldShow=!!toggle?.checked && !window.manualOutlookActive;
+            const shouldShow=!!toggle?.checked;
             if(typeof hocoLayerGroup!=='undefined' && hocoLayerGroup){
                 if(shouldShow){ if(!map.hasLayer(hocoLayerGroup)) hocoLayerGroup.addTo(map); }
                 else if(map.hasLayer(hocoLayerGroup)) map.removeLayer(hocoLayerGroup);
@@ -6876,7 +6876,15 @@
             document.getElementById('published-outlook-discussion-toggle')?.addEventListener('click',e=>{const d=document.getElementById('published-outlook-discussion');d.hidden=!d.hidden;e.currentTarget.textContent=d.hidden?'View discussion':'Hide discussion';e.currentTarget.setAttribute('aria-expanded',String(!d.hidden));});
             moveForecastLegendsToPanelTop();
             const autoToggle=document.getElementById('hoco-layer-toggle');
-            autoToggle?.addEventListener('change',()=>{autoHocoUserEnabled=autoToggle.checked;applyAutoHocoVisibility();});
+            autoToggle?.addEventListener('change',()=>{
+                autoHocoUserEnabled=autoToggle.checked;
+                if(autoToggle.checked){
+                    const selected=document.getElementById('hoco-run-select')?.value||'';
+                    const [base,day]=selected.split('|');
+                    if(base && (!hocoLayerGroup || hocoLayerGroup.getLayers().length===0)) loadHocoByTimestampAndDay(base,Number(day));
+                }
+                applyAutoHocoVisibility();
+            });
             const archiveSlider=document.getElementById('history-slider');
             archiveSlider?.addEventListener('pointerdown',()=>{archiveTimelineSliderDragged=true;},{passive:true});
             archiveSlider?.addEventListener('keydown',()=>{archiveTimelineSliderDragged=true;});
@@ -6973,8 +6981,7 @@
         /**
  * Loads the specific Day and populates the metadata legend
  */async function loadHocoByTimestampAndDay(baseSeconds, day) {
-            if (window.manualOutlookActive) return;
-            const startRange = new firebase.firestore.Timestamp(parseInt(baseSeconds), 0);
+                const startRange = new firebase.firestore.Timestamp(parseInt(baseSeconds), 0);
             const endRange = new firebase.firestore.Timestamp(parseInt(baseSeconds) + 60, 0);
 
             try {
@@ -7043,7 +7050,13 @@
         `);
                         }
                     }).addTo(hocoLayerGroup);
+                    hocoLayerGroup.eachLayer(layer=>{ if(layer.bringToFront) layer.bringToFront(); });
                     applyAutoHocoVisibility();
+                    if(document.getElementById('hoco-layer-toggle')?.checked && !map.hasLayer(hocoLayerGroup)) hocoLayerGroup.addTo(map);
+                    map.invalidateSize(false);
+                } else {
+                    console.warn('No Auto HOCO GeoJSON document found for selected run/day',baseSeconds,day);
+                    const summary=document.getElementById('hoco-compact-summary');if(summary)summary.textContent='Selected Auto HOCO run has no plot data.';
                 }
 
             } catch (error) {
@@ -15473,6 +15486,7 @@ async function calculateWindyRadarAccumulationMap() {
                 map.addLayer(numberOverlay);
             }
             if (hocoLayerGroup) {
+                if(document.getElementById('hoco-layer-toggle')?.checked && !map.hasLayer(hocoLayerGroup)) hocoLayerGroup.addTo(map);
                 hocoLayerGroup.eachLayer(layer => {
                     if (layer.setZIndex) layer.setZIndex(HOCO_Z_INDEX);
                 });
