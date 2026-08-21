@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8">
     <title>RadarLoop</title>
-    <meta name="radarloop-build" content="2026.08-recoded-animation-engine-v13">
+    <meta name="radarloop-build" content="2026.08-recoded-animation-engine-v14-nearest-radar-fallback">
     <link rel="icon" type="image/png"
         href="https://raw.githubusercontent.com/Handry-Outlook/Convective-Outlook/main/Handry_outlook_icon_pride_small.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9692,7 +9692,13 @@
                 // - use positive and short negative caches
                 // - check fewer frames back during animation
                 // - probe sequentially and stop at first valid timestamp instead of firing many requests
-                const framesToCheck = isPlaying ? 1 : (LOW_END_NOWCAST_MODE ? 1 : (activeWeatherLayerPlotCount >= 4 ? 1 : (activeWeatherLayerPlotCount >= 3 ? 2 : 4)));
+                // Radar frames can be published late or occasionally be missing. Always try the
+                // requested frame first, then search nearby frames in true nearest-time order.
+                // During playback keep the search smaller, but still allow -5/+5 and -10/+10.
+                const normalFramesToCheck = isPlaying ? 1 : (LOW_END_NOWCAST_MODE ? 1 : (activeWeatherLayerPlotCount >= 4 ? 1 : (activeWeatherLayerPlotCount >= 3 ? 2 : 4)));
+                const candidateOffsets = layerKey === 'radar'
+                    ? (isPlaying ? [0, -1, 1, -2, 2] : [0, -1, 1, -2, 2, -3, 3, -4, 4, -5, 5, -6, 6])
+                    : Array.from({ length: normalFramesToCheck }, (_, index) => -index);
                 const cacheNow = Date.now();
 
                 // Cache-first progressive preview: if we already have a recent URL for this layer type,
@@ -9710,8 +9716,12 @@
                     }
                 }
 
-                for (let i = 0; i < framesToCheck; i++) {
-                    const candidateTs = roundedTimestampMs - i * interval;
+                for (const offset of candidateOffsets) {
+                    const candidateTs = roundedTimestampMs + offset * interval;
+                    // Do not substitute a not-yet-valid observation for a requested live/past radar frame.
+                    if (layerKey === 'radar' && candidateTs > Date.now() + 2 * 60 * 1000 && targetTimestamp <= Date.now() + 2 * 60 * 1000) {
+                        continue;
+                    }
                     const windyCandidateContext = layerType === 'windy-radar' ? getWindyRadarTimeContext(candidateTs) : '';
                     const cacheKey = `${layerKey}|${layerType}|${candidateTs}|${windyCandidateContext}`;
                     const cached = weatherTileUrlCache.get(cacheKey);
@@ -9736,10 +9746,18 @@
                     }
                 }
 
-                if (!finalUrl && layerType !== 'windy-radar' && lastValidTileUrls[layerType]) {
-                    // Fallback to the last successfully plotted URL without forcing a timestamp update.
-                    finalUrl = lastValidTileUrls[layerType];
-                    finalTimestamp = null;
+                if (!finalUrl) {
+                    // Final safety net for every provider, including Windy radar: retain/use the
+                    // nearest successfully validated cached frame rather than creating a blank map.
+                    const cachedFallback = (typeof getBestCachedWeatherUrl === 'function')
+                        ? getBestCachedWeatherUrl(layerKey, layerType)
+                        : null;
+                    const lastValidFallback = lastValidTileUrls[layerType] || null;
+                    finalUrl = cachedFallback?.url || lastValidFallback;
+                    if (finalUrl) {
+                        finalTimestamp = null;
+                        console.info(`Using nearest cached ${layerKey} frame for ${layerType}.`);
+                    }
                 }
 
                 // Keep cache bounded so long sessions don't grow memory indefinitely.
@@ -9753,9 +9771,16 @@
                 if (finalUrl) {
                     await plotMainLayer(finalUrl, layerType, finalTimestamp, layerKey, currentWindyRadarContext);
                 } else {
-                    // --- FIX: Ensure Layer Removal and State Reset on URL Failure ---
+                    // If the provider is temporarily missing a radar timestamp, keep the last
+                    // visible radar layer. Removing it here caused blank -10, -5 and Now frames.
+                    const existingRadarVisible = layerKey === 'radar' && radarLayer && map.hasLayer(radarLayer);
+                    if (existingRadarVisible) {
+                        console.warn(`No nearby ${layerType} frame resolved; retaining the previously plotted radar frame.`);
+                    }
+                    // Other layer types retain the existing cleanup behaviour.
                     let currentLayer;
-                    switch (layerKey) {
+                    if (existingRadarVisible) currentLayer = null;
+                    else switch (layerKey) {
                         case 'satellite': currentLayer = satelliteLayer; satelliteLayer = null; break;
                         case 'radar': currentLayer = radarLayer; radarLayer = null; break;
                         case 'isobar': currentLayer = isobarLayer; isobarLayer = null; break;
