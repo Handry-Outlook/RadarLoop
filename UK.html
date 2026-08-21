@@ -6803,6 +6803,15 @@
                 else if(map.hasLayer(hocoLayerGroup)) map.removeLayer(hocoLayerGroup);
             }
         }
+        function enableAutoHocoFallback() {
+            autoHocoUserEnabled=true;
+            const toggle=document.getElementById('hoco-layer-toggle');
+            if(toggle)toggle.checked=true;
+            const legend=document.getElementById('hoco-metadata-legend');
+            if(legend){legend.classList.remove('auto-suppressed');legend.style.display='block';}
+            window.manualOutlookActive=false;
+            applyAutoHocoVisibility();
+        }
         function setHocoSuppressed(suppressed) {
             window.manualOutlookActive = suppressed;
             const legend=document.getElementById('hoco-metadata-legend');
@@ -6848,16 +6857,28 @@
         function selectLatestPublishedForMapTime() {
             const t=Number(currentFilterTimestamp)||Date.now();
             const active=publishedOutlooks.filter(x=>{const a=outlookDate(x.validFrom),b=outlookDate(x.validTo);return a&&b&&a.getTime()<=t&&b.getTime()>=t;});
-            const chosen=latestPublished(active)||latestPublished(publishedOutlooks); if(!chosen)return;
+            const chosen=latestPublished(active);
+            if(!chosen){
+                clearPublishedOutlook();
+                updatePublishedDetail(null);
+                const select=document.getElementById('published-outlook-version');
+                if(select)select.innerHTML='<option value="">No Manual HOCO outlook for current time</option>';
+                const compact=document.getElementById('published-outlook-compact-summary');
+                if(compact)compact.textContent='No Manual HOCO outlook is valid for the current time.';
+                setPublishedStatus('No Manual HOCO outlook is valid for the current time. Auto HOCO has been enabled.');
+                enableAutoHocoFallback();
+                renderPublishedCalendar();
+                return;
+            }
             const key=outlookDateKey(chosen.validFrom);publishedCalendarMonth=outlookDate(chosen.validFrom)||publishedCalendarMonth;buildPublishedDateCalendar(key);populatePublishedVersions(key,chosen.id);
         }
         async function fetchPublishedOutlooks() {
             try {
                 const snap=await publishedOutlookDb.collection('forecasts_v2').get();
                 publishedOutlooks=[];snap.forEach(d=>{const x=d.data();if(x.geoJSON && x.validFrom && x.validTo && x.isActive!==false) publishedOutlooks.push({id:d.id,...x});});
-                if(!publishedOutlooks.length){setPublishedStatus('No published convective outlooks are available.');return;}
+                if(!publishedOutlooks.length){setPublishedStatus('No Manual HOCO outlook is available. Auto HOCO has been enabled.');enableAutoHocoFallback();return;}
                 selectLatestPublishedForMapTime();
-            } catch(e){console.error('Published outlook load error',e);setPublishedStatus('Published outlook feed unavailable.','error');}
+            } catch(e){console.error('Published outlook load error',e);setPublishedStatus('Published outlook feed unavailable. Auto HOCO has been enabled.','error');enableAutoHocoFallback();}
         }
 
         let publishedCalendarMonth = new Date();
@@ -7136,12 +7157,12 @@
             };
             for(let i=0;i<pending.length;i+=4){await Promise.allSettled(pending.slice(i,i+4).map(worker));renderHocoCalendar();}
         }
-        function populateHocoRunSelect(key){
+        function populateHocoRunSelect(key,preferredToken=''){
             selectedHocoDateKey=key;const select=document.getElementById('hoco-run-select');
             const entries=hocoCalendarEntries.filter(x=>x.validKey===key).sort((a,b)=>b.baseSeconds-a.baseSeconds);
             select.innerHTML='';entries.forEach((x,i)=>{const o=document.createElement('option');o.value=`${x.baseSeconds}|${x.day}`;o.textContent=`${i===0?'Latest · ':''}${x.createdLabel}`;select.appendChild(o);});
             const summary=document.getElementById('hoco-compact-summary');
-            if(!entries.length){select.innerHTML='<option value="">No Auto HOCO run</option>';if(summary)summary.textContent='No automated outlook available for this date.';}else{select.value=`${entries[0].baseSeconds}|${entries[0].day}`;if(summary)summary.textContent=`Latest Auto HOCO run · ${entries[0].createdLabel}`;loadHocoByTimestampAndDay(entries[0].baseSeconds,entries[0].day);}
+            if(!entries.length){select.innerHTML='<option value="">No Auto HOCO run</option>';if(summary)summary.textContent='No automated outlook available for this date.';}else{const chosen=entries.find(x=>`${x.baseSeconds}|${x.day}`===preferredToken)||entries[0];select.value=`${chosen.baseSeconds}|${chosen.day}`;if(summary)summary.textContent=`${preferredToken?'Current':'Latest'} Auto HOCO run · ${chosen.createdLabel}`;loadHocoByTimestampAndDay(chosen.baseSeconds,chosen.day);}
             renderHocoCalendar();
         }
         function renderHocoCalendar(){
@@ -7152,8 +7173,25 @@
         }
         async function fetchHocoData(){
             try{const snap=await db.collection('hoco_requests').where('type','==','automated').orderBy('createdAt','desc').get();const seen=new Set();hocoCalendarEntries=[];
-                snap.forEach(doc=>{const x=doc.data(),created=x.createdAt?.toDate?.();if(!created)return;for(let day=0;day<3;day++){if(!String(x.id||doc.id).includes(`Day${day}`))continue;const base=new Date(created);base.setSeconds(0,0);const valid=new Date(base);valid.setDate(valid.getDate()+day);const token=`${base.getTime()}|${day}`;if(seen.has(token))continue;seen.add(token);hocoCalendarEntries.push({baseSeconds:Math.floor(base.getTime()/1000),day,validKey:hocoKey(valid),createdLabel:created.toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}),geojson:x.geojson||x.geoJSON||null,geojsonUrl:x.geojsonUrl||null,maxRisk:Number.isFinite(Number(x.maxRisk??x.highestRisk))?Number(x.maxRisk??x.highestRisk):undefined});}});
-                const today=hocoKey(new Date()),latest=hocoCalendarEntries[0];const key=hocoCalendarEntries.some(x=>x.validKey===today)?today:latest?.validKey;if(key){hocoCalendarMonth=new Date(`${key}T12:00:00`);populateHocoRunSelect(key);}else renderHocoCalendar();
+                snap.forEach(doc=>{const x=doc.data(),created=x.createdAt?.toDate?.();if(!created)return;for(let day=0;day<3;day++){if(!String(x.id||doc.id).includes(`Day${day}`))continue;const base=new Date(created);base.setSeconds(0,0);const valid=new Date(base);valid.setDate(valid.getDate()+day);const token=`${base.getTime()}|${day}`;if(seen.has(token))continue;seen.add(token);hocoCalendarEntries.push({baseSeconds:Math.floor(base.getTime()/1000),day,validKey:hocoKey(valid),createdLabel:created.toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}),startTime:x.startTime,endTime:x.endTime,sourceId:x.id||doc.id,createdAt:x.createdAt,geojson:x.geojson||x.geoJSON||null,geojsonUrl:x.geojsonUrl||null,maxRisk:Number.isFinite(Number(x.maxRisk??x.highestRisk))?Number(x.maxRisk??x.highestRisk):undefined});}});
+                const now=new Date();
+                const activeEntries=hocoCalendarEntries.filter(entry=>{
+                    const validity=parseHocoValidity({startTime:entry.startTime,endTime:entry.endTime},entry.validKey);
+                    return validity.start&&validity.end&&validity.start<=now&&validity.end>=now;
+                }).sort((a,b)=>b.baseSeconds-a.baseSeconds);
+                const active=activeEntries[0]||null;
+                if(active){
+                    hocoCalendarMonth=new Date(`${active.validKey}T12:00:00`);
+                    populateHocoRunSelect(active.validKey,`${active.baseSeconds}|${active.day}`);
+                }else{
+                    selectedHocoDateKey='';selectedAutoHocoWindow=null;hocoLayerGroup.clearLayers();
+                    const select=document.getElementById('hoco-run-select');if(select)select.innerHTML='<option value="">No Auto HOCO outlook for current time</option>';
+                    const summary=document.getElementById('hoco-compact-summary');if(summary)summary.textContent='No Auto HOCO outlook is valid for the current time.';
+                    document.getElementById('hoco-create-date').textContent='N/A';
+                    document.getElementById('hoco-start-time').textContent='N/A';
+                    document.getElementById('hoco-end-time').textContent='N/A';
+                    renderHocoCalendar();
+                }
             }catch(e){console.error('Fetch Error:',e);}
         }
         /**
