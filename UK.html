@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8">
     <title>RadarLoop</title>
-    <meta name="radarloop-build" content="2026.08-global-high-resolution-turbo-default-safe">
+    <meta name="radarloop-build" content="2026.08-recoded-animation-engine-v13">
     <link rel="icon" type="image/png"
         href="https://raw.githubusercontent.com/Handry-Outlook/Convective-Outlook/main/Handry_outlook_icon_pride_small.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7892,8 +7892,8 @@
                     if (++i >= removeCount) break;
                 }
             };
-            prune(weatherTileUrlCache, 900);
-            prune(weatherTileNegativeCache, 240);
+            prune(weatherTileUrlCache, 120);
+            prune(weatherTileNegativeCache, 50);
             prune(weatherTileInFlight, WEATHER_TILE_INFLIGHT_LIMIT);
             prune(radarValidationCache, isMobileWeatherDevice() ? 160 : 320);
         }
@@ -14379,6 +14379,14 @@ async function calculateWindyRadarAccumulationMap() {
             animationStart = start;
             animationEnd = end;
 
+            if (isPlaying) {
+                if (typeof window.fastRadarSatelliteSliderUpdate === 'function') {
+                    window.fastRadarSatelliteSliderUpdate(end.getTime());
+                }
+                isAdjustingHistory = false;
+                return;
+            }
+
             const currentBounds = is3DMode ? map3D.getBounds() : map.getBounds();
 
             currentFiltered = strikeData.filter(s => {
@@ -15995,6 +16003,8 @@ async function calculateWindyRadarAccumulationMap() {
             let accumulatedMinutes = 0;
             let lastTick = performance.now();
             let frameCommitBusy = false;
+            let lastVisualCommitAt = 0;
+            const minimumVisualIntervalMs = isMobileWeatherDevice() ? 900 : 600;
 
             if (typeof weatherAdjacentPrefetchToken !== 'undefined') weatherAdjacentPrefetchToken++;
             clearTimeout(heatmapOverlayThrottle);
@@ -16026,12 +16036,15 @@ async function calculateWindyRadarAccumulationMap() {
                 if (!isPlaying) return;
                 const elapsedSeconds = Math.min(0.25, Math.max(0, (now - lastTick) / 1000));
                 lastTick = now;
-                accumulatedMinutes += requestedSpeed * elapsedSeconds;
+                accumulatedMinutes = Math.min(stepMinutes, accumulatedMinutes + requestedSpeed * elapsedSeconds);
 
                 // Consume only one five-minute interval at a time. Any backlog remains
                 // queued rather than being collapsed into a 10, 15 or 20-minute jump.
-                if (accumulatedMinutes >= stepMinutes && !frameCommitBusy) {
-                    if (commitNextFiveMinuteFrame()) accumulatedMinutes -= stepMinutes;
+                if (accumulatedMinutes >= stepMinutes && !frameCommitBusy && now - lastVisualCommitAt >= minimumVisualIntervalMs) {
+                    if (commitNextFiveMinuteFrame()) {
+                        accumulatedMinutes = 0;
+                        lastVisualCommitAt = now;
+                    }
                 }
 
                 if (committedValue >= maxValue) {
@@ -16050,8 +16063,10 @@ async function calculateWindyRadarAccumulationMap() {
             }
             isPlaying = false;
             clearTimeout(nowcastThrottle);
-            nowcastThrottle = setTimeout(() => updateNowcast(currentFiltered), 120);
-            updateMapLayers(animationEnd ? animationEnd.getTime() : Date.now());
+            requestAnimationFrame(() => {
+                try { updateHistory(); } catch (_) {}
+                nowcastThrottle = setTimeout(() => updateNowcast(currentFiltered), 180);
+            });
         }
 
         function toggleFullScreen() {
@@ -17992,6 +18007,56 @@ async function calculateWindyRadarAccumulationMap() {
     let sliderTimer = null;
     let settleTimer = null;
     let requestSerial = 0;
+    let animationFrameInFlight = false;
+    let animationLatestTimestamp = null;
+
+    function activeLayerFor(key) {
+        return key === 'radar' ? radarLayer : satelliteLayer;
+    }
+
+    function setAnimationLayerMetadata(key, layer, timestamp, layerType, url) {
+        if (key === 'radar') {
+            radarLayer = layer; lastRadarTimestamp = timestamp; lastRadarType = layerType;
+        } else {
+            satelliteLayer = layer; lastSatelliteTimestamp = timestamp; lastSatelliteType = layerType;
+        }
+        layer._recodedAnimationUrl = url;
+        layer._recodedAnimationType = layerType;
+    }
+
+    async function updateAnimationLayerInPlace(layerKey, layerType, config, url, timestamp) {
+        const layer = activeLayerFor(layerKey);
+        // Reuse the exact Leaflet object for normal XYZ/TMS/image layers. This prevents
+        // tile containers, event handlers and decoded images accumulating every frame.
+        const reusable = layer && map.hasLayer(layer) && typeof layer.setUrl === 'function' &&
+            config?.type !== 'wms-xyz' && config?.type !== 'opera-scalar' &&
+            layer._recodedAnimationType === layerType;
+        if (!reusable) return false;
+        if (layer._recodedAnimationUrl === url) return true;
+
+        return await new Promise(resolve => {
+            let settled = false;
+            let loaded = 0;
+            const isGrid = layer instanceof L.GridLayer;
+            const readyEvent = isGrid ? 'tileload' : 'load';
+            const finish = ok => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                layer.off(readyEvent, onReady);
+                layer.off(isGrid ? 'tileerror' : 'error', onError);
+                if (ok) setAnimationLayerMetadata(layerKey, layer, timestamp, layerType, url);
+                resolve(ok);
+            };
+            const onReady = () => { if (++loaded >= (isMobileWeatherDevice() ? 1 : 2)) finish(true); };
+            const onError = () => { if (!isGrid) finish(false); };
+            const timer = setTimeout(() => finish(loaded > 0), 900);
+            layer.on(readyEvent, onReady);
+            layer.on(isGrid ? 'tileerror' : 'error', onError);
+            // Leaflet keeps the current tile level visible while the same layer redraws.
+            layer.setUrl(url, false);
+        });
+    }
 
     async function loadOneFast(layerKey, selectId, toggleId, optionsMap, timestamp, serial) {
         const select = document.getElementById(selectId);
@@ -18007,13 +18072,21 @@ async function calculateWindyRadarAccumulationMap() {
             // URL discovery/validation for radar and satellite runs concurrently.
             const url = await fetchTileUrl(timestamp, config, layerKey, layerType);
             if (!url || serial !== requestSerial) return;
+            if (isPlaying && await updateAnimationLayerInPlace(layerKey, layerType, config, url, timestamp)) return;
             await plotMainLayer(url, layerType, timestamp, layerKey);
+            const committed = activeLayerFor(layerKey);
+            if (committed) setAnimationLayerMetadata(layerKey, committed, timestamp, layerType, url);
         } catch (error) {
             if (error?.name !== 'AbortError') console.warn(`Fast ${layerKey} slider frame skipped:`, error);
         }
     }
 
     window.fastRadarSatelliteSliderUpdate = function(timestamp) {
+        if (isPlaying && animationFrameInFlight) {
+            animationLatestTimestamp = timestamp;
+            return;
+        }
+        if (isPlaying) animationFrameInFlight = true;
         const serial = ++requestSerial;
         if (typeof weatherLayerSwapGeneration !== 'undefined') {
             weatherLayerSwapGeneration.radar++;
@@ -18027,9 +18100,6 @@ async function calculateWindyRadarAccumulationMap() {
         pendingWeatherLayerTimestamp = timestamp;
         pendingDebouncedWeatherTimestamp = timestamp;
 
-        // Cancel obsolete validation work immediately. The currently displayed tiles
-        // stay visible until their replacements are ready, avoiding a blank flash.
-        if (typeof beginWeatherPerformanceGeneration === 'function') beginWeatherPerformanceGeneration();
         if (typeof resetWeatherFrameKey === 'function') {
             resetWeatherFrameKey('radar');
             resetWeatherFrameKey('satellite');
@@ -18047,6 +18117,14 @@ async function calculateWindyRadarAccumulationMap() {
                 loadOneFast('radar', 'radarLayer', 'radarToggle', radarOptions, timestamp, serial),
                 loadOneFast('satellite', 'satelliteLayerSelect', 'satelliteToggle', satelliteOptions, timestamp, serial)
             ]).then(() => {
+                if (isPlaying) {
+                    animationFrameInFlight = false;
+                    const pending = animationLatestTimestamp;
+                    animationLatestTimestamp = null;
+                    if (pending !== null && Number(pending) !== Number(timestamp)) {
+                        setTimeout(() => window.fastRadarSatelliteSliderUpdate(pending), 0);
+                    }
+                }
                 if (serial !== requestSerial) return;
                 // Prefetch adjacent frames only after the requested frame is on screen.
                 if (!isPlaying && typeof scheduleAdjacentWeatherFramePrefetch === 'function') {
@@ -18071,10 +18149,6 @@ async function calculateWindyRadarAccumulationMap() {
         const slider = document.getElementById('history-slider');
         if (!slider || slider.dataset.fastWeatherTiles === '1') return;
         slider.dataset.fastWeatherTiles = '1';
-        const request = () => window.fastRadarSatelliteSliderUpdate(getCurrentSliderTimestamp());
-        // Capture phase starts the fast path before the heavier legacy listeners.
-        slider.addEventListener('input', request, { capture:true, passive:true });
-        slider.addEventListener('change', request, { capture:true, passive:true });
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once:true });
     else install();
