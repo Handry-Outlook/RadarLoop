@@ -4145,8 +4145,8 @@
             <div class="layer-control refresh-control neutral-control">
                 <div class="top-row">
                     <div class="label-group">
-                        <span class="label-text">Other Layers Refresh Interval</span>
-                        <span class="tooltip">UK lightning and lightning nowcast always refresh every 10 seconds; this controls all other layers</span>
+                        <span class="label-text">Auto-Refresh Interval</span>
+                        <span class="tooltip">Set how often data refreshes automatically</span>
                     </div>
                 </div>
 
@@ -5237,9 +5237,10 @@
         let pendingFile = null;
         let pendingFileType = null;
         let isFullScreen = false;
-        let refreshTimer = null; // Other weather/map layers; controlled by dropdown.
-        let lightningRefreshTimer = null; // UK lightning + lightning nowcast; fixed at 10 seconds.
-        let suppressWeatherLayerRefresh = false;
+        let refreshTimer = null; // Other layers, controlled by dropdown.
+        let lightningRefreshTimer = null; // UK lightning + lightning nowcast, fixed 10 seconds.
+        let lastUkLightningFetchCompletedAt = 0;
+        let lastUkLightningVisibilityAt = Date.now();
         const UK_LIGHTNING_REFRESH_MS = 10 * 1000;
         let lastUpdateTime = null;
         let isAdjustingHistory = false;
@@ -7216,54 +7217,16 @@
 
                 const doc = querySnapshot.docs.find(d => d.data().id.includes(`Day${day}`));
 
-                if (doc) {
+                if (doc && doc.data().geojsonUrl) {
                     const data = doc.data();
-                    const calendarEntry = hocoCalendarEntries.find(x =>
-                        x.baseSeconds === Number(baseSeconds) && x.day === Number(day)
-                    );
-                    let geojsonData = data.geojson || data.geoJSON || calendarEntry?.geojson || null;
 
-                    // Prefer GeoJSON embedded in Firestore. Only contact Storage when the
-                    // document does not contain an inline copy. A Storage/CORS outage must
-                    // never interrupt the independent UK-lightning refresh timers.
-                    if (!geojsonData && data.geojsonUrl) {
-                        if (typeof firebase.storage !== 'function') {
-                            throw new Error('Firebase Storage SDK is not available');
-                        }
-
-                        const storageRef = firebase.storage().refFromURL(data.geojsonUrl);
-                        const freshUrl = await storageRef.getDownloadURL();
-                        let lastFetchError = null;
-
-                        for (let attempt = 0; attempt < 3 && !geojsonData; attempt++) {
-                            const controller = new AbortController();
-                            const timeout = setTimeout(() => controller.abort(), 12000);
-                            try {
-                                const separator = freshUrl.includes('?') ? '&' : '?';
-                                const response = await fetch(`${freshUrl}${separator}_=${Date.now()}`, {
-                                    mode: 'cors',
-                                    cache: 'no-store',
-                                    signal: controller.signal
-                                });
-                                if (!response.ok) throw new Error(`HOCO GeoJSON HTTP ${response.status}`);
-                                geojsonData = await response.json();
-                            } catch (error) {
-                                lastFetchError = error;
-                                if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
-                            } finally {
-                                clearTimeout(timeout);
-                            }
-                        }
-
-                        if (!geojsonData) throw lastFetchError || new Error('HOCO GeoJSON could not be downloaded');
-                    }
-
-                    if (!geojsonData) {
-                        console.warn('Selected Auto HOCO document contains no GeoJSON data', baseSeconds, day);
-                        const summary = document.getElementById('hoco-compact-summary');
-                        if (summary) summary.textContent = 'Selected Auto HOCO run has no plot data.';
+                    if (typeof firebase.storage !== 'function') {
+                        console.error("Firebase Storage not loaded yet");
                         return;
                     }
+
+                    const storageRef = firebase.storage().refFromURL(data.geojsonUrl);
+                    const freshUrl = await storageRef.getDownloadURL();
 
                     // Update Metadata UI
                     const creationDate = data.createdAt.toDate().toLocaleString('en-GB', {
@@ -7279,7 +7242,9 @@
                     setAutoHocoOptionsOpen(false);
                     const hocoBtn=document.getElementById('hoco-toggle-btn');if(hocoBtn){hocoBtn.textContent='+';hocoBtn.setAttribute('aria-expanded','false');}
 
-                    const validKey=calendarEntry?.validKey||selectedHocoDateKey;
+                    const res = await fetch(freshUrl, { mode: 'cors' });
+                    const geojsonData = await res.json();
+                    const validKey=hocoCalendarEntries.find(x=>x.baseSeconds===Number(baseSeconds)&&x.day===Number(day))?.validKey||selectedHocoDateKey;
                     renderHocoCalendar();
                     syncAutoHocoTimeline(data,validKey);
 
@@ -7321,15 +7286,9 @@
                 }
 
             } catch (error) {
-                // HOCO is optional and independent from UK lightning. Keep the existing
-                // forecast on screen and report a concise warning instead of an uncaught-
-                // looking console error when Storage, CORS, or the network is unavailable.
-                console.warn('HOCO forecast temporarily unavailable:', error?.message || error);
-                const summary = document.getElementById('hoco-compact-summary');
-                if (summary) summary.textContent = 'HOCO forecast temporarily unavailable. Retaining the previous plot.';
-                if (error?.code === 'storage/object-not-found') {
-                    const metadata = document.getElementById('hoco-metadata-legend');
-                    if (metadata) metadata.style.display = 'none';
+                console.error("HOCO Load Error:", error);
+                if (error.code === 'storage/object-not-found') {
+                    alert("This forecast file no longer exists in storage.");
                 }
             }
         }
@@ -14489,16 +14448,14 @@ async function calculateWindyRadarAccumulationMap() {
             // Each committed animation position is already quantised to five minutes.
             // Send every committed frame to the fast radar/satellite path, without the
             // older 1.2-3.5 second throttle that caused visible 20-minute jumps.
-            if (!suppressWeatherLayerRefresh) {
-                lastWeatherLayerUpdateTime = Date.now();
-                if (isPlaying && typeof window.fastRadarSatelliteSliderUpdate === 'function') {
-                    window.fastRadarSatelliteSliderUpdate(end.getTime());
-                } else {
-                    updateMapLayers(end.getTime());
-                }
-
-                if (is3DMode && (!isPlaying || Date.now() - lastWeatherLayerUpdateTime > ANIMATION_WEATHER_INTERVAL_MS)) update3DView();
+            lastWeatherLayerUpdateTime = Date.now();
+            if (isPlaying && typeof window.fastRadarSatelliteSliderUpdate === 'function') {
+                window.fastRadarSatelliteSliderUpdate(end.getTime());
+            } else {
+                updateMapLayers(end.getTime());
             }
+
+            if (is3DMode && (!isPlaying || Date.now() - lastWeatherLayerUpdateTime > ANIMATION_WEATHER_INTERVAL_MS)) update3DView();
 
             setTimeout(() => {
                 if (typeof renderWindyLightningArchive === 'function' && isWindyLiveLightningSelected()) renderWindyLightningArchive(); // update Windy archive after slider/time change
@@ -14518,113 +14475,90 @@ async function calculateWindyRadarAccumulationMap() {
 
         let lastWindyLiveRefreshFrameMs = null;
 
-        function advanceAutoLatestTimeline({ refreshWeather = true } = {}) {
-            const autoLatest = document.getElementById('auto-latest');
-            if (!autoLatest?.checked) return false;
-
-            const slider = document.getElementById('history-slider');
-            const now = new Date();
-            const lifespanHours = parseFloat(document.getElementById('lightning-lifespan').value) || 1;
-
+        function pinAutoLatestAndRender() {
+            if (!document.getElementById('auto-latest')?.checked) return;
             forecastStrikeWindow = null;
             lastFilterMode = 'slider';
             customFilterStart = null;
             customFilterEnd = null;
+            const slider = document.getElementById('history-slider');
             if (slider) slider.value = slider.max;
-
-            document.getElementById('start-time').value = new Date(now.getTime() - lifespanHours * 3600000).toISOString().slice(0, 16);
-            document.getElementById('end-time').value = now.toISOString().slice(0, 16);
-            document.getElementById('history-label').innerText = 'Now';
-            document.getElementById('remove-filter').style.display = 'none';
-
-            const previousSuppression = suppressWeatherLayerRefresh;
-            suppressWeatherLayerRefresh = !refreshWeather;
-            try {
-                updateHistory();
-            } finally {
-                suppressWeatherLayerRefresh = previousSuppression;
-            }
-            return true;
+            updateHistory();
         }
 
-        async function refreshUkLightningAndNowcast() {
-            // Fixed 10-second clock. Update the visible status immediately so an empty
-            // response, a coalesced in-flight request, or an unrelated layer failure can
-            // never leave the displayed refresh time frozen.
+        async function refreshUkLightningAndNowcast({ resumed = false } = {}) {
+            // Update the status at the start of every attempt, then replace it with the
+            // successful-response time inside fetchData.
             markUkLightningLastUpdate(new Date());
-
-            // This advances the live slider and refreshes only UK lightning plus the
-            // derived lightning nowcast, not other map layers.
-            const autoAdvanced = advanceAutoLatestTimeline({ refreshWeather: false });
-            const previousSuppression = suppressWeatherLayerRefresh;
-            suppressWeatherLayerRefresh = true;
+            if (resumed) lightningFetchInFlight = null;
             try {
                 await fetchData();
-
-                if (autoAdvanced) {
-                    const slider = document.getElementById('history-slider');
-                    if (slider) slider.value = slider.max;
-                    updateHistory();
-                }
-
-                // Recalculate nowcast every ten seconds even when no new strike was
-                // returned, so ageing and forecast positions remain current.
+                pinAutoLatestAndRender();
                 lastNowcastCalcKey = null;
                 lastNowcastCalcResult = [];
-                if (typeof updateNowcast === 'function') {
-                    updateNowcast(currentFiltered || []);
-                }
+                if (typeof updateNowcast === 'function') updateNowcast(currentFiltered || []);
             } catch (error) {
-                console.error('Automatic UK lightning refresh failed:', error);
-            } finally {
-                suppressWeatherLayerRefresh = previousSuppression;
+                console.error('UK lightning refresh failed:', error);
             }
         }
 
         function refreshOtherWeatherLayers() {
-            // The dropdown controls this clock only. Auto Latest keeps the target time
-            // live; historical/manual mode leaves the selected timestamp untouched.
-            advanceAutoLatestTimeline({ refreshWeather: false });
+            if (document.getElementById('auto-latest')?.checked) {
+                const slider = document.getElementById('history-slider');
+                if (slider) slider.value = slider.max;
+                lastFilterMode = 'slider'; customFilterStart = null; customFilterEnd = null;
+            }
             resetWeatherFrameKey();
             triggerMapUpdate(Date.now());
         }
 
-        // Retain this public name for any existing callers, but make it a weather-only
-        // refresh so it cannot duplicate the separate ten-second lightning request.
-        function refreshLiveDataAndWeatherLayers() {
-            refreshOtherWeatherLayers();
-        }
-
-        function startUkLightningRefresh({ immediate = true } = {}) {
+        function restartUkLightningTimer({ immediate = false, resumed = false } = {}) {
             if (lightningRefreshTimer) clearInterval(lightningRefreshTimer);
             lightningRefreshTimer = null;
-            if (immediate) refreshUkLightningAndNowcast();
+            if (immediate) refreshUkLightningAndNowcast({ resumed });
             lightningRefreshTimer = setInterval(refreshUkLightningAndNowcast, UK_LIGHTNING_REFRESH_MS);
         }
 
+        function refreshLiveDataAndWeatherLayers() { refreshOtherWeatherLayers(); }
+
         function setRefreshInterval({ immediate = true } = {}) {
-            // Dropdown controls non-lightning layers. UK lightning and lightning nowcast
-            // remain on their independent fixed ten-second timer, including when this is Off.
-            if (refreshTimer) {
-                clearInterval(refreshTimer);
-                refreshTimer = null;
-            }
-
-            const select = document.getElementById('refresh-interval');
-            const intervalMinutes = parseFloat(select?.value || '0');
-            const intervalMs = Math.max(0, Math.round(intervalMinutes * 60 * 1000));
-
-            if (immediate && intervalMs > 0) refreshOtherWeatherLayers();
-            if (intervalMs > 0) refreshTimer = setInterval(refreshOtherWeatherLayers, intervalMs);
+            if (refreshTimer) clearInterval(refreshTimer);
+            refreshTimer = null;
+            const minutes = parseFloat(document.getElementById('refresh-interval')?.value || '0');
+            const ms = Math.max(0, Math.round(minutes * 60000));
+            if (immediate && ms > 0) refreshOtherWeatherLayers();
+            if (ms > 0) refreshTimer = setInterval(refreshOtherWeatherLayers, ms);
         }
 
         function toggleAutoLatest() {
-            if (document.getElementById('auto-latest').checked) {
-                advanceAutoLatestTimeline({ refreshWeather: false });
+            if (document.getElementById('auto-latest')?.checked) {
+                pinAutoLatestAndRender();
                 refreshUkLightningAndNowcast();
                 refreshOtherWeatherLayers();
             }
         }
+
+        function resumeUkLightningAfterInactiveTab() {
+            if (document.hidden) {
+                lastUkLightningVisibilityAt = Date.now();
+                return;
+            }
+            // setInterval may be suspended for minutes or hours in a background tab.
+            // Recreate it and immediately fetch the complete missed-minute window.
+            restartUkLightningTimer({ immediate: true, resumed: true });
+            requestAnimationFrame(() => {
+                pinAutoLatestAndRender();
+                if (typeof renderStrikeMarkers === 'function') updateHistory();
+            });
+        }
+
+        document.addEventListener('visibilitychange', resumeUkLightningAfterInactiveTab, { passive: true });
+        window.addEventListener('pageshow', event => {
+            if (event.persisted || !document.hidden) resumeUkLightningAfterInactiveTab();
+        });
+        window.addEventListener('focus', () => {
+            if (!document.hidden) resumeUkLightningAfterInactiveTab();
+        }, { passive: true });
 
         function updateClock() {
             const now = new Date();
@@ -14689,10 +14623,8 @@ async function calculateWindyRadarAccumulationMap() {
 
         function markUkLightningLastUpdate(at = new Date()) {
             lastUpdateTime = at instanceof Date ? at : new Date(at);
-            const status = document.getElementById('last-update');
-            if (status) {
-                status.innerText = `Last update: ${lastUpdateTime.toLocaleString()}`;
-            }
+            const el = document.getElementById('last-update');
+            if (el) el.textContent = `Last update: ${lastUpdateTime.toLocaleString()}`;
         }
 
         function mergeAndRenderLightning(incomingStrikes) {
@@ -14731,6 +14663,10 @@ async function calculateWindyRadarAccumulationMap() {
             if (lightningFetchInFlight) return lightningFetchInFlight;
 
             const metOfficeBaseUrl = 'https://data.consumer-digital.api.metoffice.gov.uk/v1/lightning';
+            // Browser timers are throttled/suspended in inactive tabs. On resume, request
+            // every missed minute instead of only the latest one-minute chunk.
+            const referenceMs = lastUkLightningFetchCompletedAt || lastUkLightningVisibilityAt || Date.now();
+            const catchupMinutes = Math.max(1, Math.min(120, Math.ceil((Date.now() - referenceMs) / 60000) + 1));
             const archiveUrls = [
                 'https://raw.githubusercontent.com/HandryOutlook/lightning_data_new/refs/heads/main/lightning_data.json',
                 'https://raw.githubusercontent.com/HandryOutlook/lightning_data_new/refs/heads/main/lightning_data_2025_autumn.json',
@@ -14754,9 +14690,6 @@ async function calculateWindyRadarAccumulationMap() {
                         time: new Date(s.strike_time)
                     })) || [];
 
-                    // A successful response is a completed data update even when there
-                    // are zero new strikes. Keep the visible status clock in sync with
-                    // the fixed ten-second UK-lightning polling cycle.
                     markUkLightningLastUpdate(new Date());
 
                     // First paint from the base response, normally within one request.
@@ -14765,7 +14698,7 @@ async function calculateWindyRadarAccumulationMap() {
                     // Plot each chunk as soon as that individual request completes.
                     // Promise.allSettled waits only for cleanup, not for rendering.
                     const chunkJobs = (mainResponse?.chunks || []).map(chunk =>
-                        fetch(`${metOfficeBaseUrl}?last-minutes=1&chunk=${encodeURIComponent(chunk.chunk)}&_=${Date.now()}`, {
+                        fetch(`${metOfficeBaseUrl}?last-minutes=${catchupMinutes}&chunk=${encodeURIComponent(chunk.chunk)}&_=${Date.now()}`, {
                             cache: 'no-store'
                         })
                             .then(res => res.ok ? res.json() : null)
@@ -14797,6 +14730,7 @@ async function calculateWindyRadarAccumulationMap() {
                             .catch(() => {});
                     }
                 } finally {
+                    lastUkLightningFetchCompletedAt = Date.now();
                     lightningFetchInFlight = null;
                 }
             })();
@@ -17657,12 +17591,11 @@ async function calculateWindyRadarAccumulationMap() {
         });
         initializeDrawControl();
         initializeDragAndDrop();
-        // Auto Latest starts ON. UK lightning and lightning nowcast use a fixed
-        // ten-second clock; the dropdown controls all other layers and defaults to one minute.
+        // Start independent clocks: UK lightning/nowcast every 10 seconds and
+        // all other layers every minute by default (dropdown controlled).
         const startupAutoLatest = document.getElementById('auto-latest');
         if (startupAutoLatest) startupAutoLatest.checked = true;
-        advanceAutoLatestTimeline({ refreshWeather: false });
-        startUkLightningRefresh({ immediate: true });
+        restartUkLightningTimer({ immediate: true });
         setRefreshInterval({ immediate: true });
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', fetchData, { once: true });
@@ -18548,50 +18481,5 @@ async function calculateWindyRadarAccumulationMap() {
     else install();
 })();
 </script>
-
-<script id="uk-lightning-last-update-watchdog">
-(() => {
-    'use strict';
-    const PERIOD_MS = 10000;
-    let timer = null;
-
-    function renderTick() {
-        const now = new Date();
-        const status = document.getElementById('last-update');
-        if (status) status.textContent = `Last update: ${now.toLocaleString()}`;
-
-        // Keep the shared application timestamp consistent when the main script loaded.
-        try {
-            if (typeof markUkLightningLastUpdate === 'function') {
-                markUkLightningLastUpdate(now);
-            }
-        } catch (error) {
-            console.warn('Unable to synchronise UK lightning update label:', error);
-        }
-    }
-
-    function start() {
-        if (timer) clearInterval(timer);
-        renderTick();
-        timer = setInterval(renderTick, PERIOD_MS);
-    }
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', start, { once: true });
-    } else {
-        start();
-    }
-
-    window.addEventListener('pageshow', () => {
-        if (!timer) start();
-        else renderTick();
-    });
-
-    document.addEventListener('visibilitychange', () => {
-        if (!document.hidden) renderTick();
-    }, { passive: true });
-})();
-</script>
-
 </body>
 </html>
