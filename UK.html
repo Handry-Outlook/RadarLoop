@@ -4153,8 +4153,8 @@
                 <select id="refresh-interval" onchange="setRefreshInterval()">
                     <option value="0">Off</option>
                     <option value="0.0167">1 second (may slow device)</option>
-                    <option value="0.167" selected>10 seconds</option>
-                    <option value="0.5">30 seconds</option>
+                    <option value="0.167">10 seconds</option>
+                    <option value="0.5"selected>30 seconds</option>
                     <option value="1">1 minute</option>
                     <option value="5">5 minutes</option>
                     <option value="10">10 minutes</option>
@@ -9069,12 +9069,15 @@
             const generation = beginWeatherPerformanceGeneration();
             if (isPlaying) WEATHER_PERF.lastAnimationWeatherUpdate = now;
             isPlotting = true;
-            const PROCESSING_DELAY_MS = 5 * 60 * 1000;
             let targetTimestamp = timestamp;
             const timeSlider = document.getElementById('history-slider');
             const isManualTimeFilterActive = lastFilterMode === 'inputs' && customFilterStart && customFilterEnd;
-            if (timeSlider && timeSlider.value === timeSlider.max && !isManualTimeFilterActive) {
-                targetTimestamp = Date.now() - PROCESSING_DELAY_MS;
+            const autoLatestEnabled = Boolean(document.getElementById('auto-latest')?.checked);
+            if (timeSlider && Number(timeSlider.value) >= Number(timeSlider.max) && !isManualTimeFilterActive && autoLatestEnabled) {
+                // Ask providers for the current slot. fetchTileUrlCore already searches
+                // backwards when a provider has not published that slot yet, so subtracting
+                // another five minutes here made live mode permanently one frame late.
+                targetTimestamp = Date.now();
             }
 
             const layerDefs = [
@@ -14470,53 +14473,87 @@ async function calculateWindyRadarAccumulationMap() {
         }
 
         let lastWindyLiveRefreshFrameMs = null;
+
+        function invalidateLiveWeatherRefreshState() {
+            // The URL cache lasts 30 minutes and the negative cache lasts 90 seconds.
+            // Both are too long for a 10-second live poll because a newly published URL
+            // can otherwise remain hidden behind the previous cached result.
+            weatherTileUrlCache.clear();
+            weatherTileNegativeCache.clear();
+            radarValidationCache.clear();
+            resetWeatherFrameKey();
+
+            // Force plotLayerIfNecessary to re-check every selected live product even
+            // when the rounded timestamp is still inside the same five-minute slot.
+            lastRadarTimestamp = null;
+            lastSatelliteTimestamp = null;
+            lastIsobarTimestamp = null;
+            lastWindTimestamp = null;
+            lastLightningTimestamp = null;
+            lastTropicalStormsTimestamp = null;
+            lastRotationTimestamp = null;
+            lastSurfaceFrontTimestamp = null;
+            lastObservationTimestamp = null;
+            lastNowcastTimestamp = null;
+            lastWarningTimestamp = null;
+            lastRequestedRadarTimestamp = null;
+            lastRequestedSatelliteTimestamp = null;
+            lastRequestedIsobarTimestamp = null;
+            lastRequestedWindTimestamp = null;
+            lastRequestedLightningTimestamp = null;
+            lastRequestedTropicalStormsTimestamp = null;
+            lastRequestedRotationTimestamp = null;
+            lastRequestedSurfaceFrontTimestamp = null;
+            lastRequestedObservationTimestamp = null;
+            lastRequestedNowcastTimestamp = null;
+            lastRequestedWarningTimestamp = null;
+        }
+
         async function refreshLiveDataAndWeatherLayers() {
             const autoLatest = document.getElementById('auto-latest');
             const slider = document.getElementById('history-slider');
             const keepLatest = Boolean(autoLatest?.checked);
 
-            // Auto Latest is authoritative: every refresh returns the UI to live mode
-            // before data/weather requests are made. This prevents a stale slider value
-            // or an old input filter from making the interval refresh exit early.
             if (keepLatest) {
                 forecastStrikeWindow = null;
                 lastFilterMode = 'slider';
                 customFilterStart = null;
                 customFilterEnd = null;
                 if (slider) slider.value = slider.max;
+
+                const now = new Date();
+                const lifespanHours = parseFloat(document.getElementById('lightning-lifespan').value);
+                document.getElementById('start-time').value = new Date(now.getTime() - lifespanHours * 3600000).toISOString().slice(0, 16);
+                document.getElementById('end-time').value = now.toISOString().slice(0, 16);
+
+                invalidateLiveWeatherRefreshState();
             }
 
-            // Wait for the live lightning request to merge before the final history render.
-            // fetchData() already coalesces overlapping calls.
             try {
                 await fetchData();
             } catch (error) {
                 console.error('Automatic live-data refresh failed:', error);
             }
 
-            if (keepLatest) {
-                const latestSlider = document.getElementById('history-slider');
-                if (latestSlider) latestSlider.value = latestSlider.max;
-                updateHistory();
-            }
+            if (!keepLatest) return;
 
-            const activeSlider = document.getElementById('history-slider');
-            const isAtLatest = !activeSlider || Number(activeSlider.value) >= Number(activeSlider.max);
-            const manual = lastFilterMode === 'inputs' && customFilterStart && customFilterEnd;
-            if (!keepLatest && (!isAtLatest || manual)) return;
+            // fetchData may update slider limits while merging. Snap to the new maximum
+            // after the merge, then render lightning and weather using the same live time.
+            const latestSlider = document.getElementById('history-slider');
+            if (latestSlider) latestSlider.value = latestSlider.max;
+            updateHistory();
 
             const nowMs = Date.now();
-            const candidateFrameMs = Math.floor((nowMs - 5 * 60 * 1000) / (5 * 60 * 1000)) * (5 * 60 * 1000);
+            const candidateFrameMs = Math.floor(nowMs / (5 * 60 * 1000)) * (5 * 60 * 1000);
             const windySelected = document.getElementById('radarToggle')?.checked && document.getElementById('radarLayer')?.value === 'windy-radar';
-            if (windySelected && (!Number.isFinite(Number(lastRadarTimestamp)) || Number(lastRadarTimestamp) < candidateFrameMs)) {
+            if (windySelected) {
                 lastWindyLiveRefreshFrameMs = candidateFrameMs;
-                clearWindyRadarRuntimeState('live-frame-reprobe');
+                clearWindyRadarRuntimeState('automatic-live-refresh');
             }
 
-            // Re-resolve the active live frame on every interval, even when its rounded
-            // timestamp is unchanged. This allows a newly published tile in the same
-            // five-minute slot to replace the previously cached/missing result.
-            resetWeatherFrameKey();
+            // updateHistory starts a weather update. This second request is intentionally
+            // queued by updateMapLayers when a plot is active, guaranteeing that a refresh
+            // arriving during an older plot is not lost.
             triggerMapUpdate(nowMs);
         }
 
@@ -14547,7 +14584,7 @@ async function calculateWindyRadarAccumulationMap() {
                 customFilterStart = null;
                 customFilterEnd = null;
                 document.getElementById('remove-filter').style.display = 'none';
-                resetWeatherFrameKey();
+                invalidateLiveWeatherRefreshState();
                 updateHistory();
                 refreshLiveDataAndWeatherLayers();
             }
