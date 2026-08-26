@@ -4168,7 +4168,7 @@
                     <span class="tooltip">Keep time slider at most recent data</span>
                 </div>
                 <div class="toggle-switch">
-                    <input type="checkbox" id="auto-latest" onchange="toggleAutoLatest()">
+                    <input type="checkbox" id="auto-latest" onchange="toggleAutoLatest()" checked>
                     <label for="auto-latest" class="switch"></label>
                 </div>
             </div>
@@ -14470,12 +14470,40 @@ async function calculateWindyRadarAccumulationMap() {
         }
 
         let lastWindyLiveRefreshFrameMs = null;
-        function refreshLiveDataAndWeatherLayers() {
-            fetchData();
+        async function refreshLiveDataAndWeatherLayers() {
+            const autoLatest = document.getElementById('auto-latest');
             const slider = document.getElementById('history-slider');
-            const isAtLatest = !slider || Number(slider.value) >= Number(slider.max);
+            const keepLatest = Boolean(autoLatest?.checked);
+
+            // Auto Latest is authoritative: every refresh returns the UI to live mode
+            // before data/weather requests are made. This prevents a stale slider value
+            // or an old input filter from making the interval refresh exit early.
+            if (keepLatest) {
+                forecastStrikeWindow = null;
+                lastFilterMode = 'slider';
+                customFilterStart = null;
+                customFilterEnd = null;
+                if (slider) slider.value = slider.max;
+            }
+
+            // Wait for the live lightning request to merge before the final history render.
+            // fetchData() already coalesces overlapping calls.
+            try {
+                await fetchData();
+            } catch (error) {
+                console.error('Automatic live-data refresh failed:', error);
+            }
+
+            if (keepLatest) {
+                const latestSlider = document.getElementById('history-slider');
+                if (latestSlider) latestSlider.value = latestSlider.max;
+                updateHistory();
+            }
+
+            const activeSlider = document.getElementById('history-slider');
+            const isAtLatest = !activeSlider || Number(activeSlider.value) >= Number(activeSlider.max);
             const manual = lastFilterMode === 'inputs' && customFilterStart && customFilterEnd;
-            if (!isAtLatest || manual) return;
+            if (!keepLatest && (!isAtLatest || manual)) return;
 
             const nowMs = Date.now();
             const candidateFrameMs = Math.floor((nowMs - 5 * 60 * 1000) / (5 * 60 * 1000)) * (5 * 60 * 1000);
@@ -14483,8 +14511,12 @@ async function calculateWindyRadarAccumulationMap() {
             if (windySelected && (!Number.isFinite(Number(lastRadarTimestamp)) || Number(lastRadarTimestamp) < candidateFrameMs)) {
                 lastWindyLiveRefreshFrameMs = candidateFrameMs;
                 clearWindyRadarRuntimeState('live-frame-reprobe');
-                resetWeatherFrameKey('radar');
             }
+
+            // Re-resolve the active live frame on every interval, even when its rounded
+            // timestamp is unchanged. This allows a newly published tile in the same
+            // five-minute slot to replace the previously cached/missing result.
+            resetWeatherFrameKey();
             triggerMapUpdate(nowMs);
         }
 
@@ -14506,14 +14538,18 @@ async function calculateWindyRadarAccumulationMap() {
                 const start = new Date(now.getTime() - lifespanHours * 3600 * 1000);
                 document.getElementById('start-time').value = start.toISOString().slice(0, 16);
                 document.getElementById('end-time').value = now.toISOString().slice(0, 16);
+                const slider = document.getElementById('history-slider');
                 const maxMinutes = (parseInt(document.getElementById('max-history-hours').value) || 6) * 60;
-                document.getElementById('history-slider').value = maxMinutes;
+                slider.max = maxMinutes;
+                slider.value = slider.max;
                 document.getElementById('history-label').innerText = 'Now';
                 lastFilterMode = 'slider';
                 customFilterStart = null;
                 customFilterEnd = null;
                 document.getElementById('remove-filter').style.display = 'none';
+                resetWeatherFrameKey();
                 updateHistory();
+                refreshLiveDataAndWeatherLayers();
             }
         }
 
@@ -17538,7 +17574,17 @@ async function calculateWindyRadarAccumulationMap() {
         });
         initializeDrawControl();
         initializeDragAndDrop();
-        // Start live lightning as soon as this script reaches application startup.
+        // Start in live mode and keep the latest frame selected from the first render.
+        const startupAutoLatest = document.getElementById('auto-latest');
+        if (startupAutoLatest) startupAutoLatest.checked = true;
+        forecastStrikeWindow = null;
+        lastFilterMode = 'slider';
+        customFilterStart = null;
+        customFilterEnd = null;
+        const startupHistorySlider = document.getElementById('history-slider');
+        if (startupHistorySlider) startupHistorySlider.value = startupHistorySlider.max;
+
+        // Start live lightning/weather as soon as this script reaches application startup.
         // fetchData() coalesces this with any DOM/load fallback below.
         setRefreshInterval({ immediate: true });
         if (document.readyState === 'loading') {
