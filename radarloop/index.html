@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en-GB" data-theme="dark">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>RadarLoop</title>
+  <meta name="description" content="Multi-source weather radar, satellite and lightning viewer.">
+  <link rel="icon" type="image/png"
+    href="https://raw.githubusercontent.com/Handry-Outlook/Convective-Outlook/main/Handry_outlook_icon_pride_small.png">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Mapping libraries -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css">
+  <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css">
+  <link rel="stylesheet" href="https://cdn.aerisapi.com/sdk/js/mapsgl/latest/aerisweather.mapsgl.css">
+
+  <!-- Application styles -->
+  <link rel="stylesheet" href="src/styles/tokens.css">
+  <link rel="stylesheet" href="src/styles/base.css">
+  <link rel="stylesheet" href="src/styles/app.css">
+</head>
+
+<body>
+  <div class="app" id="app" data-mode="2d">
+
+    <!-- ============================ Top bar ============================ -->
+    <header class="topbar">
+      <div class="brand">
+        <img class="brand__logo" src="https://raw.githubusercontent.com/Handry-Outlook/Lightning-Strike-Visualiser-/refs/heads/main/RadarLoop%20Logo.png"
+          alt="RadarLoop" width="112" height="26" decoding="async">
+        <span class="brand__fallback" hidden>RadarLoop</span>
+      </div>
+
+      <button class="btn btn--ghost btn--icon panel-toggle" id="btn-panel" aria-label="Layers" title="Layers">☰</button>
+
+      <div class="search">
+        <span class="search__icon" aria-hidden="true">⌕</span>
+        <input id="layer-search" class="input search__input" type="search" autocomplete="off" spellcheck="false"
+          placeholder="Search layers…  /" aria-label="Search weather layers">
+        <div id="search-results" class="search__results scroll-thin" role="listbox" hidden></div>
+      </div>
+
+      <div class="topbar__status" id="topbar-status"></div>
+      <div class="topbar__spacer"></div>
+
+      <div class="topbar__actions">
+        <button class="btn btn--ghost btn--icon" id="btn-3d" title="Toggle 3D view" aria-label="Toggle 3D view"
+          aria-pressed="false">3D</button>
+        <button class="btn btn--ghost btn--icon" id="btn-locate" title="Show my location" aria-label="Show my location">◎</button>
+        <button class="btn btn--ghost btn--icon" id="btn-legend" title="Toggle legend" aria-label="Toggle legend">▤</button>
+        <button class="btn btn--ghost btn--icon" id="btn-theme" title="Switch theme" aria-label="Switch theme">◐</button>
+        <button class="btn btn--ghost btn--icon" id="btn-help" title="Help" aria-label="Help">?</button>
+        <button class="btn btn--ghost btn--icon" id="btn-fullscreen" title="Full screen" aria-label="Full screen">⛶</button>
+      </div>
+    </header>
+
+    <!-- ============================ Map area =========================== -->
+    <main class="map-area">
+      <div id="map"></div>
+      <div id="map-3d"></div>
+
+      <nav class="rail" id="rail" aria-label="Layer groups"></nav>
+
+      <aside class="panel" id="panel" hidden aria-label="Layer controls">
+        <header class="panel__head">
+          <div style="flex:1;min-width:0">
+            <div class="panel__title" id="panel-title">Layers</div>
+            <div class="panel__subtitle" id="panel-subtitle"></div>
+          </div>
+          <button class="btn btn--ghost btn--icon" id="panel-close" aria-label="Close panel">✕</button>
+        </header>
+        <div class="panel__body scroll-thin" id="panel-body"></div>
+      </aside>
+
+      <aside class="floating floating--legend" id="legend" data-collapsed="false" aria-label="Legend">
+        <header class="floating__head">
+          <span style="flex:1">Legend</span>
+          <button class="btn btn--ghost btn--icon" id="legend-toggle" aria-label="Collapse legend">−</button>
+        </header>
+        <div class="floating__body scroll-thin" id="legend-body"></div>
+      </aside>
+
+      <div class="timeline" id="timeline"></div>
+    </main>
+  </div>
+
+  <!-- ====================== Third-party libraries ====================== -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.js"></script>
+  <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+  <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+  <script src="https://unpkg.com/leaflet.vectorgrid@1.3.0/dist/Leaflet.VectorGrid.min.js"></script>
+  <script src="https://unpkg.com/esri-leaflet@3.0.12/dist/esri-leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/leaflet.heat/dist/leaflet-heat.js"></script>
+  <script src="https://unpkg.com/togeojson@0.16.0"></script>
+  <script src="https://cdn.maptiler.com/maptiler-sdk-js/v3.0.1/maptiler-sdk.umd.min.js"></script>
+  <script src="https://cdn.maptiler.com/leaflet-maptilersdk/v4.0.2/leaflet-maptilersdk.umd.min.js"></script>
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js"></script>
+  <script src="https://cdn.aerisapi.com/sdk/js/mapsgl/latest/aerisweather.mapsgl.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+
+  <!-- ========================== Application =========================== -->
+  <script type="module" src="src/main.js"></script>
+</body>
+
+</html>
