@@ -8,8 +8,9 @@
  * canvas only goes when the controller itself is disposed.
  */
 
-import { getMapsGL, releaseMapsGL, whenMapsGLReady } from '../core/map.js';
+import { getMapsGL, mapsglSurfaces, releaseMapsGL, whenMapsGLReady } from '../core/map.js';
 import { emit, EVENTS } from '../core/bus.js';
+import { slots } from '../core/state.js';
 
 /** group -> MapsGL layer id currently added. */
 const active = new Map();
@@ -40,6 +41,10 @@ export async function renderMapsGLLayer(group, type, slot, def) {
 
   try {
     controller.addWeatherLayer(layerId, { opacity: slot.opacity });
+    // The surface is created asynchronously, so presentation is applied again
+    // once it exists rather than only on the frame the layer was added.
+    applyMapsGLPresentation();
+    for (const delay of [400, 1200, 2400]) setTimeout(applyMapsGLPresentation, delay);
     emit(EVENTS.LAYER_RENDERED, { group, type, mapsgl: true });
   } catch (error) {
     console.warn(`[mapsgl] could not add "${layerId}":`, error);
@@ -85,6 +90,7 @@ export function clearMapsGLLayer(group) {
   const controller = getMapsGL();
   if (controller) removeMapsGLLayer(controller, layerId);
   active.delete(group);
+  applyMapsGLPresentation();
 
   // The controller's canvas stays on the map for as long as the controller
   // lives, so with nothing left to draw it is torn down promptly rather than on
@@ -93,15 +99,54 @@ export function clearMapsGLLayer(group) {
   if (active.size === 0) releaseMapsGL(1200);
 }
 
-export function setMapsGLOpacity(group, opacity) {
-  const layerId = active.get(group);
-  const controller = getMapsGL();
-  if (!layerId || !controller) return;
-  try {
-    controller.setLayerOpacity?.(layerId, opacity);
-  } catch {
-    /* older SDK builds do not expose per-layer opacity */
+/**
+ * Applies opacity and stacking to the MapsGL render surface.
+ *
+ * The SDK has no working per-layer opacity in this build. `setLayerOpacity` does
+ * not exist on the controller at all — the previous call was optional-chained
+ * and so silently did nothing — and `setPaintProperty`, `getWeatherLayer` and
+ * `findLayer` either return nothing for a weather layer id or leave the surface
+ * untouched. The one thing that does work is the canvas element, so opacity is
+ * applied there.
+ *
+ * Stacking has the same root. The controller injects its canvas as a direct
+ * child of Leaflet's overlay pane, where it lands at z-index 100 while every
+ * weather pane sits at 140 and above — which is why MapsGL products always drew
+ * underneath everything else regardless of the layer order. The canvas is given
+ * the z-index of the group it is drawing for, so the layer-order tab moves it
+ * like any other layer.
+ *
+ * One surface serves every MapsGL layer, so with products active in two groups
+ * at once they share one opacity and one stacking position: the highest z-index
+ * of the active groups wins, and so does the opacity that goes with it. That is
+ * a limit of the SDK's single-canvas design, not a choice.
+ */
+export function applyMapsGLPresentation() {
+  const surfaces = mapsglSurfaces();
+  if (!surfaces.length) return;
+
+  let opacity = 1;
+  let zIndex = 0;
+  for (const group of active.keys()) {
+    const slot = slots.get(group);
+    if (!slot?.enabled) continue;
+    const z = slot.zIndex || 0;
+    if (z >= zIndex) {
+      zIndex = z;
+      opacity = slot.opacity ?? 1;
+    }
   }
+
+  for (const canvas of surfaces) {
+    canvas.style.opacity = String(opacity);
+    if (zIndex) canvas.style.zIndex = String(zIndex);
+  }
+}
+
+export function setMapsGLOpacity(group, opacity) {
+  const slot = slots.get(group);
+  if (slot) slot.opacity = opacity;
+  applyMapsGLPresentation();
 }
 
 export const activeMapsGLLayers = () => Array.from(active.values());

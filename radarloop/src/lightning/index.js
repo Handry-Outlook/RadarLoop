@@ -23,6 +23,16 @@ let refreshTimer = null;
 let lastDrawSignature = '';
 let topUpInFlight = false;
 
+/** Why the strike cue did or did not fire on the last refresh. */
+let cueDiagnostics = null;
+export const strikeCueState = () => cueDiagnostics;
+
+/** Above this many new strikes at once, it is a bulk plot, not an event. */
+const CUE_BULK_LIMIT = 25;
+/** Minimum gap between cues, so dragging the scrubber does not machine-gun. */
+const CUE_MIN_GAP_MS = 400;
+let lastCueAt = 0;
+
 /**
  * The oldest strike worth keeping: the earliest point the scrubber can reach,
  * less the lifespan window that would end there, plus a margin. Derived rather
@@ -75,10 +85,40 @@ export const refresh = throttle((options = {}) => {
   // 3D shares the selection but not the Leaflet layers, so it is fed directly.
   if (is3D()) set3DStrikes(filtered, { end, lifespanHours: lightning.lifespanHours });
 
-  // The cue marks genuinely new *data*. Gating on `fromData` matters: a redraw
-  // caused by moving the scrubber also produces "fresh" strikes — they are only
-  // newly in view — and without this the cue fired continuously while dragging.
-  if (options.fromData && result.fresh > 0 && time.atLive && !time.playing) playThunder();
+  // The cue marks strikes that have just appeared on the map.
+  //
+  // It used to fire only for strikes arriving from the live poll, at the live
+  // edge, with playback stopped. That is far too narrow in practice: the poll
+  // runs every few minutes, and in a quiet spell over the UK it can be hours
+  // between strikes, so the cue appeared to be broken. Scrubbing forward through
+  // a storm plots strike after strike and made no sound at all.
+  //
+  // What it guards against instead is the case that actually needs guarding:
+  // hundreds of strikes appearing in one go, when the window jumps or the
+  // archives land. One clap for that is right; two hundred is not.
+  const bulk = result.fresh > CUE_BULK_LIMIT;
+  const spaced = Date.now() - lastCueAt >= CUE_MIN_GAP_MS;
+
+  cueDiagnostics = {
+    fromData: !!options.fromData,
+    fresh: result.fresh,
+    drawn: result.drawn,
+    filtered: filtered.length,
+    atLive: time.atLive,
+    playing: time.playing,
+    soundOn: lightning.sound,
+    bulk,
+    spaced,
+    at: Date.now(),
+  };
+
+  // Playback is still excluded: it reveals a frame of strikes several times a
+  // second, and a rumble on every frame is noise rather than a cue.
+  if (lightning.sound && result.fresh > 0 && !bulk && spaced
+      && !time.playing && !options.initial) {
+    lastCueAt = Date.now();
+    cueDiagnostics.played = playThunder();
+  }
 
   emit(EVENTS.LIGHTNING_FILTERED, {
     total: lightning.all.length,
@@ -142,8 +182,8 @@ export async function initLightning() {
   });
 
   await fetchStrikes();
-  // The first paint is not "new" data — it is the initial load.
-  refresh({ force: true });
+  // The first paint is not new activity — it is the initial load.
+  refresh({ force: true, initial: true });
   startPolling();
 }
 

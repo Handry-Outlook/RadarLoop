@@ -145,7 +145,7 @@ export const lightning = {
   counter: false,
   counterDensity: 50,
   showAll: false,
-  sound: false,
+  sound: loadSetting('lightningSound', false),
   nowcast: false,
   nowcastConfidence: 0.1,
   lastUpdate: null,
@@ -210,6 +210,7 @@ export function setLightningOption(key, value, { persist = true } = {}) {
     lifespanHours: 'lightningLifespan',
     colorByAge: 'lightningColorByAge',
     showLayer: 'lightningShowLayer',
+    sound: 'lightningSound',
   }[key];
   if (persisted) saveSetting(persisted, value);
 }

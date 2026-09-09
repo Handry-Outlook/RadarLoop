@@ -15,7 +15,7 @@ import { emit, on, EVENTS } from '../core/bus.js';
 import { slots, LAYER_LABELS } from '../core/state.js';
 import { getLayerDef } from '../data/layers.js';
 import {
-  activeInOrder, describeLayer, moveLayer, resetLayerOrder,
+  activeInOrder, describeLayer, layerView, moveLayer, resetLayerOrder,
   setLayerEnabled, setLayerOpacity, setLayerOrder,
 } from '../layers/control.js';
 import { opacityRow, toast } from './components.js';
@@ -117,13 +117,14 @@ function installDragging(list) {
  * ------------------------------------------------------------------ */
 
 function buildRow(group, index, total) {
-  const slot = slots.get(group);
-  const def = getLayerDef(group, slot.type);
-  const accent = ACCENTS[group] || 'var(--accent)';
+  // One accessor for both kinds of entry: catalog slots and the registered
+  // overlays (outlooks, drawings) that have no product behind them.
+  const view = layerView(group);
+  const accent = view.accent || ACCENTS[group] || 'var(--accent)';
 
   const handle = el('button', {
     class: 'layer-row__handle',
-    'aria-label': `Reorder ${LAYER_LABELS[group] || group}`,
+    'aria-label': `Reorder ${view.title}`,
     title: 'Drag to restack — or use the arrow keys',
     onKeyDown: (event) => {
       if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
@@ -135,7 +136,7 @@ function buildRow(group, index, total) {
 
   const opacity = opacityRow({
     label: '',
-    value: slot.opacity,
+    value: view.opacity,
     onInput: (value) => setLayerOpacity(group, value),
   });
 
@@ -146,9 +147,9 @@ function buildRow(group, index, total) {
   }, [
     handle,
     el('div', { class: 'layer-row__body' }, [
-      el('div', { class: 'layer-row__title truncate' }, def?.label || slot.type),
+      el('div', { class: 'layer-row__title truncate' }, view.title),
       el('div', { class: 'layer-row__meta truncate' },
-        `${LAYER_LABELS[group] || group} · ${index === 0 ? 'top' : (index === total - 1 ? 'bottom' : `#${index + 1}`)}`),
+        `${view.meta} · ${index === 0 ? 'top' : (index === total - 1 ? 'bottom' : `#${index + 1}`)}`),
       opacity.node,
     ]),
     el('div', { class: 'layer-row__actions' }, [

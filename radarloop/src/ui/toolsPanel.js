@@ -12,6 +12,8 @@ import * as files from '../tools/overlayFiles.js';
 import * as accumulation from '../tools/accumulation.js';
 import { dateTimeField, disclosure, opacityRow, sectionTitle, switchRow, toast } from './components.js';
 import { selectField } from './components.js';
+import { on, EVENTS } from '../core/bus.js';
+import { is3D } from '../core/map3d.js';
 
 function buildDrawingSection() {
   const riskPicker = selectField({
@@ -25,10 +27,20 @@ function buildDrawingSection() {
     class: 'btn btn--primary btn--block',
     onClick: () => {
       const on = draw.toggleDrawing();
-      drawButton.textContent = on ? 'Stop drawing' : 'Start drawing';
-      if (!on && !draw.isDrawing()) toast('Drawing disabled');
+      syncDrawButton(on);
+      if (!on) toast('Drawing disabled');
+      else if (is3D()) toast('Click to place corners, Enter to close, Esc to cancel');
     },
   }, 'Start drawing');
+
+  function syncDrawButton(on) {
+    drawButton.textContent = on ? 'Stop drawing' : 'Start drawing';
+    drawButton.classList.toggle('btn--active', !!on);
+  }
+
+  // A 3D polygon finishes on its own once the ring closes, so the button has to
+  // hear about it rather than only tracking its own presses.
+  on(EVENTS.DRAW_MODE, ({ drawing }) => syncDrawButton(drawing));
 
   return el('div', { class: 'stack' }, [
     sectionTitle('Polygon drawing'),

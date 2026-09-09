@@ -95,6 +95,9 @@ export function calendarIndex() {
  * Rendering
  * ------------------------------------------------------------------ */
 
+/** The outlook to restore when visibility is switched back on. */
+let lastSelectedId = null;
+
 export function clearPublished() {
   safeRemove(fillLayer);
   safeRemove(outlineLayer);
@@ -181,7 +184,15 @@ export function setOpacity(value) {
 
 export function setVisible(visible) {
   state.visible = visible;
-  if (!visible) clearPublished();
+  if (!visible) {
+    // clearPublished forgets the selection, so remember it: switching the layer
+    // back on from the layer list has to restore what was being shown.
+    lastSelectedId = state.selectedId ?? lastSelectedId;
+    clearPublished();
+    return;
+  }
+  const item = getById(state.selectedId ?? lastSelectedId);
+  if (item) renderPublished(item);
 }
 
 export const getById = (id) => state.outlooks.find((item) => item.id === id) || null;

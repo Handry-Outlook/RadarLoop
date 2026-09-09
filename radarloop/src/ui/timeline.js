@@ -26,6 +26,8 @@ let focusChip = null;
 let playButton = null;
 let statusLabel = null;
 let ticksHost = null;
+/** True while a pointer or finger is holding the scrubber. */
+let scrubbing = false;
 
 /* ------------------------------------------------------------------ *
  * Domain <-> slider mapping
@@ -160,6 +162,27 @@ export function buildTimeline() {
     timeCtl.setTime(fromSliderValue(slider.value));
   });
 
+  // Whether the user has hold of the scrubber.
+  //
+  // The write-back below used to be gated on `document.activeElement === slider`,
+  // which is true while dragging with a mouse but not while dragging with a
+  // finger: touch does not focus a range input. So on a phone every TIME_CHANGED
+  // during a drag rewrote the thumb from the rounded, clamped timestamp while the
+  // readout showed the raw one, and the two drifted apart mid-drag. Pointer
+  // events answer the question directly on both.
+  for (const type of ['pointerdown', 'touchstart']) {
+    slider.addEventListener(type, () => { scrubbing = true; }, { passive: true });
+  }
+  for (const type of ['pointerup', 'pointercancel', 'touchend', 'touchcancel']) {
+    window.addEventListener(type, () => {
+      if (!scrubbing) return;
+      scrubbing = false;
+      // Settle the thumb on whatever the clamped time actually became.
+      slider.value = String(toSliderValue(time.current));
+      paintReadout(time.current);
+    }, { passive: true });
+  }
+
   ticksHost = el('div', { class: 'timeline__ticks' });
 
   playButton = el('button', {
@@ -207,7 +230,9 @@ export function buildTimeline() {
   /* --- wiring --- */
 
   on(EVENTS.TIME_CHANGED, (timestamp) => {
-    if (document.activeElement !== slider) slider.value = String(toSliderValue(timestamp));
+    if (!scrubbing && document.activeElement !== slider) {
+      slider.value = String(toSliderValue(timestamp));
+    }
     paintReadout(timestamp);
   });
 

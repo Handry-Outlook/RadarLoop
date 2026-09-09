@@ -21,18 +21,43 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
   'August', 'September', 'October', 'November', 'December'];
 
 /**
- * A month calendar whose days are enabled only where `index` has an entry.
+ * A month calendar whose days are enabled only where the index has an entry.
+ *
+ * `index` is read on every paint rather than captured once: outlooks arrive
+ * asynchronously and the feed refreshes, and a snapshot taken when the panel was
+ * built silently stopped showing anything published afterwards.
+ *
  * `colourFor` maps a day's value to the marker colour.
  */
 function buildCalendar({ index, colourFor, onSelect, initialMonth = new Date() }) {
+  const readIndex = () => (typeof index === 'function' ? index() : index) || new Map();
+
   let month = new Date(initialMonth.getFullYear(), initialMonth.getMonth(), 1);
   let selected = null;
 
   const label = el('strong');
   const grid = el('div', { class: 'calendar__grid' });
+  const prev = el('button', { class: 'btn btn--ghost btn--icon', 'aria-label': 'Previous month' }, '‹');
+  const next = el('button', { class: 'btn btn--ghost btn--icon', 'aria-label': 'Next month' }, '›');
+
+  /** Oldest and newest months that actually hold something. */
+  function extent() {
+    const keys = [...readIndex().keys()].sort();
+    if (!keys.length) return null;
+    return { first: keys[0].slice(0, 7), last: keys[keys.length - 1].slice(0, 7) };
+  }
+
+  const monthKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 
   const paint = () => {
+    const entries = readIndex();
     label.textContent = `${MONTHS[month.getMonth()]} ${month.getFullYear()}`;
+
+    // Wandering off into empty years is not useful; the arrows stop at the data.
+    const range = extent();
+    const here = monthKey(month);
+    prev.disabled = !!range && here <= range.first;
+    next.disabled = !!range && here >= range.last;
 
     const first = new Date(month.getFullYear(), month.getMonth(), 1);
     // Monday-first offset.
@@ -46,7 +71,7 @@ function buildCalendar({ index, colourFor, onSelect, initialMonth = new Date() }
     for (let day = 1; day <= days; day += 1) {
       const date = new Date(month.getFullYear(), month.getMonth(), day);
       const key = dateKey(date);
-      const value = index.get(key);
+      const value = entries.get(key);
       const has = value !== undefined;
 
       const cell = el('button', {
@@ -57,8 +82,13 @@ function buildCalendar({ index, colourFor, onSelect, initialMonth = new Date() }
         'aria-selected': String(key === selected),
         disabled: has ? null : true,
         onClick: () => {
+          // Marking the selection in place rather than repainting: repainting
+          // here replaced the very button handling the click, which lost the
+          // element mid-event and made taps intermittent on touch.
           selected = key;
-          paint();
+          for (const other of grid.children) {
+            other.setAttribute('aria-selected', String(other === cell));
+          }
           onSelect(key);
         },
       }, String(day));
@@ -74,15 +104,14 @@ function buildCalendar({ index, colourFor, onSelect, initialMonth = new Date() }
     paint();
   };
 
+  prev.addEventListener('click', () => shift(-1));
+  next.addEventListener('click', () => shift(1));
+
   paint();
 
   return {
     node: el('div', { class: 'calendar' }, [
-      el('div', { class: 'calendar__head' }, [
-        el('button', { class: 'btn btn--ghost btn--icon', 'aria-label': 'Previous month', onClick: () => shift(-1) }, '‹'),
-        label,
-        el('button', { class: 'btn btn--ghost btn--icon', 'aria-label': 'Next month', onClick: () => shift(1) }, '›'),
-      ]),
+      el('div', { class: 'calendar__head' }, [prev, label, next]),
       el('div', { class: 'calendar__weekdays' }, WEEKDAYS.map((d) => el('span', {}, d))),
       grid,
     ]),
@@ -216,9 +245,8 @@ function buildPublishedSection() {
       return;
     }
 
-    const index = published.calendarIndex();
     calendar = buildCalendar({
-      index,
+      index: () => published.calendarIndex(),
       colourFor: (rank) => publishedRisk(rank).color,
       // Picking a day in the calendar is an explicit selection.
       onSelect: (key) => showDay(key, { focus: true }),
@@ -366,7 +394,7 @@ function buildAutoSection() {
     }
 
     calendar = buildCalendar({
-      index: auto.calendarIndex(),
+      index: () => auto.calendarIndex(),
       colourFor: (risk) => riskColour(risk || 0),
       onSelect: (key) => showDay(key, { focus: true }),
     });

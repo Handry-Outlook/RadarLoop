@@ -9,14 +9,30 @@
  */
 
 import { emit, EVENTS } from '../core/bus.js';
-import { slots, time, LAYER_GROUPS } from '../core/state.js';
+import { slots, time, LAYER_GROUPS, LAYER_LABELS } from '../core/state.js';
+import { LAYER_Z } from '../config.js';
 import { getLayerDef } from '../data/layers.js';
 import { applyOpacity, clearSlot, renderAll } from './renderer.js';
 import { setMapsGLOpacity } from './mapsgl.js';
 import { clearMirror, setMirrorOpacity, setMirrorOrder } from '../core/map3d.js';
+import { applyMapsGLPresentation } from './mapsgl.js';
 
 /** Turns a layer group on or off. */
 export function setLayerEnabled(group, enabled) {
+  const external = externals.get(group);
+  if (external) {
+    if (external.isEnabled() === enabled) return;
+    external.setEnabled(enabled);
+    // Never moved by hand, so it takes its preset place rather than whatever
+    // position being switched off left it in.
+    if (enabled && !positioned.has(group)) {
+      seatByPreset(group);
+      applyOrder();
+    }
+    emit(EVENTS.LAYER_TOGGLED, { group, enabled });
+    return;
+  }
+
   const slot = slots.get(group);
   if (!slot || slot.enabled === enabled) return;
 
@@ -48,6 +64,13 @@ export function selectProduct(group, type) {
 }
 
 export function setLayerOpacity(group, opacity) {
+  const external = externals.get(group);
+  if (external) {
+    external.setOpacity(opacity);
+    emit(EVENTS.LAYER_OPACITY, { group, opacity });
+    return;
+  }
+
   const slot = slots.get(group);
   if (!slot) return;
   slot.opacity = opacity;
@@ -74,6 +97,8 @@ export const layerOrder = () => [...order];
 /** Active groups in draw order, top of the stack first (as a list reads). */
 export function activeInOrder() {
   return order.filter((g) => {
+    const external = externals.get(g);
+    if (external) return !!external.isEnabled();
     const slot = slots.get(g);
     return slot?.enabled && slot.type;
   }).reverse();
@@ -84,12 +109,115 @@ export function activeInOrder() {
  * reversed back into draw order.
  */
 export function setLayerOrder(topFirst) {
+  for (const id of topFirst) positioned.add(id);
   const drawOrder = [...topFirst].reverse();
   // Groups not in the supplied list keep their relative position underneath.
   const rest = order.filter((g) => !drawOrder.includes(g));
   order = [...rest, ...drawOrder];
   applyOrder();
   emit(EVENTS.LAYER_ORDER, { order: [...order] });
+}
+
+/* ------------------------------------------------------------------ *
+ * Overlays that behave like layers but are not catalog products
+ * ------------------------------------------------------------------ */
+
+/**
+ * The outlook polygons and anything drawn with the polygon tool are real map
+ * overlays, but they have no catalog product behind them, so they never appeared
+ * in the layer list and their stacking could not be changed. Rather than forcing
+ * them through the tile pipeline — which would mean a slot, a frame resolver and
+ * a product picker for something that has none of those — they register here and
+ * take part in ordering, visibility and opacity like anything else.
+ *
+ * A descriptor supplies:
+ *   id         stable key, also used in the saved order
+ *   label      shown in the layer list
+ *   group      the muted line under it
+ *   accent     colour of the row's left edge
+ *   defaultZ   where it sits before the user reorders anything
+ *   isEnabled/setEnabled, getOpacity/setOpacity, applyZ
+ */
+const externals = new Map();
+
+export const isExternalLayer = (id) => externals.has(id);
+export const externalLayer = (id) => externals.get(id) || null;
+
+/** Preset stacking position, used only to place a layer on first registration. */
+const presetZ = (id) => externals.get(id)?.defaultZ ?? LAYER_Z[id] ?? 300;
+
+/**
+ * Layers the user has deliberately positioned.
+ *
+ * `setLayerOrder` drops everything not currently active to the bottom of the
+ * stack, which is harmless for a weather group that is switched off but wrong
+ * for an overlay that appears later: the first shape you drew turned up
+ * underneath everything. An overlay the user has never moved is re-seated at its
+ * preset when it becomes visible.
+ */
+const positioned = new Set();
+
+function seatByPreset(id) {
+  const at = order.indexOf(id);
+  if (at >= 0) order.splice(at, 1);
+  const target = order.findIndex((other) => presetZ(other) > presetZ(id));
+  if (target < 0) order.push(id);
+  else order.splice(target, 0, id);
+}
+
+/**
+ * Brings an overlay that has just appeared to the top of the stack.
+ *
+ * The drawn shapes become visible the moment the first polygon closes, without
+ * anyone switching them on, and they were inheriting whatever position an
+ * inactive entry had drifted to — underneath the weather, where a shape you just
+ * drew is invisible.
+ *
+ * The top, not the preset: presets place a layer at registration, before anyone
+ * has reordered anything, and seating against a list the user has since
+ * rearranged puts it somewhere arbitrary. Something you have this second drawn
+ * belongs on top.
+ */
+export function bringOverlayToFront(id) {
+  if (!externals.has(id) || positioned.has(id)) return;
+  const at = order.indexOf(id);
+  if (at >= 0) order.splice(at, 1);
+  order.push(id);
+  applyOrder();
+}
+
+export function registerExternalLayer(descriptor) {
+  if (!descriptor?.id) return;
+  externals.set(descriptor.id, descriptor);
+
+  // `order` runs bottom-to-top, so the layer goes in front of the first entry
+  // that is meant to sit above it. This is what puts the automated outlook above
+  // satellite and below radar without hard-coding neighbours.
+  if (!order.includes(descriptor.id)) seatByPreset(descriptor.id);
+  applyOrder();
+}
+
+/** Everything the layer list needs about one entry, slot or overlay. */
+export function layerView(id) {
+  const external = externals.get(id);
+  if (external) {
+    return {
+      title: external.label,
+      meta: external.group || 'Overlay',
+      accent: external.accent || 'var(--wx-outlook)',
+      opacity: external.getOpacity?.() ?? 1,
+      external: true,
+    };
+  }
+  const slot = slots.get(id);
+  const def = slot ? getLayerDef(id, slot.type) : null;
+  return {
+    title: def?.label || slot?.type || id,
+    meta: LAYER_LABELS[id] || id,
+    accent: null,
+    opacity: slot?.opacity ?? 1,
+    external: false,
+  };
 }
 
 /**
@@ -131,8 +259,12 @@ export function applyOrder() {
     const z = BASE_Z + index * STEP;
     const slot = slots.get(group);
     if (slot) slot.zIndex = z;
+    externals.get(group)?.applyZ(z);
     setPaneZ(group, z);
     setMirrorOrder(group, index);
+    // MapsGL owns its own canvas outside the pane stack, so it has to be moved
+    // explicitly or it stays pinned below every weather pane.
+    applyMapsGLPresentation();
   }
 }
 

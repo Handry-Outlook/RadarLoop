@@ -23,25 +23,23 @@ import { buildOutlookPanel } from './outlookPanel.js';
 import { buildToolsPanel } from './toolsPanel.js';
 import { buildLayerManagerPanel } from './layerManager.js';
 import { refreshTimelineAxis } from './timeline.js';
+import { icon } from './icons.js';
 
 /* ------------------------------------------------------------------ *
  * Group declaration
  * ------------------------------------------------------------------ */
 
 export const PANEL_GROUPS = [
-  { id: 'layers', icon: '≣', label: 'Layers', hint: 'What is drawn, and in what order' },
-  { id: 'basemap', icon: '🗺', label: 'Base map', hint: 'Background and reference overlays' },
-  { id: 'precip', icon: '◍', label: 'Radar & satellite', hint: 'Precipitation and cloud imagery', layers: ['radar', 'satellite'] },
-  { id: 'air', icon: '≋', label: 'Pressure & wind', hint: 'Isobars, fronts and wind', layers: ['isobar', 'surfaceFront', 'wind'] },
-  // U+FE0E asks for the text presentation. U+26A1 is the one glyph in this rail
-  // that defaults to *emoji* presentation, so it came out as a yellow bolt while
-  // every other icon rendered monochrome. The rest are text-default already.
-  { id: 'lightning', icon: '⚡︎', label: 'Lightning', hint: 'UK strikes, density and nowcasts' },
-  { id: 'severe', icon: '⚠', label: 'Severe & warnings', hint: 'Nowcasts, storms, rotation and alerts', layers: ['nowcast', 'warning', 'tropicalStorms', 'rotation', 'lightning'] },
-  { id: 'observations', icon: '🌡', label: 'Observations', hint: 'Surface, marine and accumulated fields', layers: ['observation'] },
-  { id: 'outlook', icon: '◈', label: 'Outlooks', hint: 'Manual and automated HOCO' },
-  { id: 'tools', icon: '✎', label: 'Tools', hint: 'Drawing, imports and export' },
-  { id: 'settings', icon: '⚙', label: 'Settings', hint: 'Time, performance and appearance' },
+  { id: 'layers', icon: 'layers', label: 'Layers', hint: 'What is drawn, and in what order' },
+  { id: 'basemap', icon: 'basemap', label: 'Base map', hint: 'Background and reference overlays' },
+  { id: 'precip', icon: 'radar', label: 'Radar & satellite', hint: 'Precipitation and cloud imagery', layers: ['radar', 'satellite'] },
+  { id: 'air', icon: 'pressure', label: 'Pressure & wind', hint: 'Isobars, fronts and wind', layers: ['isobar', 'surfaceFront', 'wind'] },
+  { id: 'lightning', icon: 'lightning', label: 'Lightning', hint: 'UK strikes, density and nowcasts' },
+  { id: 'severe', icon: 'severe', label: 'Severe & warnings', hint: 'Nowcasts, storms, rotation and alerts', layers: ['nowcast', 'warning', 'tropicalStorms', 'rotation', 'lightning'] },
+  { id: 'observations', icon: 'observations', label: 'Observations', hint: 'Surface, marine and accumulated fields', layers: ['observation'] },
+  { id: 'outlook', icon: 'outlook', label: 'Outlooks', hint: 'Manual and automated HOCO' },
+  { id: 'tools', icon: 'tools', label: 'Tools', hint: 'Drawing, imports and export' },
+  { id: 'settings', icon: 'settings', label: 'Settings', hint: 'Time, performance and appearance' },
 ];
 
 /** Accent colour per weather layer group. */
@@ -316,7 +314,9 @@ function buildLightningPanel() {
     label: 'Thunder cue',
     hint: 'Short rumble on new strikes in view',
     checked: lightning.sound,
-    onChange: (checked) => { lightning.sound = checked; },
+    // Through setLightningOption so it persists: the cue silently reset to off
+    // on every reload, which is most of why it never seemed to work.
+    onChange: (checked) => setLightningOption('sound', checked),
   }).node);
 
   return el('div', { class: 'stack' }, nodes);
@@ -542,7 +542,7 @@ export function buildRail() {
       'aria-selected': 'false',
       'aria-label': group.label,
       onClick: () => openGroup(group.id),
-    }, group.icon);
+    }, icon(group.icon));
 
     // Visual break before the non-layer groups.
     const needsDivider = group.id === 'outlook';
@@ -566,5 +566,8 @@ export function syncCards() {
   syncRail();
 }
 
-on(EVENTS.LAYER_TOGGLED, syncRail);
-on(EVENTS.LAYER_SELECTED, syncRail);
+// syncCards, not syncRail: a layer can be switched off from the layer-order tab
+// or by a share link as well as from its own card, and only the rail was being
+// brought back into line — the card kept showing the switch on.
+on(EVENTS.LAYER_TOGGLED, syncCards);
+on(EVENTS.LAYER_SELECTED, syncCards);

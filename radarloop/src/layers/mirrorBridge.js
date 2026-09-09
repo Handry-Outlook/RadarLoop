@@ -311,6 +311,10 @@ const OVERLAY_PANES = [
   ['nowcast', ['nowcastFillPane', 'nowcastOutlinePane']],
   ['outlook', ['publishedOutlookFillPane', 'publishedOutlookOutlinePane']],
   ['outlook-auto', ['hocoFillPane', 'hocoOutlinePane']],
+  // Hand-drawn shapes are an overlay like the rest: registering them as an
+  // orderable layer put them in the layer list but did nothing for 3D, where
+  // they stayed invisible because this list is what reaches the GL view.
+  ['drawings', ['drawPane']],
 ];
 
 /** Every canvas element currently painted into a named Leaflet pane. */

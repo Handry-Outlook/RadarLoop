@@ -966,23 +966,17 @@
   background: var(--surface-0);
   font-family: var(--font-sans);
 }
-/* Provider credits are not shown anywhere in the interface. The map libraries
-   and their plugins each add their own — Leaflet's attribution control, the
-   Mapbox GL logo and attribution, MapTiler's logo, and whatever MapsGL injects —
-   and several of them re-add it after a restyle or a layer change, so they are
-   suppressed here as well as being switched off at construction. */
-.leaflet-control-attribution,
-.mapboxgl-ctrl-attrib,
-.mapboxgl-ctrl-logo,
-.mapboxgl-ctrl-attrib-button,
-.maplibregl-ctrl-attrib,
-.maplibregl-ctrl-logo,
-.maptiler-logo,
-.mapsgl-attribution,
-[class*='-ctrl-attrib'],
-[class*='-ctrl-logo'] {
-  display: none !important;
+/* Base map credits (Mapbox, OpenStreetMap, MapTiler, OpenTopoMap, Esri) stay —
+   they are licence-required and they identify the map, not the weather data.
+   Weather-provider names are removed further upstream, in data/sourceNames.js. */
+.leaflet-control-attribution {
+  background: color-mix(in srgb, var(--surface-1) 82%, transparent) !important;
+  color: var(--text-tertiary) !important;
+  font-size: 10px !important;
+  border-radius: var(--radius-sm) 0 0 0;
+  padding: 2px 6px !important;
 }
+.leaflet-control-attribution a { color: var(--text-secondary) !important; }
 
 /* Weather tiles: seams between adjacent tiles are very visible on
    semi-transparent overlays, so nudge them to overlap by a hair. */
@@ -1212,6 +1206,22 @@
   /* The map must clear the docked rail and timeline. */
   .map-area { padding-bottom: 0; }
 
+  /* Leaflet pins its attribution to the bottom of the map container, which on a
+     phone sits underneath the docked rail and timeline. Move it to the top edge
+     so it stays legible (and legally present) without colliding. */
+  .leaflet-control-attribution {
+    position: fixed;
+    top: var(--topbar-height);
+    right: 0;
+    bottom: auto;
+    max-width: 62vw;
+    font-size: 9px !important;
+    border-radius: 0 0 0 var(--radius-sm);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   /* Ticks need their own room once labels sit under them. */
   .timeline__ticks { height: 16px; }
 
@@ -1236,4 +1246,62 @@
   /* The rail and the sheet keep stacking against the measured docks here too;
      overriding them with fixed values is what let the sheet slide back under
      the timeline in landscape. The sheet simply ends up shorter. */
+}
+
+/* ------------------------------------------------------------------ *
+ * Drawn icons
+ * ------------------------------------------------------------------ */
+
+/* The icon set replaced the text glyphs the buttons used to hold; see
+   ui/icons.js for why. Sizing lives here so a button can size its own icon. */
+.icon {
+  display: block;
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+.rail__btn .icon { width: 21px; height: 21px; }
+.btn--icon .icon { width: 18px; height: 18px; }
+
+/* Waiting on the browser's location fix, which can take several seconds. */
+.btn--busy { opacity: 0.6; pointer-events: none; }
+.btn--busy .icon { animation: icon-pulse 1.1s ease-in-out infinite; }
+@keyframes icon-pulse { 50% { opacity: 0.35; } }
+
+/* The location dot and its accuracy halo. */
+.locate-dot { filter: drop-shadow(0 1px 3px rgb(0 0 0 / 0.45)); }
+.locate-halo { pointer-events: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .btn--busy .icon { animation: none; }
+}
+
+/* ------------------------------------------------------------------ *
+ * Drawing toolbar
+ * ------------------------------------------------------------------ */
+
+/* leaflet-draw's toolbar is placed by Leaflet inside the map container, whose
+   bottom edge runs underneath the docked timeline. Its default top-left corner
+   is worse still — that is where the rail and the top bar are. Bottom-right,
+   lifted clear of the timeline, is the only corner nothing else claims. */
+.leaflet-bottom.leaflet-right {
+  bottom: calc(var(--timeline-height) + var(--space-3));
+}
+.leaflet-draw-toolbar a {
+  background-color: var(--surface-1) !important;
+  border-bottom-color: var(--border) !important;
+}
+.leaflet-draw-toolbar a:hover { background-color: var(--surface-3) !important; }
+.leaflet-draw-actions a {
+  background: var(--surface-2) !important;
+  color: var(--text-primary) !important;
+  border-left-color: var(--border) !important;
+}
+.leaflet-draw-tooltip { display: none; }
+
+@media (max-width: 780px) {
+  /* The docked chrome is measured at runtime; see ui/layout.js. */
+  .leaflet-bottom.leaflet-right {
+    bottom: calc(var(--timeline-dock, 96px) + var(--rail-dock, 52px) + var(--space-2));
+  }
 }

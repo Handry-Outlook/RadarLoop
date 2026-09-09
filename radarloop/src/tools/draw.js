@@ -11,6 +11,9 @@ import { RISK_COLORS, RISK_LEVELS } from '../config.js';
 import { map, safeRemove } from '../core/map.js';
 import { escapeHtml, loadSetting, saveSetting } from '../core/util.js';
 import { emit, EVENTS } from '../core/bus.js';
+import { is3D } from '../core/map3d.js';
+import { start as start3D, stop as stop3D, isDrawing3D } from './draw3d.js';
+import { bringOverlayToFront } from '../layers/control.js';
 
 let drawnItems = null;
 let drawControl = null;
@@ -40,7 +43,9 @@ function styleForRisk(risk) {
  * ------------------------------------------------------------------ */
 
 export function ensureDrawnItems() {
-  if (!drawnItems) drawnItems = new L.FeatureGroup();
+  // Its own pane, so the shapes can be restacked from the layer list like any
+  // other overlay rather than being stuck wherever Leaflet put them.
+  if (!drawnItems) drawnItems = new L.FeatureGroup([], { pane: 'drawPane' });
   if (!map.hasLayer(drawnItems)) drawnItems.addTo(map);
   return drawnItems;
 }
@@ -48,7 +53,20 @@ export function ensureDrawnItems() {
 export function toggleDrawing(enabled = !drawing) {
   const items = ensureDrawnItems();
 
+  // In 3D the Leaflet map is behind the GL canvas, so leaflet-draw has nothing
+  // to draw on and no clicks to receive. The GL collector takes over there and
+  // writes into this same feature group.
+  if (enabled && is3D()) {
+    stop3D();
+    drawing = start3D((ring) => {
+      addPolygon(L.polygon(ring));
+      drawing = false;
+      emit(EVENTS.DRAW_MODE, { drawing: false });
+    }, RISK_COLORS[currentRisk.value]);
+    return drawing;
+  }
   if (!enabled) {
+    stop3D();
     if (drawControl) {
       map.removeControl(drawControl);
       drawControl = null;
@@ -63,6 +81,9 @@ export function toggleDrawing(enabled = !drawing) {
   }
 
   drawControl = new L.Control.Draw({
+    // Bottom-right: the default top-left corner is where the rail and the top bar
+    // are, and the toolbar sat on top of them.
+    position: 'bottomright',
     edit: { featureGroup: items },
     draw: {
       polygon: { allowIntersection: false, showArea: true, shapeOptions: styleForRisk(currentRisk.value) },
@@ -82,17 +103,33 @@ export function toggleDrawing(enabled = !drawing) {
 }
 
 function onCreated(event) {
-  const layer = event.layer;
+  addPolygon(event.layer);
+}
+
+/**
+ * Styles a finished shape and files it, whichever view drew it.
+ *
+ * Shared so a polygon drawn in 3D is indistinguishable from one drawn in 2D —
+ * same style, same popup, same feature group, same KML export.
+ */
+export function addPolygon(layer) {
   const risk = currentRisk.value;
+  layer.options.pane = 'drawPane';
   layer.setStyle(styleForRisk(risk));
   layer.feature = { type: 'Feature', properties: { name: risk } };
   layer.bindPopup(`<div class="wx-popup"><header class="wx-popup__head" style="--accent:${RISK_COLORS[risk]}">
     <strong>${escapeHtml(risk)}</strong></header></div>`, { className: 'wx-popup-shell' });
+  const first = drawnLayerCount() === 0;
   ensureDrawnItems().addLayer(layer);
+  // The first shape makes the drawings layer visible; put it on top rather than
+  // inheriting wherever an inactive entry had drifted to.
+  if (first) bringOverlayToFront('drawings');
   emit(EVENTS.LEGEND_INVALIDATED);
+  emit(EVENTS.LAYER_ORDER, { order: [] });
+  return layer;
 }
 
-export const isDrawing = () => drawing;
+export const isDrawing = () => drawing || isDrawing3D();
 
 export function setRisk(risk) {
   currentRisk.value = risk;
@@ -134,6 +171,24 @@ export function clearDrawn() {
 }
 
 export const hasDrawn = () => !!drawnItems && drawnItems.getLayers().length > 0;
+
+/** How many shapes have been drawn. */
+export const drawnLayerCount = () => (drawnItems ? drawnItems.getLayers().length : 0);
+
+/** Whether the drawn shapes are currently on the map. */
+export const drawnVisible = () => !!drawnItems && map.hasLayer(drawnItems);
+
+/**
+ * Shows or hides the drawn shapes without discarding them.
+ *
+ * The layer list offers them as an ordinary layer, and turning a layer off there
+ * must not destroy anything the user has drawn.
+ */
+export function setDrawnVisible(visible) {
+  if (!drawnItems) return;
+  if (visible) drawnItems.addTo(map);
+  else map.removeLayer(drawnItems);
+}
 
 /* ------------------------------------------------------------------ *
  * KML export

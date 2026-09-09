@@ -1471,23 +1471,17 @@ input[type='number'] { color-scheme: inherit; }
   background: var(--surface-0);
   font-family: var(--font-sans);
 }
-/* Provider credits are not shown anywhere in the interface. The map libraries
-   and their plugins each add their own — Leaflet's attribution control, the
-   Mapbox GL logo and attribution, MapTiler's logo, and whatever MapsGL injects —
-   and several of them re-add it after a restyle or a layer change, so they are
-   suppressed here as well as being switched off at construction. */
-.leaflet-control-attribution,
-.mapboxgl-ctrl-attrib,
-.mapboxgl-ctrl-logo,
-.mapboxgl-ctrl-attrib-button,
-.maplibregl-ctrl-attrib,
-.maplibregl-ctrl-logo,
-.maptiler-logo,
-.mapsgl-attribution,
-[class*='-ctrl-attrib'],
-[class*='-ctrl-logo'] {
-  display: none !important;
+/* Base map credits (Mapbox, OpenStreetMap, MapTiler, OpenTopoMap, Esri) stay —
+   they are licence-required and they identify the map, not the weather data.
+   Weather-provider names are removed further upstream, in data/sourceNames.js. */
+.leaflet-control-attribution {
+  background: color-mix(in srgb, var(--surface-1) 82%, transparent) !important;
+  color: var(--text-tertiary) !important;
+  font-size: 10px !important;
+  border-radius: var(--radius-sm) 0 0 0;
+  padding: 2px 6px !important;
 }
+.leaflet-control-attribution a { color: var(--text-secondary) !important; }
 
 /* Weather tiles: seams between adjacent tiles are very visible on
    semi-transparent overlays, so nudge them to overlap by a hair. */
@@ -1717,6 +1711,22 @@ input[type='number'] { color-scheme: inherit; }
   /* The map must clear the docked rail and timeline. */
   .map-area { padding-bottom: 0; }
 
+  /* Leaflet pins its attribution to the bottom of the map container, which on a
+     phone sits underneath the docked rail and timeline. Move it to the top edge
+     so it stays legible (and legally present) without colliding. */
+  .leaflet-control-attribution {
+    position: fixed;
+    top: var(--topbar-height);
+    right: 0;
+    bottom: auto;
+    max-width: 62vw;
+    font-size: 9px !important;
+    border-radius: 0 0 0 var(--radius-sm);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   /* Ticks need their own room once labels sit under them. */
   .timeline__ticks { height: 16px; }
 
@@ -1741,6 +1751,64 @@ input[type='number'] { color-scheme: inherit; }
   /* The rail and the sheet keep stacking against the measured docks here too;
      overriding them with fixed values is what let the sheet slide back under
      the timeline in landscape. The sheet simply ends up shorter. */
+}
+
+/* ------------------------------------------------------------------ *
+ * Drawn icons
+ * ------------------------------------------------------------------ */
+
+/* The icon set replaced the text glyphs the buttons used to hold; see
+   ui/icons.js for why. Sizing lives here so a button can size its own icon. */
+.icon {
+  display: block;
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+.rail__btn .icon { width: 21px; height: 21px; }
+.btn--icon .icon { width: 18px; height: 18px; }
+
+/* Waiting on the browser's location fix, which can take several seconds. */
+.btn--busy { opacity: 0.6; pointer-events: none; }
+.btn--busy .icon { animation: icon-pulse 1.1s ease-in-out infinite; }
+@keyframes icon-pulse { 50% { opacity: 0.35; } }
+
+/* The location dot and its accuracy halo. */
+.locate-dot { filter: drop-shadow(0 1px 3px rgb(0 0 0 / 0.45)); }
+.locate-halo { pointer-events: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .btn--busy .icon { animation: none; }
+}
+
+/* ------------------------------------------------------------------ *
+ * Drawing toolbar
+ * ------------------------------------------------------------------ */
+
+/* leaflet-draw's toolbar is placed by Leaflet inside the map container, whose
+   bottom edge runs underneath the docked timeline. Its default top-left corner
+   is worse still — that is where the rail and the top bar are. Bottom-right,
+   lifted clear of the timeline, is the only corner nothing else claims. */
+.leaflet-bottom.leaflet-right {
+  bottom: calc(var(--timeline-height) + var(--space-3));
+}
+.leaflet-draw-toolbar a {
+  background-color: var(--surface-1) !important;
+  border-bottom-color: var(--border) !important;
+}
+.leaflet-draw-toolbar a:hover { background-color: var(--surface-3) !important; }
+.leaflet-draw-actions a {
+  background: var(--surface-2) !important;
+  color: var(--text-primary) !important;
+  border-left-color: var(--border) !important;
+}
+.leaflet-draw-tooltip { display: none; }
+
+@media (max-width: 780px) {
+  /* The docked chrome is measured at runtime; see ui/layout.js. */
+  .leaflet-bottom.leaflet-right {
+    bottom: calc(var(--timeline-dock, 96px) + var(--rail-dock, 52px) + var(--space-2));
+  }
 }
 
   </style>
@@ -2023,24 +2091,29 @@ const PANES = [
   { name: 'satellitePane', z: 140, parent: 'overlayPane' },
   // Outlook fills interleave here so radar echoes stay readable through them:
   // satellite (140) < fill (145) < radar (150).
-  { name: 'nowcastFillPane', z: 145, parent: 'overlayPane', clickThrough: true },
-  { name: 'publishedOutlookFillPane', z: 145, parent: 'overlayPane', clickThrough: true },
+  { name: 'nowcastFillPane', z: 144, parent: 'overlayPane', clickThrough: true },
+  { name: 'nowcastOutlinePane', z: 145, parent: 'overlayPane' },
+  // Automated outlook above satellite, below radar; the manual one above it.
+  // Both are ordinary orderable layers now, so their outlines live with their
+  // fills rather than being pinned to the top of the whole map.
   { name: 'hocoFillPane', z: 146, parent: 'overlayPane', clickThrough: true },
+  { name: 'hocoOutlinePane', z: 147, parent: 'overlayPane', clickThrough: true },
+  { name: 'publishedOutlookFillPane', z: 148, parent: 'overlayPane', clickThrough: true },
+  { name: 'publishedOutlookOutlinePane', z: 149, parent: 'overlayPane', clickThrough: true },
   { name: 'radarPane', z: 150, parent: 'overlayPane' },
   { name: 'operaRadarPane', z: 155, parent: 'overlayPane' },
   { name: 'observationPane', z: 160, parent: 'overlayPane' },
   { name: 'isobarPane', z: 170, parent: 'overlayPane' },
   { name: 'frontPane', z: 180, parent: 'overlayPane' },
   { name: 'warningFillPane', z: 190, parent: 'overlayPane', clickThrough: true },
+  // Hand-drawn shapes start above the weather; like the outlooks they can be
+  // restacked from the layer list.
+  { name: 'drawPane', z: 192, parent: 'overlayPane' },
 
   // --- top-level: above the whole weather stack ---
   { name: 'warningPane', z: 550 },
   { name: 'labelsPane', z: 600, clickThrough: true },
   { name: 'lightningPane', z: 1000 },
-  // Outlook outlines sit above everything so a risk boundary is never lost.
-  { name: 'nowcastOutlinePane', z: 2001 },
-  { name: 'publishedOutlookOutlinePane', z: 2002, clickThrough: true },
-  { name: 'hocoOutlinePane', z: 2003, clickThrough: true },
 ];
 
 /** Per-layer-group default z-index within the overlay stack. */
@@ -2163,6 +2236,8 @@ const EVENTS = {
   LAYER_RENDERED: 'layer:rendered',
   LAYER_FAILED: 'layer:failed',
   BASEMAP_CHANGED: 'basemap:changed',
+  /** Drawing started or stopped, so the tools panel can follow along. */
+  DRAW_MODE: 'draw:mode',
   LIGHTNING_DATA: 'lightning:data',
   LIGHTNING_FILTERED: 'lightning:filtered',
   /** A lightning option changed programmatically; controls should re-sync. */
@@ -2600,7 +2675,7 @@ const lightning = {
   counter: false,
   counterDensity: 50,
   showAll: false,
-  sound: false,
+  sound: loadSetting('lightningSound', false),
   nowcast: false,
   nowcastConfidence: 0.1,
   lastUpdate: null,
@@ -2665,6 +2740,7 @@ function setLightningOption(key, value, { persist = true } = {}) {
     lifespanHours: 'lightningLifespan',
     colorByAge: 'lightningColorByAge',
     showLayer: 'lightningShowLayer',
+    sound: 'lightningSound',
   }[key];
   if (persisted) saveSetting(persisted, value);
 }
@@ -2721,58 +2797,59 @@ const { CREDENTIALS } = __mod('config.js');
 const mapboxStyle = (style) => ({
   kind: 'xyz',
   url: `https://api.mapbox.com/styles/v1/mapbox/${style}/tiles/256/{z}/{x}/{y}@2x?access_token=${CREDENTIALS.mapbox}`,
-  options: { tileSize: 256 },
+  options: { tileSize: 256, attribution: '© Mapbox © OpenStreetMap' },
   // 3D renders the same style natively rather than as raster tiles, so the base
   // map choice carries across instead of being ignored there.
   glStyle: `mapbox://styles/mapbox/${style}`,
 });
 
 const BASEMAPS = {
-  'mapbox-traffic-night': { label: 'Traffic Night', group: 'Standard', dark: true, ...mapboxStyle('traffic-night-v2') },
-  'mapbox-traffic-day': { label: 'Traffic Day', group: 'Standard', ...mapboxStyle('traffic-day-v2') },
-  'mapbox-dark': { label: 'Dark', group: 'Standard', dark: true, ...mapboxStyle('dark-v11') },
-  'mapbox-light': { label: 'Light', group: 'Standard', ...mapboxStyle('light-v11') },
-  'mapbox-navigation': { label: 'Navigation Day', group: 'Standard', ...mapboxStyle('navigation-day-v1') },
-  'mapbox-navigation-night': { label: 'Navigation Night', group: 'Standard', dark: true, ...mapboxStyle('navigation-night-v1') },
-  custom: { label: 'Classic Streets', group: 'Standard', ...mapboxStyle('streets-v12') },
-  'mapbox-satellite': { label: 'Satellite', group: 'Standard', dark: true, ...mapboxStyle('satellite-v9') },
-  'mapbox-streets-satellite': { label: 'Satellite Streets', group: 'Standard', dark: true, ...mapboxStyle('satellite-streets-v12') },
-  'mapbox-outdoors': { label: 'Outdoors', group: 'Standard', ...mapboxStyle('outdoors-v12') },
-  'mapbox-contrast': { label: 'High Contrast', group: 'Standard', ...mapboxStyle('high-contrast-v1') },
+  'mapbox-traffic-night': { label: 'Traffic Night', group: 'Mapbox', dark: true, ...mapboxStyle('traffic-night-v2') },
+  'mapbox-traffic-day': { label: 'Traffic Day', group: 'Mapbox', ...mapboxStyle('traffic-day-v2') },
+  'mapbox-dark': { label: 'Dark', group: 'Mapbox', dark: true, ...mapboxStyle('dark-v11') },
+  'mapbox-light': { label: 'Light', group: 'Mapbox', ...mapboxStyle('light-v11') },
+  'mapbox-navigation': { label: 'Navigation Day', group: 'Mapbox', ...mapboxStyle('navigation-day-v1') },
+  'mapbox-navigation-night': { label: 'Navigation Night', group: 'Mapbox', dark: true, ...mapboxStyle('navigation-night-v1') },
+  custom: { label: 'Classic Streets', group: 'Mapbox', ...mapboxStyle('streets-v12') },
+  'mapbox-satellite': { label: 'Satellite', group: 'Mapbox', dark: true, ...mapboxStyle('satellite-v9') },
+  'mapbox-streets-satellite': { label: 'Satellite Streets', group: 'Mapbox', dark: true, ...mapboxStyle('satellite-streets-v12') },
+  'mapbox-outdoors': { label: 'Outdoors', group: 'Mapbox', ...mapboxStyle('outdoors-v12') },
+  'mapbox-contrast': { label: 'High Contrast', group: 'Mapbox', ...mapboxStyle('high-contrast-v1') },
 
   opentopo: {
-    label: 'Topographic',
-    group: 'Alternative',
+    label: 'OpenTopoMap',
+    group: 'Open data',
     kind: 'xyz',
     url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-    options: {},
+    options: { attribution: 'Map data: © OpenTopoMap (CC-BY-SA)' },
   },
   osm: {
-    label: 'Street Map',
-    group: 'Alternative',
+    label: 'OpenStreetMap',
+    group: 'Open data',
     kind: 'xyz',
     url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    options: {},
+    options: { attribution: '© OpenStreetMap' },
   },
   esri: {
-    label: 'World Imagery',
-    group: 'Alternative',
+    label: 'Esri World Imagery',
+    group: 'Open data',
     dark: true,
     kind: 'xyz',
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    options: {},
+    options: { attribution: 'Tiles © Esri' },
   },
 
-  'maptiler-streets': { label: 'Streets', group: 'Data Visualisation', kind: 'maptiler', style: 'STREETS' },
-  'maptiler-outdoor': { label: 'Outdoor', group: 'Data Visualisation', kind: 'maptiler', style: 'OUTDOOR' },
-  'maptiler-light': { label: 'Dataviz Light', group: 'Data Visualisation', kind: 'maptiler', style: 'DATAVIZ.LIGHT' },
-  'maptiler-dark': { label: 'Dataviz Dark', group: 'Data Visualisation', kind: 'maptiler', dark: true, style: 'DATAVIZ.DARK' },
+  'maptiler-streets': { label: 'Streets', group: 'MapTiler', kind: 'maptiler', style: 'STREETS' },
+  'maptiler-outdoor': { label: 'Outdoor', group: 'MapTiler', kind: 'maptiler', style: 'OUTDOOR' },
+  'maptiler-light': { label: 'Dataviz Light', group: 'MapTiler', kind: 'maptiler', style: 'DATAVIZ.LIGHT' },
+  'maptiler-dark': { label: 'Dataviz Dark', group: 'MapTiler', kind: 'maptiler', dark: true, style: 'DATAVIZ.DARK' },
 };
 
 /** Transparent boundary + place-label overlay drawn above the weather stack. */
 const REFERENCE_OVERLAY = {
   url: `https://api.mapbox.com/styles/v1/handry20191026/cmkxzwlsx000t01sfe7m81tqm/draft/tiles/{z}/{x}/{y}?access_token=${CREDENTIALS.mapbox}`,
   options: {
+    attribution: '© Mapbox',
     pane: 'labelsPane',
     opacity: 1,
     tileSize: 512,
@@ -3547,13 +3624,14 @@ function createMap(containerId = 'map') {
 
   const instance = L.map(container, {
     zoomControl: false,
-    // The attribution control exists only to name data providers, which the
-    // interface does not disclose. See data/sourceNames.js.
-    attributionControl: false,
+    attributionControl: true,
     minZoom: MAP_DEFAULTS.minZoom,
     maxZoom: MAP_DEFAULTS.maxZoom,
     worldCopyJump: true,
   }).setView(MAP_DEFAULTS.center, MAP_DEFAULTS.zoom);
+
+  // The default 'Leaflet' prefix is library branding, not a data credit.
+  instance.attributionControl.setPrefix('');
 
   return instance;
 }
@@ -3616,6 +3694,7 @@ function buildBasemap(id) {
     const style = def.style.split('.').reduce((acc, part) => acc?.[part], L.maptiler.MapStyle);
     return L.maptiler.maptilerLayer({
       apiKey: CREDENTIALS.maptiler,
+      attribution: '© MapTiler © OpenStreetMap contributors',
       style,
     });
   }
@@ -3730,7 +3809,13 @@ function canvasesInOverlay() {
  * its layers into this one canvas — so the mirror captures the canvas instead,
  * and needs to know which element that is.
  */
-const mapsglSurfaces = () => mapsglCanvases.filter((c) => c.isConnected);
+function mapsglSurfaces() {
+  mapsglCanvases = mapsglCanvases.filter((c) => c.isConnected);
+  // The controller can attach its surface later than the two capture passes at
+  // start-up, so an empty list is re-checked rather than trusted.
+  if (!mapsglCanvases.length && mapsglController) mapsglCanvases = canvasesInOverlay();
+  return mapsglCanvases;
+}
 
 function ensureMapsGL() {
   clearTimeout(mapsglIdleTimer);
@@ -3930,16 +4015,21 @@ __define('data/sourceNames.js', (__exports, __mod) => {
  * to…"). Every entry here is an initialism that only ever appears capitalised.
  */
 const ACRONYMS = [
-  'NOAA', 'GOES', 'JMA', 'NASA', 'GPM', 'DTN', 'OSM', 'MTG',
+  'NOAA', 'GOES', 'JMA', 'NASA', 'GPM', 'DTN', 'MTG',
   'EUMETSAT', 'EUMETNET', 'OPERA', 'UKMO', 'ECMWF', 'NWS',
 ];
 
-/** Full names, matched case-insensitively. Longest first so prefixes lose. */
+/**
+ * Full names, matched case-insensitively. Longest first so prefixes lose.
+ *
+ * Base map providers are deliberately absent. Mapbox, OpenStreetMap, MapTiler,
+ * OpenTopoMap and Esri credits stay in the attribution control: those are the
+ * licence-required ones, and they identify the *map*, not the weather data.
+ */
 const NAMES = [
-  'OpenStreetMap contributors', 'OpenStreetMap', 'OpenTopoMap',
   'Met Office', 'MetOffice', 'Meteoguard', 'MeteoSat', 'Copernicus',
-  'X Weather', 'XWeather', 'Xweather', 'MapsGL', 'MapTiler', 'Mapbox',
-  'RainViewer', 'ArcGIS', 'Foreca', 'Aeris', 'Windy', 'Esri',
+  'X Weather', 'XWeather', 'Xweather', 'MapsGL',
+  'RainViewer', 'Foreca', 'Aeris', 'Windy',
 ];
 
 const ACRONYM_RE = new RegExp(`\\b(?:${ACRONYMS.join('|')})\\b`, 'g');
@@ -5916,6 +6006,8 @@ function attemptBudget({ animating, historical, activeLayers }) {
  */
 const LADDER = [0, 1, 2, 3, 4, 6, 8, 12, 16, 24, 36, 48, 72, 96, 144, 288];
 const REFINE_LIMIT = 5;
+/** How far a dense sweep goes when the geometric ladder finds nothing. */
+const DENSE_LIMIT = 12;
 /** Re-discover periodically so a recovering feed is picked up again. */
 const LAG_TTL_MS = 10 * 60 * 1000;
 
@@ -5945,6 +6037,30 @@ async function discoverLag(productKey, def, rounded, interval, extraTokens) {
         break;
       }
       previous = offset;
+    }
+
+    // The ladder is geometric, so it steps straight over most offsets: between
+    // rungs 4 and 6 it never asks for 5. A provider keeping only one frame at an
+    // offset the ladder skips is therefore invisible to it — which is exactly
+    // what happened to the marine grids when their window narrowed to a single
+    // hour five hours back. On failure, sweep the near offsets it missed. Only
+    // reached when the ladder found nothing, and bounded, so the cost is a dozen
+    // probes once per product per TTL rather than per frame.
+    if (hit < 0) {
+      const probed = new Set(LADDER.filter((o) => o <= DENSE_LIMIT));
+      for (let offset = 1; offset <= DENSE_LIMIT; offset += 1) {
+        if (probed.has(offset)) continue;
+        const ts = rounded - offset * interval;
+        if (ts < Date.now() - 400 * interval) break;
+        const url = expandUrl(def.url, new Date(ts), extraTokens);
+        if (!url) break;
+        // eslint-disable-next-line no-await-in-loop
+        if (await probe(url, def, productKey)) {
+          hit = offset;
+          previous = offset - 1;
+          break;
+        }
+      }
     }
 
     if (hit < 0) return null;
@@ -7209,8 +7325,9 @@ __define('layers/mapsgl.js', (__exports, __mod) => {
  * "removing a layer" and "removing the canvas" are different operations — the
  * canvas only goes when the controller itself is disposed.
  */
-const { getMapsGL, releaseMapsGL, whenMapsGLReady } = __mod('core/map.js');
+const { getMapsGL, mapsglSurfaces, releaseMapsGL, whenMapsGLReady } = __mod('core/map.js');
 const { emit, EVENTS } = __mod('core/bus.js');
+const { slots } = __mod('core/state.js');
 /** group -> MapsGL layer id currently added. */
 const active = new Map();
 
@@ -7240,6 +7357,10 @@ async function renderMapsGLLayer(group, type, slot, def) {
 
   try {
     controller.addWeatherLayer(layerId, { opacity: slot.opacity });
+    // The surface is created asynchronously, so presentation is applied again
+    // once it exists rather than only on the frame the layer was added.
+    applyMapsGLPresentation();
+    for (const delay of [400, 1200, 2400]) setTimeout(applyMapsGLPresentation, delay);
     emit(EVENTS.LAYER_RENDERED, { group, type, mapsgl: true });
   } catch (error) {
     console.warn(`[mapsgl] could not add "${layerId}":`, error);
@@ -7285,6 +7406,7 @@ function clearMapsGLLayer(group) {
   const controller = getMapsGL();
   if (controller) removeMapsGLLayer(controller, layerId);
   active.delete(group);
+  applyMapsGLPresentation();
 
   // The controller's canvas stays on the map for as long as the controller
   // lives, so with nothing left to draw it is torn down promptly rather than on
@@ -7293,15 +7415,54 @@ function clearMapsGLLayer(group) {
   if (active.size === 0) releaseMapsGL(1200);
 }
 
-function setMapsGLOpacity(group, opacity) {
-  const layerId = active.get(group);
-  const controller = getMapsGL();
-  if (!layerId || !controller) return;
-  try {
-    controller.setLayerOpacity?.(layerId, opacity);
-  } catch {
-    /* older SDK builds do not expose per-layer opacity */
+/**
+ * Applies opacity and stacking to the MapsGL render surface.
+ *
+ * The SDK has no working per-layer opacity in this build. `setLayerOpacity` does
+ * not exist on the controller at all — the previous call was optional-chained
+ * and so silently did nothing — and `setPaintProperty`, `getWeatherLayer` and
+ * `findLayer` either return nothing for a weather layer id or leave the surface
+ * untouched. The one thing that does work is the canvas element, so opacity is
+ * applied there.
+ *
+ * Stacking has the same root. The controller injects its canvas as a direct
+ * child of Leaflet's overlay pane, where it lands at z-index 100 while every
+ * weather pane sits at 140 and above — which is why MapsGL products always drew
+ * underneath everything else regardless of the layer order. The canvas is given
+ * the z-index of the group it is drawing for, so the layer-order tab moves it
+ * like any other layer.
+ *
+ * One surface serves every MapsGL layer, so with products active in two groups
+ * at once they share one opacity and one stacking position: the highest z-index
+ * of the active groups wins, and so does the opacity that goes with it. That is
+ * a limit of the SDK's single-canvas design, not a choice.
+ */
+function applyMapsGLPresentation() {
+  const surfaces = mapsglSurfaces();
+  if (!surfaces.length) return;
+
+  let opacity = 1;
+  let zIndex = 0;
+  for (const group of active.keys()) {
+    const slot = slots.get(group);
+    if (!slot?.enabled) continue;
+    const z = slot.zIndex || 0;
+    if (z >= zIndex) {
+      zIndex = z;
+      opacity = slot.opacity ?? 1;
+    }
   }
+
+  for (const canvas of surfaces) {
+    canvas.style.opacity = String(opacity);
+    if (zIndex) canvas.style.zIndex = String(zIndex);
+  }
+}
+
+function setMapsGLOpacity(group, opacity) {
+  const slot = slots.get(group);
+  if (slot) slot.opacity = opacity;
+  applyMapsGLPresentation();
 }
 
 const activeMapsGLLayers = () => Array.from(active.values());
@@ -7309,6 +7470,7 @@ const hasMapsGLLayers = () => active.size > 0;
 
 __exports.renderMapsGLLayer = renderMapsGLLayer;
 __exports.clearMapsGLLayer = clearMapsGLLayer;
+__exports.applyMapsGLPresentation = applyMapsGLPresentation;
 __exports.setMapsGLOpacity = setMapsGLOpacity;
 __exports.activeMapsGLLayers = activeMapsGLLayers;
 __exports.hasMapsGLLayers = hasMapsGLLayers;
@@ -7624,6 +7786,10 @@ const OVERLAY_PANES = [
   ['nowcast', ['nowcastFillPane', 'nowcastOutlinePane']],
   ['outlook', ['publishedOutlookFillPane', 'publishedOutlookOutlinePane']],
   ['outlook-auto', ['hocoFillPane', 'hocoOutlinePane']],
+  // Hand-drawn shapes are an overlay like the rest: registering them as an
+  // orderable layer put them in the layer list but did nothing for 3D, where
+  // they stayed invisible because this list is what reaches the GL view.
+  ['drawings', ['drawPane']],
 ];
 
 /** Every canvas element currently painted into a named Leaflet pane. */
@@ -7902,8 +8068,7 @@ function create(styleMode) {
     // Lets the rendered frame be read back — needed for screenshots and for the
     // geometric checks that verify mirrored layers land in the right place.
     preserveDrawingBuffer: true,
-    // As in 2D: no provider names in the interface.
-    attributionControl: false,
+    attributionControl: true,
   });
 
   gl.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), 'bottom-right');
@@ -7911,6 +8076,7 @@ function create(styleMode) {
   // The still-image products are captured from the 2D map, which therefore has
   // to be pointed wherever the camera goes.
   gl.on('moveend', scheduleFollow);
+  gl.on('resize', handleResize);
 
   gl.on('style.load', () => {
     addTerrain();
@@ -8176,6 +8342,23 @@ function scheduleFollow() {
   }, FOLLOW_DEBOUNCE_MS);
 }
 
+/**
+ * A viewport resize moves both views, but not in step.
+ *
+ * Every still is captured against the 2D container's size and the 2D bounds, and
+ * Leaflet only learns it has been resized when it is told. Until then the
+ * captured geometry describes the old viewport while GL has already adopted the
+ * new one, so the mirrored layers — the MapsGL surface most visibly — slide
+ * around. Telling Leaflet immediately, then re-following and re-capturing, keeps
+ * the two in agreement.
+ */
+function handleResize() {
+  if (!gl || !runtime.is3D) return;
+  map.invalidateSize({ animate: false });
+  scheduleFollow();
+}
+
+
 /** Stops the camera follow when 3D is left. */
 function stopFollowing() {
   clearTimeout(followTimer);
@@ -8193,6 +8376,9 @@ function enter3D(containerId = 'map-3d', { styleMode = 'default' } = {}) {
 
   document.getElementById('app')?.setAttribute('data-mode', '3d');
   runtime.is3D = true;
+  // Registered with the mode rather than at import: this module is also loaded
+  // directly by the Node-side tests, where there is no window to bind to.
+  window.addEventListener('resize', handleResize, { passive: true });
 
   if (!gl) create(styleMode);
   else {
@@ -8209,6 +8395,7 @@ function enter3D(containerId = 'map-3d', { styleMode = 'default' } = {}) {
 function exit3D() {
   if (!runtime.is3D) return;
   stopFollowing();
+  window.removeEventListener('resize', handleResize);
 
   // Carry the camera back so the two views stay in agreement.
   if (gl) {
@@ -9283,6 +9470,8 @@ const earliestTimestamp = () => domain().start;
  * With a filter or focus it is that window; otherwise it is the lightning
  * lifespan ending at the scrubber position.
  */
+const LIVE_SKEW_MS = 60 * 1000;
+
 function activeWindow(lifespanHours) {
   if (time.mode === 'inputs' && time.filterStart && time.filterEnd) {
     // Progressive reveal: strikes accumulate from the window's start up to the
@@ -9291,8 +9480,20 @@ function activeWindow(lifespanHours) {
     const end = new Date(Math.min(time.current, time.filterEnd.getTime()));
     return { start: time.filterStart, end, progressive: true };
   }
-  const end = new Date(time.current);
-  const start = new Date(time.current - lifespanHours * 3600 * 1000);
+  // At the live edge the window runs to *now*, not to the last clock tick.
+  //
+  // `time.current` only advances when the auto-follow timer fires, so a strike
+  // arriving between ticks fell outside the window and was not drawn. That also
+  // silenced the cue: the live poll asks "are any of these strikes new?" at the
+  // moment the data lands, and the answer was no because none of them were in
+  // range yet. By the time the clock caught up, the redraw was a clock refresh
+  // rather than a data one, and the cue only fires for data.
+  //
+  // The tolerance absorbs clock skew between the browser and the feed, which
+  // otherwise puts a just-detected strike marginally in the future.
+  const liveEdge = time.atLive ? Math.max(time.current, Date.now() + LIVE_SKEW_MS) : time.current;
+  const end = new Date(liveEdge);
+  const start = new Date(liveEdge - lifespanHours * 3600 * 1000);
   return { start, end, progressive: false };
 }
 
@@ -11050,6 +11251,16 @@ let refreshTimer = null;
 let lastDrawSignature = '';
 let topUpInFlight = false;
 
+/** Why the strike cue did or did not fire on the last refresh. */
+let cueDiagnostics = null;
+const strikeCueState = () => cueDiagnostics;
+
+/** Above this many new strikes at once, it is a bulk plot, not an event. */
+const CUE_BULK_LIMIT = 25;
+/** Minimum gap between cues, so dragging the scrubber does not machine-gun. */
+const CUE_MIN_GAP_MS = 400;
+let lastCueAt = 0;
+
 /**
  * The oldest strike worth keeping: the earliest point the scrubber can reach,
  * less the lifespan window that would end there, plus a margin. Derived rather
@@ -11102,10 +11313,40 @@ const refresh = throttle((options = {}) => {
   // 3D shares the selection but not the Leaflet layers, so it is fed directly.
   if (is3D()) set3DStrikes(filtered, { end, lifespanHours: lightning.lifespanHours });
 
-  // The cue marks genuinely new *data*. Gating on `fromData` matters: a redraw
-  // caused by moving the scrubber also produces "fresh" strikes — they are only
-  // newly in view — and without this the cue fired continuously while dragging.
-  if (options.fromData && result.fresh > 0 && time.atLive && !time.playing) playThunder();
+  // The cue marks strikes that have just appeared on the map.
+  //
+  // It used to fire only for strikes arriving from the live poll, at the live
+  // edge, with playback stopped. That is far too narrow in practice: the poll
+  // runs every few minutes, and in a quiet spell over the UK it can be hours
+  // between strikes, so the cue appeared to be broken. Scrubbing forward through
+  // a storm plots strike after strike and made no sound at all.
+  //
+  // What it guards against instead is the case that actually needs guarding:
+  // hundreds of strikes appearing in one go, when the window jumps or the
+  // archives land. One clap for that is right; two hundred is not.
+  const bulk = result.fresh > CUE_BULK_LIMIT;
+  const spaced = Date.now() - lastCueAt >= CUE_MIN_GAP_MS;
+
+  cueDiagnostics = {
+    fromData: !!options.fromData,
+    fresh: result.fresh,
+    drawn: result.drawn,
+    filtered: filtered.length,
+    atLive: time.atLive,
+    playing: time.playing,
+    soundOn: lightning.sound,
+    bulk,
+    spaced,
+    at: Date.now(),
+  };
+
+  // Playback is still excluded: it reveals a frame of strikes several times a
+  // second, and a rumble on every frame is noise rather than a cue.
+  if (lightning.sound && result.fresh > 0 && !bulk && spaced
+      && !time.playing && !options.initial) {
+    lastCueAt = Date.now();
+    cueDiagnostics.played = playThunder();
+  }
 
   emit(EVENTS.LIGHTNING_FILTERED, {
     total: lightning.all.length,
@@ -11169,8 +11410,8 @@ async function initLightning() {
   });
 
   await fetchStrikes();
-  // The first paint is not "new" data — it is the initial load.
-  refresh({ force: true });
+  // The first paint is not new activity — it is the initial load.
+  refresh({ force: true, initial: true });
   startPolling();
 }
 
@@ -11183,6 +11424,7 @@ function teardownLightning() {
 
 __exports.fetchStrikes = fetchStrikes;
 __exports.filterWindow = filterWindow;
+__exports.strikeCueState = strikeCueState;
 __exports.retentionCutoff = retentionCutoff;
 __exports.refresh = refresh;
 __exports.recolour = recolour;
@@ -11204,13 +11446,29 @@ __define('layers/control.js', (__exports, __mod) => {
  * inline handler on the card, which is how they drifted apart.
  */
 const { emit, EVENTS } = __mod('core/bus.js');
-const { slots, time, LAYER_GROUPS } = __mod('core/state.js');
+const { slots, time, LAYER_GROUPS, LAYER_LABELS } = __mod('core/state.js');
+const { LAYER_Z } = __mod('config.js');
 const { getLayerDef } = __mod('data/layers.js');
 const { applyOpacity, clearSlot, renderAll } = __mod('layers/renderer.js');
 const { setMapsGLOpacity } = __mod('layers/mapsgl.js');
 const { clearMirror, setMirrorOpacity, setMirrorOrder } = __mod('core/map3d.js');
+const { applyMapsGLPresentation } = __mod('layers/mapsgl.js');
 /** Turns a layer group on or off. */
 function setLayerEnabled(group, enabled) {
+  const external = externals.get(group);
+  if (external) {
+    if (external.isEnabled() === enabled) return;
+    external.setEnabled(enabled);
+    // Never moved by hand, so it takes its preset place rather than whatever
+    // position being switched off left it in.
+    if (enabled && !positioned.has(group)) {
+      seatByPreset(group);
+      applyOrder();
+    }
+    emit(EVENTS.LAYER_TOGGLED, { group, enabled });
+    return;
+  }
+
   const slot = slots.get(group);
   if (!slot || slot.enabled === enabled) return;
 
@@ -11242,6 +11500,13 @@ function selectProduct(group, type) {
 }
 
 function setLayerOpacity(group, opacity) {
+  const external = externals.get(group);
+  if (external) {
+    external.setOpacity(opacity);
+    emit(EVENTS.LAYER_OPACITY, { group, opacity });
+    return;
+  }
+
   const slot = slots.get(group);
   if (!slot) return;
   slot.opacity = opacity;
@@ -11268,6 +11533,8 @@ const layerOrder = () => [...order];
 /** Active groups in draw order, top of the stack first (as a list reads). */
 function activeInOrder() {
   return order.filter((g) => {
+    const external = externals.get(g);
+    if (external) return !!external.isEnabled();
     const slot = slots.get(g);
     return slot?.enabled && slot.type;
   }).reverse();
@@ -11278,12 +11545,115 @@ function activeInOrder() {
  * reversed back into draw order.
  */
 function setLayerOrder(topFirst) {
+  for (const id of topFirst) positioned.add(id);
   const drawOrder = [...topFirst].reverse();
   // Groups not in the supplied list keep their relative position underneath.
   const rest = order.filter((g) => !drawOrder.includes(g));
   order = [...rest, ...drawOrder];
   applyOrder();
   emit(EVENTS.LAYER_ORDER, { order: [...order] });
+}
+
+/* ------------------------------------------------------------------ *
+ * Overlays that behave like layers but are not catalog products
+ * ------------------------------------------------------------------ */
+
+/**
+ * The outlook polygons and anything drawn with the polygon tool are real map
+ * overlays, but they have no catalog product behind them, so they never appeared
+ * in the layer list and their stacking could not be changed. Rather than forcing
+ * them through the tile pipeline — which would mean a slot, a frame resolver and
+ * a product picker for something that has none of those — they register here and
+ * take part in ordering, visibility and opacity like anything else.
+ *
+ * A descriptor supplies:
+ *   id         stable key, also used in the saved order
+ *   label      shown in the layer list
+ *   group      the muted line under it
+ *   accent     colour of the row's left edge
+ *   defaultZ   where it sits before the user reorders anything
+ *   isEnabled/setEnabled, getOpacity/setOpacity, applyZ
+ */
+const externals = new Map();
+
+const isExternalLayer = (id) => externals.has(id);
+const externalLayer = (id) => externals.get(id) || null;
+
+/** Preset stacking position, used only to place a layer on first registration. */
+const presetZ = (id) => externals.get(id)?.defaultZ ?? LAYER_Z[id] ?? 300;
+
+/**
+ * Layers the user has deliberately positioned.
+ *
+ * `setLayerOrder` drops everything not currently active to the bottom of the
+ * stack, which is harmless for a weather group that is switched off but wrong
+ * for an overlay that appears later: the first shape you drew turned up
+ * underneath everything. An overlay the user has never moved is re-seated at its
+ * preset when it becomes visible.
+ */
+const positioned = new Set();
+
+function seatByPreset(id) {
+  const at = order.indexOf(id);
+  if (at >= 0) order.splice(at, 1);
+  const target = order.findIndex((other) => presetZ(other) > presetZ(id));
+  if (target < 0) order.push(id);
+  else order.splice(target, 0, id);
+}
+
+/**
+ * Brings an overlay that has just appeared to the top of the stack.
+ *
+ * The drawn shapes become visible the moment the first polygon closes, without
+ * anyone switching them on, and they were inheriting whatever position an
+ * inactive entry had drifted to — underneath the weather, where a shape you just
+ * drew is invisible.
+ *
+ * The top, not the preset: presets place a layer at registration, before anyone
+ * has reordered anything, and seating against a list the user has since
+ * rearranged puts it somewhere arbitrary. Something you have this second drawn
+ * belongs on top.
+ */
+function bringOverlayToFront(id) {
+  if (!externals.has(id) || positioned.has(id)) return;
+  const at = order.indexOf(id);
+  if (at >= 0) order.splice(at, 1);
+  order.push(id);
+  applyOrder();
+}
+
+function registerExternalLayer(descriptor) {
+  if (!descriptor?.id) return;
+  externals.set(descriptor.id, descriptor);
+
+  // `order` runs bottom-to-top, so the layer goes in front of the first entry
+  // that is meant to sit above it. This is what puts the automated outlook above
+  // satellite and below radar without hard-coding neighbours.
+  if (!order.includes(descriptor.id)) seatByPreset(descriptor.id);
+  applyOrder();
+}
+
+/** Everything the layer list needs about one entry, slot or overlay. */
+function layerView(id) {
+  const external = externals.get(id);
+  if (external) {
+    return {
+      title: external.label,
+      meta: external.group || 'Overlay',
+      accent: external.accent || 'var(--wx-outlook)',
+      opacity: external.getOpacity?.() ?? 1,
+      external: true,
+    };
+  }
+  const slot = slots.get(id);
+  const def = slot ? getLayerDef(id, slot.type) : null;
+  return {
+    title: def?.label || slot?.type || id,
+    meta: LAYER_LABELS[id] || id,
+    accent: null,
+    opacity: slot?.opacity ?? 1,
+    external: false,
+  };
 }
 
 /**
@@ -11325,8 +11695,12 @@ function applyOrder() {
     const z = BASE_Z + index * STEP;
     const slot = slots.get(group);
     if (slot) slot.zIndex = z;
+    externals.get(group)?.applyZ(z);
     setPaneZ(group, z);
     setMirrorOrder(group, index);
+    // MapsGL owns its own canvas outside the pane stack, so it has to be moved
+    // explicitly or it stays pinned below every weather pane.
+    applyMapsGLPresentation();
   }
 }
 
@@ -11371,6 +11745,11 @@ __exports.setLayerOpacity = setLayerOpacity;
 __exports.layerOrder = layerOrder;
 __exports.activeInOrder = activeInOrder;
 __exports.setLayerOrder = setLayerOrder;
+__exports.isExternalLayer = isExternalLayer;
+__exports.externalLayer = externalLayer;
+__exports.bringOverlayToFront = bringOverlayToFront;
+__exports.registerExternalLayer = registerExternalLayer;
+__exports.layerView = layerView;
 __exports.moveLayer = moveLayer;
 __exports.resetLayerOrder = resetLayerOrder;
 __exports.applyOrder = applyOrder;
@@ -11856,6 +12235,9 @@ function calendarIndex() {
  * Rendering
  * ------------------------------------------------------------------ */
 
+/** The outlook to restore when visibility is switched back on. */
+let lastSelectedId = null;
+
 function clearPublished() {
   safeRemove(fillLayer);
   safeRemove(outlineLayer);
@@ -11942,7 +12324,15 @@ function setOpacity(value) {
 
 function setVisible(visible) {
   state.visible = visible;
-  if (!visible) clearPublished();
+  if (!visible) {
+    // clearPublished forgets the selection, so remember it: switching the layer
+    // back on from the layer list has to restore what was being shown.
+    lastSelectedId = state.selectedId ?? lastSelectedId;
+    clearPublished();
+    return;
+  }
+  const item = getById(state.selectedId ?? lastSelectedId);
+  if (item) renderPublished(item);
 }
 
 const getById = (id) => state.outlooks.find((item) => item.id === id) || null;
@@ -12411,18 +12801,43 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
   'August', 'September', 'October', 'November', 'December'];
 
 /**
- * A month calendar whose days are enabled only where `index` has an entry.
+ * A month calendar whose days are enabled only where the index has an entry.
+ *
+ * `index` is read on every paint rather than captured once: outlooks arrive
+ * asynchronously and the feed refreshes, and a snapshot taken when the panel was
+ * built silently stopped showing anything published afterwards.
+ *
  * `colourFor` maps a day's value to the marker colour.
  */
 function buildCalendar({ index, colourFor, onSelect, initialMonth = new Date() }) {
+  const readIndex = () => (typeof index === 'function' ? index() : index) || new Map();
+
   let month = new Date(initialMonth.getFullYear(), initialMonth.getMonth(), 1);
   let selected = null;
 
   const label = el('strong');
   const grid = el('div', { class: 'calendar__grid' });
+  const prev = el('button', { class: 'btn btn--ghost btn--icon', 'aria-label': 'Previous month' }, '‹');
+  const next = el('button', { class: 'btn btn--ghost btn--icon', 'aria-label': 'Next month' }, '›');
+
+  /** Oldest and newest months that actually hold something. */
+  function extent() {
+    const keys = [...readIndex().keys()].sort();
+    if (!keys.length) return null;
+    return { first: keys[0].slice(0, 7), last: keys[keys.length - 1].slice(0, 7) };
+  }
+
+  const monthKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 
   const paint = () => {
+    const entries = readIndex();
     label.textContent = `${MONTHS[month.getMonth()]} ${month.getFullYear()}`;
+
+    // Wandering off into empty years is not useful; the arrows stop at the data.
+    const range = extent();
+    const here = monthKey(month);
+    prev.disabled = !!range && here <= range.first;
+    next.disabled = !!range && here >= range.last;
 
     const first = new Date(month.getFullYear(), month.getMonth(), 1);
     // Monday-first offset.
@@ -12436,7 +12851,7 @@ function buildCalendar({ index, colourFor, onSelect, initialMonth = new Date() }
     for (let day = 1; day <= days; day += 1) {
       const date = new Date(month.getFullYear(), month.getMonth(), day);
       const key = dateKey(date);
-      const value = index.get(key);
+      const value = entries.get(key);
       const has = value !== undefined;
 
       const cell = el('button', {
@@ -12447,8 +12862,13 @@ function buildCalendar({ index, colourFor, onSelect, initialMonth = new Date() }
         'aria-selected': String(key === selected),
         disabled: has ? null : true,
         onClick: () => {
+          // Marking the selection in place rather than repainting: repainting
+          // here replaced the very button handling the click, which lost the
+          // element mid-event and made taps intermittent on touch.
           selected = key;
-          paint();
+          for (const other of grid.children) {
+            other.setAttribute('aria-selected', String(other === cell));
+          }
           onSelect(key);
         },
       }, String(day));
@@ -12464,15 +12884,14 @@ function buildCalendar({ index, colourFor, onSelect, initialMonth = new Date() }
     paint();
   };
 
+  prev.addEventListener('click', () => shift(-1));
+  next.addEventListener('click', () => shift(1));
+
   paint();
 
   return {
     node: el('div', { class: 'calendar' }, [
-      el('div', { class: 'calendar__head' }, [
-        el('button', { class: 'btn btn--ghost btn--icon', 'aria-label': 'Previous month', onClick: () => shift(-1) }, '‹'),
-        label,
-        el('button', { class: 'btn btn--ghost btn--icon', 'aria-label': 'Next month', onClick: () => shift(1) }, '›'),
-      ]),
+      el('div', { class: 'calendar__head' }, [prev, label, next]),
       el('div', { class: 'calendar__weekdays' }, WEEKDAYS.map((d) => el('span', {}, d))),
       grid,
     ]),
@@ -12606,9 +13025,8 @@ function buildPublishedSection() {
       return;
     }
 
-    const index = published.calendarIndex();
     calendar = buildCalendar({
-      index,
+      index: () => published.calendarIndex(),
       colourFor: (rank) => publishedRisk(rank).color,
       // Picking a day in the calendar is an explicit selection.
       onSelect: (key) => showDay(key, { focus: true }),
@@ -12756,7 +13174,7 @@ function buildAutoSection() {
     }
 
     calendar = buildCalendar({
-      index: auto.calendarIndex(),
+      index: () => auto.calendarIndex(),
       colourFor: (risk) => riskColour(risk || 0),
       onSelect: (key) => showDay(key, { focus: true }),
     });
@@ -12831,6 +13249,236 @@ function buildOutlookPanel() {
 __exports.buildOutlookPanel = buildOutlookPanel;
 });
 
+__define('tools/draw3d.js', (__exports, __mod) => {
+/**
+ * Drawing polygons on the 3D map.
+ *
+ * leaflet-draw only knows about the Leaflet map, and in 3D that map is hidden
+ * behind the GL canvas — so pressing "Start drawing" there did nothing you could
+ * see or click. Rather than trying to drive leaflet-draw through a hidden map,
+ * this collects vertices from the GL canvas directly and hands the finished ring
+ * to the same store the 2D tool writes into, so a shape drawn in 3D is the same
+ * object as one drawn in 2D: it appears in both views, in the layer list, and in
+ * the KML export.
+ *
+ * The interaction is the conventional one: click to place a vertex, click the
+ * first vertex again or press Enter to close, Backspace to undo the last one,
+ * Escape to abandon. A rubber band follows the pointer so the shape is visible
+ * before it is finished, which matters more in 3D than in 2D — on a pitched
+ * camera it is otherwise hard to tell where a click landed.
+ */
+const { getGl, is3D } = __mod('core/map3d.js');
+const { emit, EVENTS } = __mod('core/bus.js');
+const SRC = 'wx-draw-progress';
+const FILL = 'wx-draw-progress-fill';
+const LINE = 'wx-draw-progress-line';
+const DOTS = 'wx-draw-progress-dots';
+
+/** Screen distance, in pixels, within which a click counts as "on the first vertex". */
+const CLOSE_RADIUS = 14;
+
+let active = false;
+let points = [];
+let hover = null;
+let onFinish = null;
+let accent = '#38bdf8';
+
+const gl = () => getGl();
+
+/* ------------------------------------------------------------------ *
+ * Preview
+ * ------------------------------------------------------------------ */
+
+function previewData() {
+  const ring = hover ? [...points, hover] : [...points];
+  const features = [];
+
+  if (ring.length >= 2) {
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'LineString', coordinates: ring },
+      properties: {},
+    });
+  }
+  if (ring.length >= 3) {
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Polygon', coordinates: [[...ring, ring[0]]] },
+      properties: {},
+    });
+  }
+  for (const p of points) {
+    features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: p }, properties: {} });
+  }
+  return { type: 'FeatureCollection', features };
+}
+
+function paint() {
+  const map = gl();
+  if (!map) return;
+  const data = previewData();
+  const source = map.getSource(SRC);
+  if (source) {
+    source.setData(data);
+    return;
+  }
+
+  try {
+    map.addSource(SRC, { type: 'geojson', data });
+    map.addLayer({
+      id: FILL,
+      type: 'fill',
+      source: SRC,
+      filter: ['==', ['geometry-type'], 'Polygon'],
+      paint: { 'fill-color': accent, 'fill-opacity': 0.25 },
+    });
+    map.addLayer({
+      id: LINE,
+      type: 'line',
+      source: SRC,
+      filter: ['==', ['geometry-type'], 'LineString'],
+      paint: { 'line-color': accent, 'line-width': 2 },
+    });
+    map.addLayer({
+      id: DOTS,
+      type: 'circle',
+      source: SRC,
+      filter: ['==', ['geometry-type'], 'Point'],
+      paint: {
+        'circle-radius': 5,
+        'circle-color': '#fff',
+        'circle-stroke-color': accent,
+        'circle-stroke-width': 2,
+      },
+    });
+  } catch (error) {
+    console.warn('[draw3d] preview unavailable:', error);
+  }
+}
+
+function clearPreview() {
+  const map = gl();
+  if (!map) return;
+  for (const id of [DOTS, LINE, FILL]) {
+    try { if (map.getLayer(id)) map.removeLayer(id); } catch { /* style gone */ }
+  }
+  try { if (map.getSource(SRC)) map.removeSource(SRC); } catch { /* style gone */ }
+}
+
+/* ------------------------------------------------------------------ *
+ * Input
+ * ------------------------------------------------------------------ */
+
+/** True when the click landed on the first vertex, which closes the ring. */
+function closesRing(event) {
+  const map = gl();
+  if (!map || points.length < 3) return false;
+  const first = map.project(points[0]);
+  return Math.hypot(first.x - event.point.x, first.y - event.point.y) <= CLOSE_RADIUS;
+}
+
+function onClick(event) {
+  if (closesRing(event)) {
+    finish();
+    return;
+  }
+  points.push([event.lngLat.lng, event.lngLat.lat]);
+  paint();
+}
+
+function onMove(event) {
+  if (!points.length) return;
+  hover = [event.lngLat.lng, event.lngLat.lat];
+  paint();
+}
+
+function onKey(event) {
+  if (event.key === 'Escape') {
+    cancel();
+  } else if (event.key === 'Enter') {
+    finish();
+  } else if (event.key === 'Backspace' && points.length) {
+    event.preventDefault();
+    points.pop();
+    paint();
+  }
+}
+
+function finish() {
+  // Three distinct vertices is the minimum that encloses anything.
+  if (points.length < 3) {
+    cancel();
+    return;
+  }
+  const ring = points.map(([lng, lat]) => [lat, lng]);
+  const done = onFinish;
+  stop();
+  done?.(ring);
+}
+
+function cancel() {
+  stop();
+  emit(EVENTS.LEGEND_INVALIDATED);
+}
+
+/* ------------------------------------------------------------------ *
+ * Public API
+ * ------------------------------------------------------------------ */
+
+/** Whether a 3D drawing session is in progress. */
+const isDrawing3D = () => active;
+
+/**
+ * Starts collecting a polygon from the GL map.
+ *
+ * @param {(latLngs: Array<[number, number]>) => void} handler
+ *   receives the finished ring as Leaflet-order [lat, lng] pairs
+ * @param {string} colour preview colour, normally the current risk's
+ * @returns {boolean} whether a session started
+ */
+function start(handler, colour) {
+  const map = gl();
+  if (!is3D() || !map) return false;
+  stop();
+
+  active = true;
+  points = [];
+  hover = null;
+  onFinish = handler;
+  accent = colour || accent;
+
+  map.on('click', onClick);
+  map.on('mousemove', onMove);
+  window.addEventListener('keydown', onKey);
+  map.getCanvas().style.cursor = 'crosshair';
+  paint();
+  return true;
+}
+
+function stop() {
+  const map = gl();
+  if (map) {
+    map.off('click', onClick);
+    map.off('mousemove', onMove);
+    try { map.getCanvas().style.cursor = ''; } catch { /* canvas gone */ }
+  }
+  window.removeEventListener('keydown', onKey);
+  clearPreview();
+  active = false;
+  points = [];
+  hover = null;
+  onFinish = null;
+}
+
+/** Number of vertices placed so far, for the tools panel's hint. */
+const vertexCount = () => points.length;
+
+__exports.isDrawing3D = isDrawing3D;
+__exports.start = start;
+__exports.stop = stop;
+__exports.vertexCount = vertexCount;
+});
+
 __define('tools/draw.js', (__exports, __mod) => {
 /**
  * Polygon drawing and KML interchange.
@@ -12844,6 +13492,9 @@ const { RISK_COLORS, RISK_LEVELS } = __mod('config.js');
 const { map, safeRemove } = __mod('core/map.js');
 const { escapeHtml, loadSetting, saveSetting } = __mod('core/util.js');
 const { emit, EVENTS } = __mod('core/bus.js');
+const { is3D } = __mod('core/map3d.js');
+const { start: start3D, stop: stop3D, isDrawing3D } = __mod('tools/draw3d.js');
+const { bringOverlayToFront } = __mod('layers/control.js');
 let drawnItems = null;
 let drawControl = null;
 let drawing = false;
@@ -12872,7 +13523,9 @@ function styleForRisk(risk) {
  * ------------------------------------------------------------------ */
 
 function ensureDrawnItems() {
-  if (!drawnItems) drawnItems = new L.FeatureGroup();
+  // Its own pane, so the shapes can be restacked from the layer list like any
+  // other overlay rather than being stuck wherever Leaflet put them.
+  if (!drawnItems) drawnItems = new L.FeatureGroup([], { pane: 'drawPane' });
   if (!map.hasLayer(drawnItems)) drawnItems.addTo(map);
   return drawnItems;
 }
@@ -12880,7 +13533,20 @@ function ensureDrawnItems() {
 function toggleDrawing(enabled = !drawing) {
   const items = ensureDrawnItems();
 
+  // In 3D the Leaflet map is behind the GL canvas, so leaflet-draw has nothing
+  // to draw on and no clicks to receive. The GL collector takes over there and
+  // writes into this same feature group.
+  if (enabled && is3D()) {
+    stop3D();
+    drawing = start3D((ring) => {
+      addPolygon(L.polygon(ring));
+      drawing = false;
+      emit(EVENTS.DRAW_MODE, { drawing: false });
+    }, RISK_COLORS[currentRisk.value]);
+    return drawing;
+  }
   if (!enabled) {
+    stop3D();
     if (drawControl) {
       map.removeControl(drawControl);
       drawControl = null;
@@ -12895,6 +13561,9 @@ function toggleDrawing(enabled = !drawing) {
   }
 
   drawControl = new L.Control.Draw({
+    // Bottom-right: the default top-left corner is where the rail and the top bar
+    // are, and the toolbar sat on top of them.
+    position: 'bottomright',
     edit: { featureGroup: items },
     draw: {
       polygon: { allowIntersection: false, showArea: true, shapeOptions: styleForRisk(currentRisk.value) },
@@ -12914,17 +13583,33 @@ function toggleDrawing(enabled = !drawing) {
 }
 
 function onCreated(event) {
-  const layer = event.layer;
+  addPolygon(event.layer);
+}
+
+/**
+ * Styles a finished shape and files it, whichever view drew it.
+ *
+ * Shared so a polygon drawn in 3D is indistinguishable from one drawn in 2D —
+ * same style, same popup, same feature group, same KML export.
+ */
+function addPolygon(layer) {
   const risk = currentRisk.value;
+  layer.options.pane = 'drawPane';
   layer.setStyle(styleForRisk(risk));
   layer.feature = { type: 'Feature', properties: { name: risk } };
   layer.bindPopup(`<div class="wx-popup"><header class="wx-popup__head" style="--accent:${RISK_COLORS[risk]}">
     <strong>${escapeHtml(risk)}</strong></header></div>`, { className: 'wx-popup-shell' });
+  const first = drawnLayerCount() === 0;
   ensureDrawnItems().addLayer(layer);
+  // The first shape makes the drawings layer visible; put it on top rather than
+  // inheriting wherever an inactive entry had drifted to.
+  if (first) bringOverlayToFront('drawings');
   emit(EVENTS.LEGEND_INVALIDATED);
+  emit(EVENTS.LAYER_ORDER, { order: [] });
+  return layer;
 }
 
-const isDrawing = () => drawing;
+const isDrawing = () => drawing || isDrawing3D();
 
 function setRisk(risk) {
   currentRisk.value = risk;
@@ -12966,6 +13651,24 @@ function clearDrawn() {
 }
 
 const hasDrawn = () => !!drawnItems && drawnItems.getLayers().length > 0;
+
+/** How many shapes have been drawn. */
+const drawnLayerCount = () => (drawnItems ? drawnItems.getLayers().length : 0);
+
+/** Whether the drawn shapes are currently on the map. */
+const drawnVisible = () => !!drawnItems && map.hasLayer(drawnItems);
+
+/**
+ * Shows or hides the drawn shapes without discarding them.
+ *
+ * The layer list offers them as an ordinary layer, and turning a layer off there
+ * must not destroy anything the user has drawn.
+ */
+function setDrawnVisible(visible) {
+  if (!drawnItems) return;
+  if (visible) drawnItems.addTo(map);
+  else map.removeLayer(drawnItems);
+}
 
 /* ------------------------------------------------------------------ *
  * KML export
@@ -13086,6 +13789,7 @@ function downloadBlob(blob, filename) {
 __exports.currentRisk = currentRisk;
 __exports.ensureDrawnItems = ensureDrawnItems;
 __exports.toggleDrawing = toggleDrawing;
+__exports.addPolygon = addPolygon;
 __exports.isDrawing = isDrawing;
 __exports.setRisk = setRisk;
 __exports.setPolygonOpacity = setPolygonOpacity;
@@ -13093,6 +13797,9 @@ __exports.setPolygonWeight = setPolygonWeight;
 __exports.polygonStyle = polygonStyle;
 __exports.clearDrawn = clearDrawn;
 __exports.hasDrawn = hasDrawn;
+__exports.drawnLayerCount = drawnLayerCount;
+__exports.drawnVisible = drawnVisible;
+__exports.setDrawnVisible = setDrawnVisible;
 __exports.exportKML = exportKML;
 __exports.importKML = importKML;
 __exports.setKmlVisible = setKmlVisible;
@@ -13652,6 +14359,8 @@ const files = __mod('tools/overlayFiles.js');
 const accumulation = __mod('tools/accumulation.js');
 const { dateTimeField, disclosure, opacityRow, sectionTitle, switchRow, toast } = __mod('ui/components.js');
 const { selectField } = __mod('ui/components.js');
+const { on, EVENTS } = __mod('core/bus.js');
+const { is3D } = __mod('core/map3d.js');
 function buildDrawingSection() {
   const riskPicker = selectField({
     label: 'Risk category',
@@ -13664,10 +14373,20 @@ function buildDrawingSection() {
     class: 'btn btn--primary btn--block',
     onClick: () => {
       const on = draw.toggleDrawing();
-      drawButton.textContent = on ? 'Stop drawing' : 'Start drawing';
-      if (!on && !draw.isDrawing()) toast('Drawing disabled');
+      syncDrawButton(on);
+      if (!on) toast('Drawing disabled');
+      else if (is3D()) toast('Click to place corners, Enter to close, Esc to cancel');
     },
   }, 'Start drawing');
+
+  function syncDrawButton(on) {
+    drawButton.textContent = on ? 'Stop drawing' : 'Start drawing';
+    drawButton.classList.toggle('btn--active', !!on);
+  }
+
+  // A 3D polygon finishes on its own once the ring closes, so the button has to
+  // hear about it rather than only tracking its own presses.
+  on(EVENTS.DRAW_MODE, ({ drawing }) => syncDrawButton(drawing));
 
   return el('div', { class: 'stack' }, [
     sectionTitle('Polygon drawing'),
@@ -13896,7 +14615,7 @@ const { el, byId } = __mod('core/util.js');
 const { emit, on, EVENTS } = __mod('core/bus.js');
 const { slots, LAYER_LABELS } = __mod('core/state.js');
 const { getLayerDef } = __mod('data/layers.js');
-const { activeInOrder, describeLayer, moveLayer, resetLayerOrder, setLayerEnabled, setLayerOpacity, setLayerOrder } = __mod('layers/control.js');
+const { activeInOrder, describeLayer, layerView, moveLayer, resetLayerOrder, setLayerEnabled, setLayerOpacity, setLayerOrder } = __mod('layers/control.js');
 const { opacityRow, toast } = __mod('ui/components.js');
 /** Accent per group, matching the layer cards. */
 const ACCENTS = {
@@ -13995,13 +14714,14 @@ function installDragging(list) {
  * ------------------------------------------------------------------ */
 
 function buildRow(group, index, total) {
-  const slot = slots.get(group);
-  const def = getLayerDef(group, slot.type);
-  const accent = ACCENTS[group] || 'var(--accent)';
+  // One accessor for both kinds of entry: catalog slots and the registered
+  // overlays (outlooks, drawings) that have no product behind them.
+  const view = layerView(group);
+  const accent = view.accent || ACCENTS[group] || 'var(--accent)';
 
   const handle = el('button', {
     class: 'layer-row__handle',
-    'aria-label': `Reorder ${LAYER_LABELS[group] || group}`,
+    'aria-label': `Reorder ${view.title}`,
     title: 'Drag to restack — or use the arrow keys',
     onKeyDown: (event) => {
       if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
@@ -14013,7 +14733,7 @@ function buildRow(group, index, total) {
 
   const opacity = opacityRow({
     label: '',
-    value: slot.opacity,
+    value: view.opacity,
     onInput: (value) => setLayerOpacity(group, value),
   });
 
@@ -14024,9 +14744,9 @@ function buildRow(group, index, total) {
   }, [
     handle,
     el('div', { class: 'layer-row__body' }, [
-      el('div', { class: 'layer-row__title truncate' }, def?.label || slot.type),
+      el('div', { class: 'layer-row__title truncate' }, view.title),
       el('div', { class: 'layer-row__meta truncate' },
-        `${LAYER_LABELS[group] || group} · ${index === 0 ? 'top' : (index === total - 1 ? 'bottom' : `#${index + 1}`)}`),
+        `${view.meta} · ${index === 0 ? 'top' : (index === total - 1 ? 'bottom' : `#${index + 1}`)}`),
       opacity.node,
     ]),
     el('div', { class: 'layer-row__actions' }, [
@@ -14128,6 +14848,8 @@ let focusChip = null;
 let playButton = null;
 let statusLabel = null;
 let ticksHost = null;
+/** True while a pointer or finger is holding the scrubber. */
+let scrubbing = false;
 
 /* ------------------------------------------------------------------ *
  * Domain <-> slider mapping
@@ -14262,6 +14984,27 @@ function buildTimeline() {
     timeCtl.setTime(fromSliderValue(slider.value));
   });
 
+  // Whether the user has hold of the scrubber.
+  //
+  // The write-back below used to be gated on `document.activeElement === slider`,
+  // which is true while dragging with a mouse but not while dragging with a
+  // finger: touch does not focus a range input. So on a phone every TIME_CHANGED
+  // during a drag rewrote the thumb from the rounded, clamped timestamp while the
+  // readout showed the raw one, and the two drifted apart mid-drag. Pointer
+  // events answer the question directly on both.
+  for (const type of ['pointerdown', 'touchstart']) {
+    slider.addEventListener(type, () => { scrubbing = true; }, { passive: true });
+  }
+  for (const type of ['pointerup', 'pointercancel', 'touchend', 'touchcancel']) {
+    window.addEventListener(type, () => {
+      if (!scrubbing) return;
+      scrubbing = false;
+      // Settle the thumb on whatever the clamped time actually became.
+      slider.value = String(toSliderValue(time.current));
+      paintReadout(time.current);
+    }, { passive: true });
+  }
+
   ticksHost = el('div', { class: 'timeline__ticks' });
 
   playButton = el('button', {
@@ -14309,7 +15052,9 @@ function buildTimeline() {
   /* --- wiring --- */
 
   on(EVENTS.TIME_CHANGED, (timestamp) => {
-    if (document.activeElement !== slider) slider.value = String(toSliderValue(timestamp));
+    if (!scrubbing && document.activeElement !== slider) {
+      slider.value = String(toSliderValue(timestamp));
+    }
     paintReadout(timestamp);
   });
 
@@ -14379,6 +15124,94 @@ __exports.refreshTimelineAxis = refreshTimelineAxis;
 __exports.bindShortcuts = bindShortcuts;
 });
 
+__define('ui/icons.js', (__exports, __mod) => {
+/**
+ * The interface icon set.
+ *
+ * Everything used to be a text glyph — `⚡`, `🗺`, `🌡`, `◍`, `≋` and so on. That
+ * is a rendering lottery: a few of those characters have an emoji presentation
+ * (the lightning bolt came out yellow while its neighbours were monochrome),
+ * several have no glyph at all in some system fonts and fall back to a box, and
+ * their weights and optical sizes never matched each other because they come
+ * from whatever fonts happen to be installed.
+ *
+ * These are drawn instead: one 24×24 grid, one stroke weight, `currentColor`
+ * throughout, so they inherit the button's colour and every state that goes with
+ * it. Paths are deliberately simple — at 17px on a phone, detail is noise.
+ */
+
+const SVG = 'http://www.w3.org/2000/svg';
+
+/** Path data, on a 24×24 grid with a 1.6px stroke. */
+const PATHS = {
+  layers: ['M12 3 3 8l9 5 9-5-9-5Z', 'M3 13l9 5 9-5', 'M3 17.5l9 5 9-5'],
+  basemap: ['M9 4 3 6.5v13L9 17l6 2.5 6-2.5v-13L15 7 9 4Z', 'M9 4v13', 'M15 7v12.5'],
+  radar: ['M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0-18 0', 'M12 12m-5 0a5 5 0 1 0 10 0a5 5 0 1 0-10 0', 'M12 12h9'],
+  pressure: ['M3 8h13a3 3 0 1 0-3-3', 'M3 13h16a3 3 0 1 1-3 3', 'M3 18h9a2.5 2.5 0 1 1-2.5 2.5'],
+  lightning: ['M13 2 4 14h6l-1 8 9-12h-6l1-8Z'],
+  severe: ['M12 3 2 20h20L12 3Z', 'M12 10v5', 'M12 18h.01'],
+  observations: ['M14 14.8V5a2 2 0 1 0-4 0v9.8a4 4 0 1 0 4 0Z', 'M12 9v6'],
+  outlook: ['M12 2 3 12l9 10 9-10-9-10Z', 'M12 8l-4 4 4 4 4-4-4-4Z'],
+  tools: ['M15.5 3.5 20.5 8.5', 'M3 21l1.5-5L16 4.5a2.1 2.1 0 0 1 3 3L7.5 19 3 21Z'],
+  settings: [
+    'M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0',
+    'M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1v.2a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-2.8-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3.5 15h-.2a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 8.2l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 2.7-1.1V4a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.8 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7h.2a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z',
+  ],
+
+  /* --- top bar --- */
+  locate: ['M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0-8 0', 'M12 2v3', 'M12 19v3', 'M2 12h3', 'M19 12h3'],
+  legend: ['M4 6h16', 'M4 12h16', 'M4 18h16', 'M4 6h.01', 'M4 12h.01', 'M4 18h.01'],
+  theme: ['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z', 'M12 3v18a9 9 0 0 0 0-18Z'],
+  help: ['M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0-18 0', 'M9.5 9a2.6 2.6 0 1 1 3.4 2.5c-.6.2-.9.8-.9 1.4v.6', 'M12 17h.01'],
+  fullscreen: ['M4 9V4h5', 'M20 9V4h-5', 'M4 15v5h5', 'M20 15v5h-5'],
+  menu: ['M4 7h16', 'M4 12h16', 'M4 17h16'],
+  cube: ['M12 2 3 7v10l9 5 9-5V7l-9-5Z', 'M3 7l9 5 9-5', 'M12 12v10'],
+  search: ['M11 11m-7 0a7 7 0 1 0 14 0a7 7 0 1 0-14 0', 'M16.2 16.2 21 21'],
+  close: ['M6 6l12 12', 'M18 6 6 18'],
+};
+
+/**
+ * Builds one icon.
+ *
+ * `aria-hidden` because every caller is a button that already carries its own
+ * label — announcing the drawing as well would just repeat it.
+ */
+function icon(name, { size = 20, stroke = 1.6 } = {}) {
+  const paths = PATHS[name];
+  const svg = document.createElementNS(SVG, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', String(size));
+  svg.setAttribute('height', String(size));
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', String(stroke));
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('focusable', 'false');
+  svg.classList.add('icon');
+
+  for (const d of paths || []) {
+    const path = document.createElementNS(SVG, 'path');
+    path.setAttribute('d', d);
+    svg.append(path);
+  }
+  return svg;
+}
+
+const hasIcon = (name) => Object.hasOwn(PATHS, name);
+
+/** Replaces a button's text glyph with the drawn icon, keeping its label. */
+function applyIcon(element, name, options) {
+  if (!element || !hasIcon(name)) return;
+  element.replaceChildren(icon(name, options));
+}
+
+__exports.icon = icon;
+__exports.hasIcon = hasIcon;
+__exports.applyIcon = applyIcon;
+});
+
 __define('ui/panels.js', (__exports, __mod) => {
 /**
  * The slide-over panel and its groups.
@@ -14404,24 +15237,22 @@ const { buildOutlookPanel } = __mod('ui/outlookPanel.js');
 const { buildToolsPanel } = __mod('ui/toolsPanel.js');
 const { buildLayerManagerPanel } = __mod('ui/layerManager.js');
 const { refreshTimelineAxis } = __mod('ui/timeline.js');
+const { icon } = __mod('ui/icons.js');
 /* ------------------------------------------------------------------ *
  * Group declaration
  * ------------------------------------------------------------------ */
 
 const PANEL_GROUPS = [
-  { id: 'layers', icon: '≣', label: 'Layers', hint: 'What is drawn, and in what order' },
-  { id: 'basemap', icon: '🗺', label: 'Base map', hint: 'Background and reference overlays' },
-  { id: 'precip', icon: '◍', label: 'Radar & satellite', hint: 'Precipitation and cloud imagery', layers: ['radar', 'satellite'] },
-  { id: 'air', icon: '≋', label: 'Pressure & wind', hint: 'Isobars, fronts and wind', layers: ['isobar', 'surfaceFront', 'wind'] },
-  // U+FE0E asks for the text presentation. U+26A1 is the one glyph in this rail
-  // that defaults to *emoji* presentation, so it came out as a yellow bolt while
-  // every other icon rendered monochrome. The rest are text-default already.
-  { id: 'lightning', icon: '⚡︎', label: 'Lightning', hint: 'UK strikes, density and nowcasts' },
-  { id: 'severe', icon: '⚠', label: 'Severe & warnings', hint: 'Nowcasts, storms, rotation and alerts', layers: ['nowcast', 'warning', 'tropicalStorms', 'rotation', 'lightning'] },
-  { id: 'observations', icon: '🌡', label: 'Observations', hint: 'Surface, marine and accumulated fields', layers: ['observation'] },
-  { id: 'outlook', icon: '◈', label: 'Outlooks', hint: 'Manual and automated HOCO' },
-  { id: 'tools', icon: '✎', label: 'Tools', hint: 'Drawing, imports and export' },
-  { id: 'settings', icon: '⚙', label: 'Settings', hint: 'Time, performance and appearance' },
+  { id: 'layers', icon: 'layers', label: 'Layers', hint: 'What is drawn, and in what order' },
+  { id: 'basemap', icon: 'basemap', label: 'Base map', hint: 'Background and reference overlays' },
+  { id: 'precip', icon: 'radar', label: 'Radar & satellite', hint: 'Precipitation and cloud imagery', layers: ['radar', 'satellite'] },
+  { id: 'air', icon: 'pressure', label: 'Pressure & wind', hint: 'Isobars, fronts and wind', layers: ['isobar', 'surfaceFront', 'wind'] },
+  { id: 'lightning', icon: 'lightning', label: 'Lightning', hint: 'UK strikes, density and nowcasts' },
+  { id: 'severe', icon: 'severe', label: 'Severe & warnings', hint: 'Nowcasts, storms, rotation and alerts', layers: ['nowcast', 'warning', 'tropicalStorms', 'rotation', 'lightning'] },
+  { id: 'observations', icon: 'observations', label: 'Observations', hint: 'Surface, marine and accumulated fields', layers: ['observation'] },
+  { id: 'outlook', icon: 'outlook', label: 'Outlooks', hint: 'Manual and automated HOCO' },
+  { id: 'tools', icon: 'tools', label: 'Tools', hint: 'Drawing, imports and export' },
+  { id: 'settings', icon: 'settings', label: 'Settings', hint: 'Time, performance and appearance' },
 ];
 
 /** Accent colour per weather layer group. */
@@ -14696,7 +15527,9 @@ function buildLightningPanel() {
     label: 'Thunder cue',
     hint: 'Short rumble on new strikes in view',
     checked: lightning.sound,
-    onChange: (checked) => { lightning.sound = checked; },
+    // Through setLightningOption so it persists: the cue silently reset to off
+    // on every reload, which is most of why it never seemed to work.
+    onChange: (checked) => setLightningOption('sound', checked),
   }).node);
 
   return el('div', { class: 'stack' }, nodes);
@@ -14922,7 +15755,7 @@ function buildRail() {
       'aria-selected': 'false',
       'aria-label': group.label,
       onClick: () => openGroup(group.id),
-    }, group.icon);
+    }, icon(group.icon));
 
     // Visual break before the non-layer groups.
     const needsDivider = group.id === 'outlook';
@@ -14946,8 +15779,11 @@ function syncCards() {
   syncRail();
 }
 
-on(EVENTS.LAYER_TOGGLED, syncRail);
-on(EVENTS.LAYER_SELECTED, syncRail);
+// syncCards, not syncRail: a layer can be switched off from the layer-order tab
+// or by a share link as well as from its own card, and only the rail was being
+// brought back into line — the card kept showing the switch on.
+on(EVENTS.LAYER_TOGGLED, syncCards);
+on(EVENTS.LAYER_SELECTED, syncCards);
 
 __exports.PANEL_GROUPS = PANEL_GROUPS;
 __exports.applyPerformanceMode = applyPerformanceMode;
@@ -15325,6 +16161,90 @@ function showHelp() {
 __exports.showHelp = showHelp;
 });
 
+__define('layers/registerOverlays.js', (__exports, __mod) => {
+/**
+ * Puts the outlooks and hand-drawn shapes into the layer list.
+ *
+ * These are real overlays with no catalog product behind them, so they had no
+ * row in the layer list and no way to change their stacking. Registering them
+ * here — rather than inside the outlook and drawing modules — keeps those
+ * modules unaware of the layer system, and keeps every descriptor in one place
+ * where the preset stacking can be read at a glance.
+ *
+ * Preset order, bottom to top:
+ *
+ *     satellite (140) < automated outlook (146) < manual outlook (148) < radar (150)
+ *
+ * and hand-drawn shapes above the weather stack. Each entry's fill and outline
+ * panes move together, one zoom level apart, so an outlook reads as a single
+ * layer in the list.
+ */
+const { registerExternalLayer } = __mod('layers/control.js');
+const { map } = __mod('core/map.js');
+const { refreshOverlayMirror } = __mod('layers/mirrorBridge.js');
+const published = __mod('hoco/published.js');
+const auto = __mod('hoco/auto.js');
+const draw = __mod('tools/draw.js');
+/** Sets a fill pane and its outline pane, keeping the outline just above. */
+function stackPanes(fillPane, outlinePane) {
+  return (z) => {
+    const fill = map.getPane(fillPane);
+    const outline = map.getPane(outlinePane);
+    if (fill) fill.style.zIndex = String(z);
+    if (outline) outline.style.zIndex = String(z + 1);
+    refreshOverlayMirror();
+  };
+}
+
+function registerOverlayLayers() {
+  registerExternalLayer({
+    id: 'outlookAuto',
+    label: 'Automated outlook',
+    group: 'Outlooks',
+    accent: 'var(--wx-outlook)',
+    defaultZ: 146,
+    isEnabled: () => auto.autoState().visible,
+    setEnabled: (on) => auto.setVisible(on),
+    getOpacity: () => auto.autoState().opacity,
+    setOpacity: (value) => auto.setOpacity(value),
+    applyZ: stackPanes('hocoFillPane', 'hocoOutlinePane'),
+  });
+
+  registerExternalLayer({
+    id: 'outlookManual',
+    label: 'Manual outlook',
+    group: 'Outlooks',
+    accent: 'var(--wx-outlook)',
+    defaultZ: 148,
+    isEnabled: () => published.publishedState().visible,
+    setEnabled: (on) => published.setVisible(on),
+    getOpacity: () => published.publishedState().opacity,
+    setOpacity: (value) => published.setOpacity(value),
+    applyZ: stackPanes('publishedOutlookFillPane', 'publishedOutlookOutlinePane'),
+  });
+
+  registerExternalLayer({
+    id: 'drawings',
+    label: 'Drawn shapes',
+    group: 'Tools',
+    accent: 'var(--accent)',
+    defaultZ: 192,
+    // Only listed once something has been drawn: an always-present empty row
+    // would be noise.
+    isEnabled: () => draw.hasDrawn() && draw.drawnVisible(),
+    setEnabled: (on) => draw.setDrawnVisible(on),
+    getOpacity: () => draw.polygonStyle().fillOpacity ?? 0.4,
+    setOpacity: (value) => draw.setPolygonOpacity(value),
+    applyZ: (z) => {
+      const pane = map.getPane('drawPane');
+      if (pane) pane.style.zIndex = String(z);
+    },
+  });
+}
+
+__exports.registerOverlayLayers = registerOverlayLayers;
+});
+
 __define('ui/layout.js', (__exports, __mod) => {
 /**
  * Publishes the height of the docked chrome as CSS custom properties.
@@ -15398,13 +16318,13 @@ __define('main.js', (__exports, __mod) => {
  */
 const { MAP_DEFAULTS } = __mod('config.js');
 const { emit, on, EVENTS } = __mod('core/bus.js');
-const { initMap, invalidateSizeIfChanged, map, setBasemap } = __mod('core/map.js');
+const { initMap, invalidateSizeIfChanged, map, safeRemove, setBasemap } = __mod('core/map.js');
 const { lightning: lightningState, runtime, setTheme, slots, time, restoreSelection, serialiseSelection } = __mod('core/state.js');
 const { byId, debounce, loadSetting, saveSetting } = __mod('core/util.js');
 const { flushPending, renderAll } = __mod('layers/renderer.js');
 const { getLayerDef, LAYER_CATALOG, LAYER_ORDER } = __mod('data/layers.js');
 const timeCtl = __mod('time/controller.js');
-const { initLightning, refresh: refreshLightning } = __mod('lightning/index.js');
+const { initLightning, refresh: refreshLightning, strikeCueState } = __mod('lightning/index.js');
 const { isUnlocked, playStrikeSound, poolState } = __mod('lightning/audio.js');
 const { applyPerformanceMode, buildRail, closePanel, currentGroup, lastOpenedGroup, openGroup, syncCards } = __mod('ui/panels.js');
 const { bindShortcuts, buildTimeline } = __mod('ui/timeline.js');
@@ -15412,11 +16332,14 @@ const { buildLegend, toggleLegendVisible } = __mod('ui/legend.js');
 const { buildSearch } = __mod('ui/search.js');
 const { showHelp } = __mod('ui/help.js');
 const { toast } = __mod('ui/components.js');
+const draw = __mod('tools/draw.js');
+const { applyIcon } = __mod('ui/icons.js');
 const { initOutlookFocus, focusOutlook } = __mod('hoco/focus.js');
 const { exit3D, getGl, mirrorKind, mirroredGroups, refresh3DTheme, toggle3D } = __mod('core/map3d.js');
 const { tileScheme, usesFlippedY } = __mod('core/mirror3d.js');
-const { applyOrder, bindMap: bindLayerControl, selectProduct, setLayerEnabled } = __mod('layers/control.js');
+const { activeInOrder, applyOrder, bindMap: bindLayerControl, selectProduct, setLayerEnabled, setLayerOpacity, moveLayer } = __mod('layers/control.js');
 const { initLayerManager } = __mod('ui/layerManager.js');
+const { registerOverlayLayers } = __mod('layers/registerOverlays.js');
 const { trackDockedChrome } = __mod('ui/layout.js');
 const { refreshOverlayMirror, remirrorAll, stats: mirrorStats } = __mod('layers/mirrorBridge.js');
 const { poolStats } = __mod('layers/windyPool.js');
@@ -15448,7 +16371,20 @@ const persistSession = debounce(() => saveSetting('layers', serialiseSelection()
  * Top bar actions
  * ------------------------------------------------------------------ */
 
+/** Text glyphs in the shell markup, replaced with the drawn icon set. */
+const TOPBAR_ICONS = {
+  'btn-panel': 'menu',
+  'btn-3d': 'cube',
+  'btn-locate': 'locate',
+  'btn-legend': 'legend',
+  'btn-theme': 'theme',
+  'btn-help': 'help',
+  'btn-fullscreen': 'fullscreen',
+};
+
 function bindTopbar() {
+  for (const [id, name] of Object.entries(TOPBAR_ICONS)) applyIcon(byId(id), name);
+
   byId('btn-theme')?.addEventListener('click', () => {
     setTheme(runtime.theme === 'dark' ? 'light' : 'dark');
   });
@@ -15522,22 +16458,89 @@ function bindTopbar() {
       toast('This browser has no location support', { tone: 'error' });
       return;
     }
+    byId('btn-locate')?.classList.add('btn--busy');
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        const { latitude, longitude } = position.coords;
-        map.flyTo([latitude, longitude], Math.max(map.getZoom(), 8), { duration: 0.8 });
-        L.circleMarker([latitude, longitude], {
-          radius: 7,
-          color: '#38bdf8',
-          weight: 2,
-          fillColor: '#38bdf8',
-          fillOpacity: 0.35,
-        }).addTo(map).bindPopup('Your location').openPopup();
+        byId('btn-locate')?.classList.remove('btn--busy');
+        showLocation(position);
       },
-      () => toast('Could not determine your location', { tone: 'error' }),
+      () => {
+        byId('btn-locate')?.classList.remove('btn--busy');
+        toast('Could not determine your location', { tone: 'error' });
+      },
       { enableHighAccuracy: true, timeout: 8000 },
     );
   });
+}
+
+/* ------------------------------------------------------------------ *
+ * Your location
+ * ------------------------------------------------------------------ */
+
+/**
+ * Marks where the browser thinks the user is.
+ *
+ * The previous version dropped a bare Leaflet popup reading "Your location",
+ * which carried none of the application's styling, and added a fresh marker on
+ * every press so they piled up. This reuses one marker, shows the accuracy the
+ * fix actually has — a 3 km fix and a 30 m fix mean very different things — and
+ * uses the same popup shell as every other feature on the map.
+ */
+let locationMarker = null;
+let locationHalo = null;
+
+function formatAccuracy(metres) {
+  if (!Number.isFinite(metres)) return 'accuracy unknown';
+  return metres >= 1000
+    ? `± ${(metres / 1000).toFixed(metres >= 10000 ? 0 : 1)} km`
+    : `± ${Math.round(metres)} m`;
+}
+
+function showLocation(position) {
+  const { latitude, longitude, accuracy } = position.coords;
+  const at = [latitude, longitude];
+
+  map.flyTo(at, Math.max(map.getZoom(), 8), { duration: 0.8 });
+
+  // The accuracy halo is a real circle in metres, so it shrinks and grows with
+  // the zoom the way the uncertainty actually does.
+  if (locationHalo) safeRemove(locationHalo);
+  if (Number.isFinite(accuracy) && accuracy > 0) {
+    locationHalo = L.circle(at, {
+      radius: accuracy,
+      pane: 'labelsPane',
+      className: 'locate-halo',
+      color: '#38bdf8',
+      weight: 1,
+      opacity: 0.5,
+      fillColor: '#38bdf8',
+      fillOpacity: 0.1,
+      interactive: false,
+    }).addTo(map);
+  }
+
+  if (locationMarker) safeRemove(locationMarker);
+  locationMarker = L.circleMarker(at, {
+    radius: 7,
+    pane: 'labelsPane',
+    color: '#fff',
+    weight: 2,
+    fillColor: '#38bdf8',
+    fillOpacity: 1,
+    className: 'locate-dot',
+  }).addTo(map);
+
+  locationMarker.bindPopup(`
+    <div class="wx-popup">
+      <header class="wx-popup__head" style="--accent:#38bdf8">
+        <strong>Your location</strong>
+      </header>
+      <dl class="wx-popup__rows">
+        <dt>Latitude</dt><dd>${latitude.toFixed(4)}°</dd>
+        <dt>Longitude</dt><dd>${longitude.toFixed(4)}°</dd>
+        <dt>Accuracy</dt><dd>${formatAccuracy(accuracy)}</dd>
+      </dl>
+    </div>`, { className: 'wx-popup-shell', closeButton: true }).openPopup();
 }
 
 /* ------------------------------------------------------------------ *
@@ -15622,6 +16625,8 @@ async function boot() {
   bindEvents();
   initOutlookFocus();
   initLayerManager();
+  // Outlooks and drawings join the layer list as orderable overlays.
+  registerOverlayLayers();
   syncCards();
   // The docked rail and timeline are measured so the panel sheet can sit above
   // them on a phone instead of underneath.
@@ -15660,17 +16665,28 @@ window.RadarLoop = {
   lightningAll: () => lightningState.all,
   lightningFiltered: () => lightningState.filtered,
   lightningLifespan: () => lightningState.lifespanHours,
+  lightning: lightningState,
+  refreshLightning,
+  strikeCueState,
   gl: () => getGl(),
   mirrorStats: () => ({ ...mirrorStats }),
   mirrorKind,
   phases: () => ({ ...(runtime.phases || {}) }),
   tileWorkers: () => ({ ...poolStats }),
   refreshOverlayMirror,
+  showLocation,
+  startDrawing: () => draw.toggleDrawing(true),
+  isDrawing: () => draw.isDrawing(),
+  drawnCount: () => draw.drawnLayerCount(),
+  addPolygon: (layer) => draw.addPolygon(layer),
   playSound: () => playStrikeSound(),
   soundUnlocked: () => isUnlocked(),
   soundPool: () => poolState(),
   selectProduct: (g, t) => selectProduct(g, t),
   setLayerEnabled,
+  setLayerOpacity,
+  moveLayer,
+  layerOrder: () => activeInOrder(),
   setBasemap,
   openGroup,
   /** Drives the outlook-focus path directly, for the test harness. */

@@ -13,13 +13,13 @@
 
 import { MAP_DEFAULTS } from './config.js';
 import { emit, on, EVENTS } from './core/bus.js';
-import { initMap, invalidateSizeIfChanged, map, setBasemap } from './core/map.js';
+import { initMap, invalidateSizeIfChanged, map, safeRemove, setBasemap } from './core/map.js';
 import { lightning as lightningState, runtime, setTheme, slots, time, restoreSelection, serialiseSelection } from './core/state.js';
 import { byId, debounce, loadSetting, saveSetting } from './core/util.js';
 import { flushPending, renderAll } from './layers/renderer.js';
 import { getLayerDef, LAYER_CATALOG, LAYER_ORDER } from './data/layers.js';
 import * as timeCtl from './time/controller.js';
-import { initLightning, refresh as refreshLightning } from './lightning/index.js';
+import { initLightning, refresh as refreshLightning, strikeCueState } from './lightning/index.js';
 import { isUnlocked, playStrikeSound, poolState } from './lightning/audio.js';
 import { applyPerformanceMode, buildRail, closePanel, currentGroup, lastOpenedGroup, openGroup, syncCards } from './ui/panels.js';
 import { bindShortcuts, buildTimeline } from './ui/timeline.js';
@@ -27,11 +27,14 @@ import { buildLegend, toggleLegendVisible } from './ui/legend.js';
 import { buildSearch } from './ui/search.js';
 import { showHelp } from './ui/help.js';
 import { toast } from './ui/components.js';
+import * as draw from './tools/draw.js';
+import { applyIcon } from './ui/icons.js';
 import { initOutlookFocus, focusOutlook } from './hoco/focus.js';
 import { exit3D, getGl, mirrorKind, mirroredGroups, refresh3DTheme, toggle3D } from './core/map3d.js';
 import { tileScheme, usesFlippedY } from './core/mirror3d.js';
-import { applyOrder, bindMap as bindLayerControl, selectProduct, setLayerEnabled } from './layers/control.js';
+import { activeInOrder, applyOrder, bindMap as bindLayerControl, selectProduct, setLayerEnabled, setLayerOpacity, moveLayer } from './layers/control.js';
 import { initLayerManager } from './ui/layerManager.js';
+import { registerOverlayLayers } from './layers/registerOverlays.js';
 import { trackDockedChrome } from './ui/layout.js';
 import { refreshOverlayMirror, remirrorAll, stats as mirrorStats } from './layers/mirrorBridge.js';
 import { poolStats } from './layers/windyPool.js';
@@ -64,7 +67,20 @@ const persistSession = debounce(() => saveSetting('layers', serialiseSelection()
  * Top bar actions
  * ------------------------------------------------------------------ */
 
+/** Text glyphs in the shell markup, replaced with the drawn icon set. */
+const TOPBAR_ICONS = {
+  'btn-panel': 'menu',
+  'btn-3d': 'cube',
+  'btn-locate': 'locate',
+  'btn-legend': 'legend',
+  'btn-theme': 'theme',
+  'btn-help': 'help',
+  'btn-fullscreen': 'fullscreen',
+};
+
 function bindTopbar() {
+  for (const [id, name] of Object.entries(TOPBAR_ICONS)) applyIcon(byId(id), name);
+
   byId('btn-theme')?.addEventListener('click', () => {
     setTheme(runtime.theme === 'dark' ? 'light' : 'dark');
   });
@@ -138,22 +154,89 @@ function bindTopbar() {
       toast('This browser has no location support', { tone: 'error' });
       return;
     }
+    byId('btn-locate')?.classList.add('btn--busy');
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        const { latitude, longitude } = position.coords;
-        map.flyTo([latitude, longitude], Math.max(map.getZoom(), 8), { duration: 0.8 });
-        L.circleMarker([latitude, longitude], {
-          radius: 7,
-          color: '#38bdf8',
-          weight: 2,
-          fillColor: '#38bdf8',
-          fillOpacity: 0.35,
-        }).addTo(map).bindPopup('Your location').openPopup();
+        byId('btn-locate')?.classList.remove('btn--busy');
+        showLocation(position);
       },
-      () => toast('Could not determine your location', { tone: 'error' }),
+      () => {
+        byId('btn-locate')?.classList.remove('btn--busy');
+        toast('Could not determine your location', { tone: 'error' });
+      },
       { enableHighAccuracy: true, timeout: 8000 },
     );
   });
+}
+
+/* ------------------------------------------------------------------ *
+ * Your location
+ * ------------------------------------------------------------------ */
+
+/**
+ * Marks where the browser thinks the user is.
+ *
+ * The previous version dropped a bare Leaflet popup reading "Your location",
+ * which carried none of the application's styling, and added a fresh marker on
+ * every press so they piled up. This reuses one marker, shows the accuracy the
+ * fix actually has — a 3 km fix and a 30 m fix mean very different things — and
+ * uses the same popup shell as every other feature on the map.
+ */
+let locationMarker = null;
+let locationHalo = null;
+
+function formatAccuracy(metres) {
+  if (!Number.isFinite(metres)) return 'accuracy unknown';
+  return metres >= 1000
+    ? `± ${(metres / 1000).toFixed(metres >= 10000 ? 0 : 1)} km`
+    : `± ${Math.round(metres)} m`;
+}
+
+function showLocation(position) {
+  const { latitude, longitude, accuracy } = position.coords;
+  const at = [latitude, longitude];
+
+  map.flyTo(at, Math.max(map.getZoom(), 8), { duration: 0.8 });
+
+  // The accuracy halo is a real circle in metres, so it shrinks and grows with
+  // the zoom the way the uncertainty actually does.
+  if (locationHalo) safeRemove(locationHalo);
+  if (Number.isFinite(accuracy) && accuracy > 0) {
+    locationHalo = L.circle(at, {
+      radius: accuracy,
+      pane: 'labelsPane',
+      className: 'locate-halo',
+      color: '#38bdf8',
+      weight: 1,
+      opacity: 0.5,
+      fillColor: '#38bdf8',
+      fillOpacity: 0.1,
+      interactive: false,
+    }).addTo(map);
+  }
+
+  if (locationMarker) safeRemove(locationMarker);
+  locationMarker = L.circleMarker(at, {
+    radius: 7,
+    pane: 'labelsPane',
+    color: '#fff',
+    weight: 2,
+    fillColor: '#38bdf8',
+    fillOpacity: 1,
+    className: 'locate-dot',
+  }).addTo(map);
+
+  locationMarker.bindPopup(`
+    <div class="wx-popup">
+      <header class="wx-popup__head" style="--accent:#38bdf8">
+        <strong>Your location</strong>
+      </header>
+      <dl class="wx-popup__rows">
+        <dt>Latitude</dt><dd>${latitude.toFixed(4)}°</dd>
+        <dt>Longitude</dt><dd>${longitude.toFixed(4)}°</dd>
+        <dt>Accuracy</dt><dd>${formatAccuracy(accuracy)}</dd>
+      </dl>
+    </div>`, { className: 'wx-popup-shell', closeButton: true }).openPopup();
 }
 
 /* ------------------------------------------------------------------ *
@@ -238,6 +321,8 @@ async function boot() {
   bindEvents();
   initOutlookFocus();
   initLayerManager();
+  // Outlooks and drawings join the layer list as orderable overlays.
+  registerOverlayLayers();
   syncCards();
   // The docked rail and timeline are measured so the panel sheet can sit above
   // them on a phone instead of underneath.
@@ -276,17 +361,28 @@ window.RadarLoop = {
   lightningAll: () => lightningState.all,
   lightningFiltered: () => lightningState.filtered,
   lightningLifespan: () => lightningState.lifespanHours,
+  lightning: lightningState,
+  refreshLightning,
+  strikeCueState,
   gl: () => getGl(),
   mirrorStats: () => ({ ...mirrorStats }),
   mirrorKind,
   phases: () => ({ ...(runtime.phases || {}) }),
   tileWorkers: () => ({ ...poolStats }),
   refreshOverlayMirror,
+  showLocation,
+  startDrawing: () => draw.toggleDrawing(true),
+  isDrawing: () => draw.isDrawing(),
+  drawnCount: () => draw.drawnLayerCount(),
+  addPolygon: (layer) => draw.addPolygon(layer),
   playSound: () => playStrikeSound(),
   soundUnlocked: () => isUnlocked(),
   soundPool: () => poolState(),
   selectProduct: (g, t) => selectProduct(g, t),
   setLayerEnabled,
+  setLayerOpacity,
+  moveLayer,
+  layerOrder: () => activeInOrder(),
   setBasemap,
   openGroup,
   /** Drives the outlook-focus path directly, for the test harness. */

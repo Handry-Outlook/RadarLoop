@@ -49,6 +49,8 @@ export const earliestTimestamp = () => domain().start;
  * With a filter or focus it is that window; otherwise it is the lightning
  * lifespan ending at the scrubber position.
  */
+const LIVE_SKEW_MS = 60 * 1000;
+
 export function activeWindow(lifespanHours) {
   if (time.mode === 'inputs' && time.filterStart && time.filterEnd) {
     // Progressive reveal: strikes accumulate from the window's start up to the
@@ -57,8 +59,20 @@ export function activeWindow(lifespanHours) {
     const end = new Date(Math.min(time.current, time.filterEnd.getTime()));
     return { start: time.filterStart, end, progressive: true };
   }
-  const end = new Date(time.current);
-  const start = new Date(time.current - lifespanHours * 3600 * 1000);
+  // At the live edge the window runs to *now*, not to the last clock tick.
+  //
+  // `time.current` only advances when the auto-follow timer fires, so a strike
+  // arriving between ticks fell outside the window and was not drawn. That also
+  // silenced the cue: the live poll asks "are any of these strikes new?" at the
+  // moment the data lands, and the answer was no because none of them were in
+  // range yet. By the time the clock caught up, the redraw was a clock refresh
+  // rather than a data one, and the cue only fires for data.
+  //
+  // The tolerance absorbs clock skew between the browser and the feed, which
+  // otherwise puts a just-detected strike marginally in the future.
+  const liveEdge = time.atLive ? Math.max(time.current, Date.now() + LIVE_SKEW_MS) : time.current;
+  const end = new Date(liveEdge);
+  const start = new Date(liveEdge - lifespanHours * 3600 * 1000);
   return { start, end, progressive: false };
 }
 

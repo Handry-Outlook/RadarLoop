@@ -166,24 +166,29 @@ export const PANES = [
   { name: 'satellitePane', z: 140, parent: 'overlayPane' },
   // Outlook fills interleave here so radar echoes stay readable through them:
   // satellite (140) < fill (145) < radar (150).
-  { name: 'nowcastFillPane', z: 145, parent: 'overlayPane', clickThrough: true },
-  { name: 'publishedOutlookFillPane', z: 145, parent: 'overlayPane', clickThrough: true },
+  { name: 'nowcastFillPane', z: 144, parent: 'overlayPane', clickThrough: true },
+  { name: 'nowcastOutlinePane', z: 145, parent: 'overlayPane' },
+  // Automated outlook above satellite, below radar; the manual one above it.
+  // Both are ordinary orderable layers now, so their outlines live with their
+  // fills rather than being pinned to the top of the whole map.
   { name: 'hocoFillPane', z: 146, parent: 'overlayPane', clickThrough: true },
+  { name: 'hocoOutlinePane', z: 147, parent: 'overlayPane', clickThrough: true },
+  { name: 'publishedOutlookFillPane', z: 148, parent: 'overlayPane', clickThrough: true },
+  { name: 'publishedOutlookOutlinePane', z: 149, parent: 'overlayPane', clickThrough: true },
   { name: 'radarPane', z: 150, parent: 'overlayPane' },
   { name: 'operaRadarPane', z: 155, parent: 'overlayPane' },
   { name: 'observationPane', z: 160, parent: 'overlayPane' },
   { name: 'isobarPane', z: 170, parent: 'overlayPane' },
   { name: 'frontPane', z: 180, parent: 'overlayPane' },
   { name: 'warningFillPane', z: 190, parent: 'overlayPane', clickThrough: true },
+  // Hand-drawn shapes start above the weather; like the outlooks they can be
+  // restacked from the layer list.
+  { name: 'drawPane', z: 192, parent: 'overlayPane' },
 
   // --- top-level: above the whole weather stack ---
   { name: 'warningPane', z: 550 },
   { name: 'labelsPane', z: 600, clickThrough: true },
   { name: 'lightningPane', z: 1000 },
-  // Outlook outlines sit above everything so a risk boundary is never lost.
-  { name: 'nowcastOutlinePane', z: 2001 },
-  { name: 'publishedOutlookOutlinePane', z: 2002, clickThrough: true },
-  { name: 'hocoOutlinePane', z: 2003, clickThrough: true },
 ];
 
 /** Per-layer-group default z-index within the overlay stack. */

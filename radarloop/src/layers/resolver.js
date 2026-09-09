@@ -164,6 +164,8 @@ function attemptBudget({ animating, historical, activeLayers }) {
  */
 const LADDER = [0, 1, 2, 3, 4, 6, 8, 12, 16, 24, 36, 48, 72, 96, 144, 288];
 const REFINE_LIMIT = 5;
+/** How far a dense sweep goes when the geometric ladder finds nothing. */
+const DENSE_LIMIT = 12;
 /** Re-discover periodically so a recovering feed is picked up again. */
 const LAG_TTL_MS = 10 * 60 * 1000;
 
@@ -193,6 +195,30 @@ async function discoverLag(productKey, def, rounded, interval, extraTokens) {
         break;
       }
       previous = offset;
+    }
+
+    // The ladder is geometric, so it steps straight over most offsets: between
+    // rungs 4 and 6 it never asks for 5. A provider keeping only one frame at an
+    // offset the ladder skips is therefore invisible to it — which is exactly
+    // what happened to the marine grids when their window narrowed to a single
+    // hour five hours back. On failure, sweep the near offsets it missed. Only
+    // reached when the ladder found nothing, and bounded, so the cost is a dozen
+    // probes once per product per TTL rather than per frame.
+    if (hit < 0) {
+      const probed = new Set(LADDER.filter((o) => o <= DENSE_LIMIT));
+      for (let offset = 1; offset <= DENSE_LIMIT; offset += 1) {
+        if (probed.has(offset)) continue;
+        const ts = rounded - offset * interval;
+        if (ts < Date.now() - 400 * interval) break;
+        const url = expandUrl(def.url, new Date(ts), extraTokens);
+        if (!url) break;
+        // eslint-disable-next-line no-await-in-loop
+        if (await probe(url, def, productKey)) {
+          hit = offset;
+          previous = offset - 1;
+          break;
+        }
+      }
     }
 
     if (hit < 0) return null;

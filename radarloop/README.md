@@ -42,6 +42,7 @@ src/
     worker.js              starts a worker from either build (module URL or Blob)
   data/
     layers.js              GENERATED — 186 weather product definitions
+    sourceNames.js         keeps weather-provider names out of the interface
     palettes.js            GENERATED — 12 rainfall colour presets
     basemaps.js            base map catalog (built lazily)
   layers/
@@ -54,6 +55,7 @@ src/
     windyPool.js           worker pool: colour table, dispatch, fallback
     windyTile.worker.js    fetch, decode, crop and recolour, off the main thread
     control.js             single entry point: enable, select, opacity, order
+    registerOverlays.js    outlooks and drawings, registered as orderable layers
     mapsgl.js              Aeris MapsGL GPU layers (readiness-gated)
     mirrorBridge.js        hands rendered 2D layers to the 3D view
     xweather.js            Xweather point/polygon feeds
@@ -79,7 +81,9 @@ src/
     overlayFiles.js        image overlays, strike PNG export, area picker
     accumulation.js        rainfall accumulation (geometry + presentation)
     accumulation.worker.js the off-thread integration
+    draw3d.js              collects polygon vertices from the GL canvas
   ui/
+    icons.js               the drawn icon set, replacing the old text glyphs
     layout.js              measures the docked chrome so the phone sheet clears it
     panels.js              rail + slide-over panel, built from a group declaration
     components.js          shared control builders
@@ -204,6 +208,9 @@ node tools/test-3d-fixes.mjs        # 3D coastline + radar follows the scrubber
 node tools/test-3d-placement.mjs    # measures 3D radar displacement by cross-correlation
 node tools/test-3d-coverage.mjs     # zoom in, switch to 3D, zoom out: coverage and lifespan
 node tools/test-3d-layers.mjs       # MapsGL, overlays, stacking, tile addressing, phone sheet
+node tools/test-mapsgl-and-cue.mjs  # MapsGL opacity/stacking, strike cue, 3D resize, attribution
+node tools/test-overlays-ui.mjs     # outlooks/drawings as layers, 3D drawing, icons, phone scrubber
+node tools/test-cue-and-draw3d.mjs  # thunder cue gating and persistence, drawn shapes in 3D
 node tools/diag-3d-layers.mjs       # sweeps every listed product for a 3D representation
 node tools/test-3d-perf.mjs         # latest-frame fallback, 3D scrub cost, 3D resolution parity
 node tools/probe-scrub-cost.mjs     # attributes a scrubber step: 2D vs 3D, by phase
@@ -650,6 +657,173 @@ are worth recording because three of them are easy to reintroduce:
 32. **Xweather overlays did not refresh in 3D.** The in-place data swap that
     keeps the 2D overlay from flashing returned before re-mirroring, so 3D kept
     showing the previous refresh indefinitely.
+
+
+33. **Weather-source names are kept out of the interface.** `data/sourceNames.js`
+    is the single place that decides what counts as a source name, and
+    `data/layers.js` runs `scrubCatalog` over itself at load, so regenerating the
+    catalog cannot reintroduce one; the free-text popup fields go through the
+    same `cleanLabel`. Acronyms are matched case-sensitively and full names are
+    not — `GOES` is also an ordinary English word, and matching it loosely ate
+    its way through alert prose.
+
+    Base map credits are exempt on purpose. Mapbox, OpenStreetMap, MapTiler,
+    OpenTopoMap and Esri stay in the attribution control: those are
+    licence-required and they identify the *map*, not the weather data. Note that
+    requests are unchanged either way — hostnames, keys and payloads are all
+    still visible in the network tab, so this is a presentation change rather
+    than concealment.
+
+34. **MapsGL products ignored the opacity slider.** `controller.setLayerOpacity`
+    does not exist in this SDK build, and the call was optional-chained inside a
+    swallowing `try`, so a missing method looked exactly like a working one.
+    `setPaintProperty`, `getWeatherLayer` and `findLayer` either return nothing
+    for a weather layer id or leave the surface untouched. Opacity is applied to
+    the render canvas instead, which does work.
+
+35. **MapsGL products always drew underneath everything.** The controller injects
+    its canvas as a direct child of Leaflet's overlay pane, where it lands at
+    z-index 100 while every weather pane sits at 140 and above. The canvas now
+    takes the z-index of the group it is drawing for, so the layer-order tab
+    moves it like any other layer. One surface serves every MapsGL layer, so with
+    products active in two groups they share one opacity and one position — a
+    limit of the SDK's single-canvas design.
+
+36. **The strike cue never fired.** The live window ended at `time.current`, the
+    last auto-follow tick, and `filterWindow` cuts at `ms <= end` — so a strike
+    arriving between ticks was outside the window at exactly the moment the live
+    poll asked "is any of this new?". The answer was no, and by the time the
+    clock caught up the redraw was a clock refresh rather than a data one, which
+    the cue deliberately ignores. At the live edge the window now runs to *now*,
+    with a minute of tolerance for clock skew against the feed. This also means a
+    new strike is drawn when it arrives rather than at the next tick.
+
+    `strikeCueState()` records the gate values at the decision point. This cue
+    has now broken twice through an upstream gate going false invisibly, and
+    inferring it from whether a sound came out does not work: headed Chromium
+    enforces an autoplay policy that headless does not.
+
+37. **Resizing the window made the 3D overlays slide around.** Every still is
+    captured against the 2D container's size and bounds, and Leaflet only learns
+    it has been resized when told — which happened on a shared 150 ms debounce.
+    Until then the captured geometry described the old viewport while GL had
+    already adopted the new one. 3D now invalidates the 2D size itself on both
+    its own `resize` and the window's, then re-follows and re-captures.
+
+38. **Switching a layer off from the layer-order tab left its card switch on.**
+    Only `syncRail` was bound to `LAYER_TOGGLED`; `syncCards`, which brings the
+    switch, the body and the select back into line, was called at boot and never
+    again. Both layer events now run it.
+
+
+39. **On a phone the clock and the scrubber thumb disagreed mid-drag.** The
+    write-back that keeps the thumb in step with the clock was skipped only while
+    `document.activeElement === slider` — true when dragging with a mouse, but
+    touch does not focus a range input. So on a phone every `TIME_CHANGED` during
+    a drag rewrote the thumb from the rounded, clamped timestamp while the
+    readout showed the raw one. Pointer and touch events now answer "is the user
+    holding this?" directly, and the thumb is settled once on release.
+
+40. **Outlooks and drawn shapes are layers.** Both are real overlays with no
+    catalog product behind them, so they had no row in the layer list and no way
+    to be restacked. They register through `layers/registerOverlays.js` and take
+    part in ordering, visibility and opacity like anything else — without being
+    forced through the tile pipeline, which would have meant a slot, a frame
+    resolver and a product picker for something that has none of those.
+
+    Preset order, bottom to top: satellite, automated outlook, manual outlook,
+    radar, with drawn shapes above the weather. Each outlook's fill and outline
+    panes move together, so it reads as one layer; that also means the outlines
+    are no longer pinned above the entire map, which is the point of making them
+    orderable.
+
+    An overlay that becomes visible on its own — the drawn shapes appear the
+    moment the first polygon closes — is brought to the front rather than seated
+    by preset. Presets place a layer at registration, before anything has been
+    reordered; seating against a list the user has since rearranged puts it
+    somewhere arbitrary, which is how the first shape drawn ended up underneath
+    the weather.
+
+41. **Polygons could not be drawn in 3D.** leaflet-draw only knows about the
+    Leaflet map, which in 3D is behind the GL canvas, so "Start drawing" there
+    did nothing visible or clickable. `tools/draw3d.js` collects vertices from
+    the GL canvas instead — click to place, click the first vertex or press Enter
+    to close, Backspace to undo, Escape to abandon, with a rubber band following
+    the pointer because on a pitched camera it is otherwise hard to tell where a
+    click landed. The finished ring goes through the same `addPolygon` the 2D
+    tool uses, so a shape drawn in 3D is the same object: same style, same popup,
+    same feature group, same KML export, same row in the layer list.
+
+42. **The drawing toolbar sat on top of the interface.** leaflet-draw defaults to
+    the top-left corner, which is where the rail and the top bar are, and the
+    bottom edge of the map container runs underneath the docked timeline. It is
+    bottom-right now, lifted clear of the timeline, and on a phone clear of the
+    measured rail and timeline docks.
+
+43. **The icons were a rendering lottery.** Every icon was a text glyph — `⚡`,
+    `🗺`, `🌡`, `◍`, `≋`. Some have an emoji presentation (the bolt came out
+    yellow among monochrome neighbours), some have no glyph at all in certain
+    system fonts and fall back to a box, and their weights never matched because
+    they come from whatever fonts happen to be installed. `ui/icons.js` draws
+    them instead: one 24×24 grid, one stroke weight, `currentColor` throughout,
+    so they inherit each button's colour and states.
+
+44. **The location popup was a bare Leaflet default** reading "Your location",
+    with none of the application's styling, and it added a fresh marker on every
+    press so they piled up. One marker now, the application's popup shell, and an
+    accuracy halo drawn in metres — a 3 km fix and a 30 m fix mean very different
+    things and the old popup said neither.
+
+45. **The outlook calendar could go stale or drop a tap.** It captured the index
+    once when the panel was built, so outlooks published afterwards never
+    appeared; it is read on every paint now. Clicking a day repainted the whole
+    grid from inside that day's own click handler, replacing the button
+    mid-event, which made taps intermittent on touch — the selection is marked in
+    place instead. Month navigation also stops at the range that actually holds
+    outlooks rather than wandering into empty years.
+
+46. **The latest-frame search stepped over the only available frame.** The ladder
+    is geometric — 0, 1, 2, 3, 4, 6, 8, 12 … — so it never asks for offset 5. When
+    the marine grids narrowed to a single frame five hours back, they became
+    invisible to it and drew nothing, exactly the failure the ladder was added to
+    fix. A bounded dense sweep of the near offsets now runs when the ladder finds
+    nothing: a dozen probes once per product per TTL, only on the failure path.
+
+
+47. **The thunder cue never fired, for two separate reasons.**
+
+    `lightning.sound` was the one lightning option `setLightningOption` did not
+    persist — `showLayer` and `colorByAge` were in the map, it was not — so the
+    switch reset to off on every reload. Turning it on and coming back the next
+    day left it silent with no indication why. It now persists like its
+    neighbours.
+
+    The gate was also far narrower than the behaviour it was meant to express. It
+    required `fromData && atLive && !playing`: only strikes arriving from the live
+    poll, which runs every few minutes, so in a quiet spell over the UK it is
+    hours between cues, and scrubbing forward through a storm — plotting strike
+    after strike — made no sound at all.
+
+    What actually needs guarding is a bulk plot: the archives landing, or a
+    window jump putting hundreds on screen at once, where one clap is right and
+    two hundred is not. So the cue now fires on any newly plotted strikes, capped
+    at `CUE_BULK_LIMIT` (25) per redraw, with a `CUE_MIN_GAP_MS` (400) floor
+    between cues on top of the 90 ms redraw throttle — twelve arrivals in 1.2 s
+    produce three cues, not twelve. Playback stays excluded: it reveals a frame
+    of strikes several times a second, and a rumble on every frame is noise.
+
+    The old gate carried a comment saying the cue had already been broken twice
+    by something upstream going false invisibly. It was broken a third time by
+    the same shape of problem, which is why `strikeCueState()` now also reports
+    `bulk` and `spaced`.
+
+48. **Hand-drawn polygons were invisible in 3D.** Registering them as an
+    orderable layer gave them a pane, a row in the layer list and a stacking
+    position, but `mirrorBridge`'s `OVERLAY_PANES` — the list of Leaflet panes the
+    GL view captures — was never extended to include `drawPane`. They existed
+    everywhere except the view the user was looking at. Adding the pane covers
+    both shapes drawn in 2D and shapes drawn in 3D, since both end up in the same
+    feature group.
 
 
 ## Known limitations

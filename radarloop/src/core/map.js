@@ -227,7 +227,13 @@ function canvasesInOverlay() {
  * its layers into this one canvas — so the mirror captures the canvas instead,
  * and needs to know which element that is.
  */
-export const mapsglSurfaces = () => mapsglCanvases.filter((c) => c.isConnected);
+export function mapsglSurfaces() {
+  mapsglCanvases = mapsglCanvases.filter((c) => c.isConnected);
+  // The controller can attach its surface later than the two capture passes at
+  // start-up, so an empty list is re-checked rather than trusted.
+  if (!mapsglCanvases.length && mapsglController) mapsglCanvases = canvasesInOverlay();
+  return mapsglCanvases;
+}
 
 export function ensureMapsGL() {
   clearTimeout(mapsglIdleTimer);

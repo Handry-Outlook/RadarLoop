@@ -90,6 +90,7 @@ function create(styleMode) {
   // The still-image products are captured from the 2D map, which therefore has
   // to be pointed wherever the camera goes.
   gl.on('moveend', scheduleFollow);
+  gl.on('resize', handleResize);
 
   gl.on('style.load', () => {
     addTerrain();
@@ -370,6 +371,23 @@ function scheduleFollow() {
   }, FOLLOW_DEBOUNCE_MS);
 }
 
+/**
+ * A viewport resize moves both views, but not in step.
+ *
+ * Every still is captured against the 2D container's size and the 2D bounds, and
+ * Leaflet only learns it has been resized when it is told. Until then the
+ * captured geometry describes the old viewport while GL has already adopted the
+ * new one, so the mirrored layers — the MapsGL surface most visibly — slide
+ * around. Telling Leaflet immediately, then re-following and re-capturing, keeps
+ * the two in agreement.
+ */
+function handleResize() {
+  if (!gl || !runtime.is3D) return;
+  map.invalidateSize({ animate: false });
+  scheduleFollow();
+}
+
+
 /** Stops the camera follow when 3D is left. */
 function stopFollowing() {
   clearTimeout(followTimer);
@@ -387,6 +405,9 @@ export function enter3D(containerId = 'map-3d', { styleMode = 'default' } = {}) 
 
   document.getElementById('app')?.setAttribute('data-mode', '3d');
   runtime.is3D = true;
+  // Registered with the mode rather than at import: this module is also loaded
+  // directly by the Node-side tests, where there is no window to bind to.
+  window.addEventListener('resize', handleResize, { passive: true });
 
   if (!gl) create(styleMode);
   else {
@@ -403,6 +424,7 @@ export function enter3D(containerId = 'map-3d', { styleMode = 'default' } = {}) 
 export function exit3D() {
   if (!runtime.is3D) return;
   stopFollowing();
+  window.removeEventListener('resize', handleResize);
 
   // Carry the camera back so the two views stay in agreement.
   if (gl) {

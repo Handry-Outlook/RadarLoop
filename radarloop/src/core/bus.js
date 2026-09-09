@@ -53,6 +53,8 @@ export const EVENTS = {
   LAYER_RENDERED: 'layer:rendered',
   LAYER_FAILED: 'layer:failed',
   BASEMAP_CHANGED: 'basemap:changed',
+  /** Drawing started or stopped, so the tools panel can follow along. */
+  DRAW_MODE: 'draw:mode',
   LIGHTNING_DATA: 'lightning:data',
   LIGHTNING_FILTERED: 'lightning:filtered',
   /** A lightning option changed programmatically; controls should re-sync. */
