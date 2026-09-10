@@ -301,9 +301,12 @@ export function mirrorTo3D(group, def, layer, url, opacity) {
       return mirrorFrame(group, def, url, opacity);
     }
 
+    case 'windy-lightning':
     case 'opera': {
       // The layer already renders the whole viewport onto one canvas, so it can
-      // be handed over directly — no encode, same as the tiled path.
+      // be handed over directly — no encode, same as the tiled path. The live
+      // strikes qualify for the same reason: they are drawn, not fetched, so
+      // there is no URL for GL to load and only the pixels exist.
       const canvas = layer?._canvas;
       if (!canvas || !canvas.width || !canvas.height) return false;
       stats.mirrored += 1;

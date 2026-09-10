@@ -3802,8 +3802,11 @@ const LAYER_CATALOG = {
   lightning: {
     "windy-live-lightning": {
       kind: "windy-lightning",
-      label: "Live + past 24 hours Global Lightning",
-      listed: false
+      // Not "past 24 hours": the only endpoint that still answers returns a
+      // rolling seven-minute window, so history accumulates from the moment the
+      // layer is switched on and no further back.
+      label: "Live Global Strikes",
+      listed: true
     },
     "xweather-lightning": {
       kind: "geojson",
@@ -8165,6 +8168,478 @@ __exports.devicePixelRatioStep = devicePixelRatioStep;
 __exports.createWindyRadarLayer = createWindyRadarLayer;
 });
 
+__define('lightning/render.js', (__exports, __mod) => {
+/**
+ * Strike rendering.
+ *
+ * ## Why this is a single canvas layer
+ *
+ * The legacy renderer created one `L.crossMarker` per strike — up to 9,000 live
+ * Leaflet layers, each with its own popup binding, style object and entry in the
+ * renderer's redraw list. Every colour update walked all of them calling
+ * `setStyle`, and every pan asked Leaflet to reposition all of them.
+ *
+ * Here all strikes are drawn onto one canvas in a single pass. Cost per frame is
+ * one loop over the visible strikes with no per-strike allocation, so ten
+ * thousand strikes cost roughly what a hundred markers used to. Click-to-inspect
+ * is preserved through a hit test rather than per-marker interactivity.
+ */
+const { DEVICE, TUNING } = __mod('config.js');
+const { map } = __mod('core/map.js');
+const { lightning, runtime } = __mod('core/state.js');
+/** Age ramp, newest to oldest. Thresholds are fractions of the lifespan. */
+const AGE_STOPS = [
+  [0.05, '#ffd700'],
+  [0.2, '#ff00ff'],
+  [0.5, '#ff69b4'],
+  [0.8, '#800080'],
+  [Infinity, '#4b0082'],
+];
+
+function colourForAge(fraction) {
+  for (const [limit, colour] of AGE_STOPS) if (fraction < limit) return colour;
+  return AGE_STOPS[AGE_STOPS.length - 1][1];
+}
+
+/** Colour used when age colouring is switched off. */
+const STATIC_COLOUR = '#111111';
+
+/* ------------------------------------------------------------------ *
+ * The layer
+ * ------------------------------------------------------------------ */
+
+const StrikeCanvasLayer = L.Layer.extend({
+  initialize(options = {}) {
+    L.setOptions(this, options);
+    this._strikes = [];
+    this._windowEnd = Date.now();
+    this._lifespanMs = 3 * 3600 * 1000;
+    this._flashes = [];
+    this._frame = null;
+    this._onViewChange = () => this._schedule();
+  },
+
+  onAdd(leafletMap) {
+    this._map = leafletMap;
+    this._canvas = L.DomUtil.create('canvas', 'strike-canvas');
+    leafletMap.getPane(this.options.pane || 'lightningPane').appendChild(this._canvas);
+    leafletMap.on('move zoom viewreset resize', this._onViewChange);
+    leafletMap.on('click', this._onClick, this);
+    this._schedule();
+    return this;
+  },
+
+  onRemove(leafletMap) {
+    cancelAnimationFrame(this._frame);
+    leafletMap.off('move zoom viewreset resize', this._onViewChange);
+    leafletMap.off('click', this._onClick, this);
+    this._canvas?.remove();
+    this._canvas = null;
+    this._map = null;
+    return this;
+  },
+
+  /** Replaces the drawn set. `newKeys` marks strikes that should flash. */
+  setStrikes(strikes, { end, lifespanHours, newKeys } = {}) {
+    this._strikes = strikes;
+    if (end) this._windowEnd = end instanceof Date ? end.getTime() : end;
+    if (lifespanHours) this._lifespanMs = Math.max(1, lifespanHours * 3600 * 1000);
+
+    if (newKeys?.size) {
+      const now = performance.now();
+      let budget = DEVICE.mobile ? 6 : 14;
+      for (const strike of strikes) {
+        if (budget <= 0) break;
+        if (!newKeys.has(strike.ms)) continue;
+        this._flashes.push({ lat: strike.lat, lon: strike.lon, start: now });
+        budget -= 1;
+      }
+    }
+    this._schedule();
+    return this;
+  },
+
+  setOpacity(value) {
+    if (this._canvas) this._canvas.style.opacity = String(value);
+    return this;
+  },
+
+  _schedule() {
+    if (this._frame) return;
+    this._frame = requestAnimationFrame(() => {
+      this._frame = null;
+      this._render();
+    });
+  },
+
+  _render() {
+    const leafletMap = this._map;
+    const canvas = this._canvas;
+    if (!leafletMap || !canvas) return;
+
+    const size = leafletMap.getSize();
+    const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
+    if (canvas.width !== Math.round(size.x * dpr) || canvas.height !== Math.round(size.y * dpr)) {
+      canvas.width = Math.round(size.x * dpr);
+      canvas.height = Math.round(size.y * dpr);
+      canvas.style.width = `${size.x}px`;
+      canvas.style.height = `${size.y}px`;
+    }
+    L.DomUtil.setPosition(canvas, leafletMap.containerPointToLayerPoint([0, 0]));
+
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, size.x, size.y);
+
+    const bounds = leafletMap.getBounds().pad(0.15);
+    const colourByAge = lightning.colorByAge;
+    const end = this._windowEnd;
+    const lifespan = this._lifespanMs;
+    const arm = runtime.lowEnd ? 3.5 : 4.5;
+
+    ctx.lineWidth = runtime.lowEnd ? 1.4 : 1.8;
+    ctx.lineCap = 'round';
+    ctx.globalAlpha = 0.92;
+
+    // Batching by colour means at most five path/stroke pairs for the whole
+    // field instead of one stroke per strike.
+    const batches = new Map();
+
+    for (let i = 0; i < this._strikes.length; i += 1) {
+      const s = this._strikes[i];
+      if (s.lat < bounds.getSouth() || s.lat > bounds.getNorth()) continue;
+      if (s.lon < bounds.getWest() || s.lon > bounds.getEast()) continue;
+
+      const colour = colourByAge ? colourForAge((end - s.ms) / lifespan) : STATIC_COLOUR;
+      let batch = batches.get(colour);
+      if (!batch) {
+        batch = [];
+        batches.set(colour, batch);
+      }
+      const point = leafletMap.latLngToContainerPoint([s.lat, s.lon]);
+      batch.push(point.x, point.y);
+    }
+
+    for (const [colour, points] of batches) {
+      ctx.strokeStyle = colour;
+      ctx.beginPath();
+      for (let i = 0; i < points.length; i += 2) {
+        const x = points[i];
+        const y = points[i + 1];
+        ctx.moveTo(x - arm, y - arm);
+        ctx.lineTo(x + arm, y + arm);
+        ctx.moveTo(x + arm, y - arm);
+        ctx.lineTo(x - arm, y + arm);
+      }
+      ctx.stroke();
+    }
+
+    this._renderFlashes(ctx, leafletMap);
+  },
+
+  /** Expanding rings for strikes that arrived in the last poll. */
+  _renderFlashes(ctx, leafletMap) {
+    if (!this._flashes.length) return;
+    const now = performance.now();
+    const DURATION = 900;
+    const alive = [];
+
+    for (const flash of this._flashes) {
+      const t = (now - flash.start) / DURATION;
+      if (t >= 1) continue;
+      alive.push(flash);
+      const point = leafletMap.latLngToContainerPoint([flash.lat, flash.lon]);
+      ctx.globalAlpha = (1 - t) * 0.8;
+      ctx.strokeStyle = '#fff8c4';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 4 + t * 22, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    ctx.globalAlpha = 1;
+    this._flashes = alive;
+    if (alive.length) this._schedule();
+  },
+
+  /** Finds the nearest strike to a click and shows its time. */
+  _onClick(event) {
+    if (!this._strikes.length) return;
+    const clickPoint = this._map.latLngToContainerPoint(event.latlng);
+    let best = null;
+    let bestDistance = 12 * 12; // squared pixels
+
+    for (const s of this._strikes) {
+      const point = this._map.latLngToContainerPoint([s.lat, s.lon]);
+      const dx = point.x - clickPoint.x;
+      const dy = point.y - clickPoint.y;
+      const distance = dx * dx + dy * dy;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = s;
+      }
+    }
+    if (!best) return;
+
+    L.popup({ className: 'wx-popup-shell', closeButton: true })
+      .setLatLng([best.lat, best.lon])
+      .setContent(
+        `<div class="wx-popup"><header class="wx-popup__head" style="--accent:#ffd700">
+           <strong>Lightning strike</strong></header>
+         <dl class="wx-popup__rows">
+           <dt>Time</dt><dd>${new Date(best.ms).toISOString().replace('T', ' ').slice(0, 19)} UTC</dd>
+           <dt>Position</dt><dd>${best.lat.toFixed(3)}, ${best.lon.toFixed(3)}</dd>
+         </dl></div>`,
+      )
+      .openOn(this._map);
+  },
+});
+
+/* ------------------------------------------------------------------ *
+ * Controller
+ * ------------------------------------------------------------------ */
+
+let layer = null;
+let previousKeys = new Set();
+
+function ensureStrikeLayer() {
+  if (!layer) layer = new StrikeCanvasLayer({ pane: 'lightningPane' });
+  if (!map.hasLayer(layer)) layer.addTo(map);
+  return layer;
+}
+
+function removeStrikeLayer() {
+  if (layer && map.hasLayer(layer)) map.removeLayer(layer);
+}
+
+/**
+ * Draws a filtered set. Strikes are decimated above the render ceiling so a
+ * multi-day archive selection cannot stall the frame.
+ */
+function drawStrikes(filtered, { end, lifespanHours }) {
+  if (!lightning.showLayer) {
+    removeStrikeLayer();
+    return { drawn: 0, fresh: 0 };
+  }
+
+  const ceiling = runtime.lowEnd ? 4000 : TUNING.maxRenderedStrikes;
+  let visible = filtered;
+  if (filtered.length > ceiling) {
+    const stride = Math.ceil(filtered.length / ceiling);
+    visible = [];
+    for (let i = 0; i < filtered.length; i += stride) visible.push(filtered[i]);
+  }
+
+  const keys = new Set(visible.map((s) => s.ms));
+  const fresh = new Set();
+  for (const key of keys) if (!previousKeys.has(key)) fresh.add(key);
+  previousKeys = keys;
+
+  ensureStrikeLayer().setStrikes(visible, { end, lifespanHours, newKeys: fresh });
+  return { drawn: visible.length, fresh: fresh.size, decimated: visible.length < filtered.length };
+}
+
+/** Forces a redraw after a colour-mode change, without refiltering. */
+function refreshColours() {
+  layer?._schedule();
+}
+
+const getStrikeLayer = () => layer;
+
+__exports.colourForAge = colourForAge;
+__exports.StrikeCanvasLayer = StrikeCanvasLayer;
+__exports.ensureStrikeLayer = ensureStrikeLayer;
+__exports.removeStrikeLayer = removeStrikeLayer;
+__exports.drawStrikes = drawStrikes;
+__exports.refreshColours = refreshColours;
+__exports.getStrikeLayer = getStrikeLayer;
+});
+
+__define('layers/windyLightning.js', (__exports, __mod) => {
+/**
+ * Live global strikes.
+ *
+ * The catalog has carried this product since the rewrite, but nothing ever
+ * rendered it: `kind: 'windy-lightning'` fell through the renderer's switch to
+ * the raster branch, which built a tile layer from an undefined URL and drew
+ * nothing at all. The two endpoints for it sat in `config.js` unread by any
+ * module.
+ *
+ * **The feed.** One endpoint still answers; the 5-minute frame endpoint is 404.
+ * It returns a rolling window of roughly the last seven minutes of strikes
+ * worldwide, refreshed continuously, so this layer polls and accumulates rather
+ * than fetching a frame per timestamp. That is also why it cannot honour the
+ * "past 24 hours" half of the name it used to carry: history builds up from the
+ * moment it is switched on and no further back.
+ *
+ * **The coordinates.** Each strike arrives as four integers, `[t, x, y, flag]`,
+ * with no projection stated. `t` is centiseconds. `x` and `y` are an 18-bit grid
+ * — the maxima observed sit just under 2^18 — and the question is what that grid
+ * spans. Four readings are possible, being linear or Mercator latitude, each
+ * with either sign convention, and they are told apart by where they put the
+ * lightning:
+ *
+ *   Web Mercator      33% of strikes poleward of 55 degrees, which does not happen
+ *   linear, north-up  the Southern Ocean and the empty South Pacific
+ *   linear, south-up  the Mediterranean, Sumatra, the Gulf coast and Texas
+ *
+ * The last is a textbook global distribution for the hour it was sampled — 0.4%
+ * poleward of 55, afternoon convection over the Americas, the maritime continent
+ * overnight — so `x` spans 360 degrees of longitude from the antimeridian and
+ * `y` spans 180 degrees of latitude from the south pole, both linear.
+ *
+ * The fourth integer is not age: its values do not correlate with strike time at
+ * all, every class averaging about five minutes old. It is left alone.
+ */
+const { ENDPOINTS } = __mod('config.js');
+const { EVENTS, on } = __mod('core/bus.js');
+const { lightning, time } = __mod('core/state.js');
+const { StrikeCanvasLayer } = __mod('lightning/render.js');
+/** The grid the provider quantises positions onto. */
+const GRID = 262144;
+
+/** How often to ask. The feed's own window is about seven minutes. */
+const POLL_MS = 30000;
+
+/**
+ * Ceiling on retained strikes.
+ *
+ * A busy hour worldwide is a few hundred thousand, and the renderer decimates
+ * above its own ceiling anyway, so this only bounds memory.
+ */
+const MAX_HELD = 300000;
+
+/** Decodes one packed record into a strike. */
+function decodeStrike(record) {
+  const [t, x, y] = record;
+  return {
+    ms: t * 100,
+    lon: (x / GRID) * 360 - 180,
+    lat: (y / GRID) * 180 - 90,
+  };
+}
+
+/** Every strike in a feed response, oldest first. */
+function decodeFeed(payload) {
+  const values = payload?.hotQueue?.values;
+  if (!Array.isArray(values)) return [];
+  const out = values.map(decodeStrike).filter((s) =>
+    Number.isFinite(s.ms) && Math.abs(s.lat) <= 90 && Math.abs(s.lon) <= 180);
+  out.sort((a, b) => a.ms - b.ms);
+  return out;
+}
+
+/* ------------------------------------------------------------------ *
+ * The layer
+ * ------------------------------------------------------------------ */
+
+/** Diagnostics, surfaced through window.RadarLoop for the checks. */
+const feedStats = { polls: 0, failed: 0, received: 0, held: 0, drawn: 0, lastAt: 0 };
+
+/**
+ * Draws the live feed through the same canvas the archive strikes use.
+ *
+ * Reusing `StrikeCanvasLayer` rather than writing a second renderer is what
+ * makes these strikes look like strikes: the same age colouring, the same
+ * lifespan, the same decimation ceiling, and the same flash on arrival.
+ */
+const WindyLightningLayer = StrikeCanvasLayer.extend({
+  initialize(options = {}) {
+    StrikeCanvasLayer.prototype.initialize.call(this, options);
+    /** Keyed on the packed integers, which are exact and cheap to compare. */
+    this._held = new Map();
+    this._timer = null;
+    this._stop = null;
+  },
+
+  onAdd(leafletMap) {
+    StrikeCanvasLayer.prototype.onAdd.call(this, leafletMap);
+    this._poll();
+    this._timer = setInterval(() => this._poll(), POLL_MS);
+    // The scrubber decides which of the accumulated strikes are in view, the
+    // same as it does for the archive.
+    this._stop = on(EVENTS.TIME_COMMITTED, () => this._paint());
+    return this;
+  },
+
+  onRemove(leafletMap) {
+    clearInterval(this._timer);
+    this._timer = null;
+    this._stop?.();
+    this._stop = null;
+    this._held.clear();
+    feedStats.held = 0;
+    return StrikeCanvasLayer.prototype.onRemove.call(this, leafletMap);
+  },
+
+  async _poll() {
+    feedStats.polls += 1;
+    try {
+      const response = await fetch(`${ENDPOINTS.windyLightningLive}?_=${Date.now()}`, {
+        cache: 'no-store',
+        credentials: 'omit',
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const strikes = decodeFeed(await response.json());
+      feedStats.received += strikes.length;
+      feedStats.lastAt = Date.now();
+
+      // Successive responses overlap by most of their window, so the store is
+      // keyed rather than appended.
+      for (const strike of strikes) this._held.set(`${strike.ms}|${strike.lat}|${strike.lon}`, strike);
+      this._prune();
+      this._paint();
+    } catch (error) {
+      feedStats.failed += 1;
+      console.warn('[lightning] live feed:', error?.message || error);
+    }
+  },
+
+  /** Drops anything older than the lifespan, and caps what is kept. */
+  _prune() {
+    const horizon = Date.now() - Math.max(1, lightning.lifespanHours) * 3600 * 1000;
+    for (const [key, strike] of this._held) if (strike.ms < horizon) this._held.delete(key);
+    if (this._held.size > MAX_HELD) {
+      const excess = this._held.size - MAX_HELD;
+      let dropped = 0;
+      for (const key of this._held.keys()) {
+        this._held.delete(key);
+        dropped += 1;
+        if (dropped >= excess) break;
+      }
+    }
+    feedStats.held = this._held.size;
+  },
+
+  /** Hands the renderer whatever falls inside the scrubber's window. */
+  _paint() {
+    const end = time.current;
+    const lifespanHours = Math.max(0.01, lightning.lifespanHours);
+    const start = end - lifespanHours * 3600 * 1000;
+    const visible = [];
+    for (const strike of this._held.values()) {
+      if (strike.ms >= start && strike.ms <= end) visible.push(strike);
+    }
+    visible.sort((a, b) => a.ms - b.ms);
+    feedStats.drawn = visible.length;
+    this.setStrikes(visible, { end, lifespanHours, newKeys: new Set() });
+    this.options.onPainted?.();
+  },
+});
+
+const isWindyLightning = (kind) => kind === 'windy-lightning';
+
+function createWindyLightningLayer(options = {}) {
+  return new WindyLightningLayer({ pane: 'lightningPane', ...options });
+}
+
+__exports.decodeStrike = decodeStrike;
+__exports.decodeFeed = decodeFeed;
+__exports.feedStats = feedStats;
+__exports.isWindyLightning = isWindyLightning;
+__exports.createWindyLightningLayer = createWindyLightningLayer;
+});
+
 __define('layers/solar.js', (__exports, __mod) => {
 /**
  * Where the sun is.
@@ -9154,9 +9629,12 @@ function mirrorTo3D(group, def, layer, url, opacity) {
       return mirrorFrame(group, def, url, opacity);
     }
 
+    case 'windy-lightning':
     case 'opera': {
       // The layer already renders the whole viewport onto one canvas, so it can
-      // be handed over directly — no encode, same as the tiled path.
+      // be handed over directly — no encode, same as the tiled path. The live
+      // strikes qualify for the same reason: they are drawn, not fetched, so
+      // there is no URL for GL to load and only the pixels exist.
       const canvas = layer?._canvas;
       if (!canvas || !canvas.width || !canvas.height) return false;
       stats.mirrored += 1;
@@ -10427,6 +10905,7 @@ const { prefetchNeighbours, resolveFrame } = __mod('layers/resolver.js');
 const { createOperaLayer } = __mod('layers/opera.js');
 const { getSignature } = __mod('layers/radarScale.js');
 const { createWindyRadarLayer, isWindyRadar } = __mod('layers/windy.js');
+const { createWindyLightningLayer } = __mod('layers/windyLightning.js');
 const { channelFor, createWindySatLayer, isWindySat } = __mod('layers/windySat.js');
 const { renderMapsGLLayer, clearMapsGLLayer } = __mod('layers/mapsgl.js');
 const { renderXweatherLayer, clearXweatherLayer } = __mod('layers/xweather.js');
@@ -10714,8 +11193,33 @@ async function renderSlot(group, timestamp, generation, activeLayers) {
     if (is3D()) mirrorMapsGLSoon(group, slot.opacity);
     return pending;
   }
-  if (def.kind === 'xweather' || def.kind === 'windy-lightning') {
+  if (def.kind === 'xweather') {
     return renderXweatherLayer(group, slot.type, slot, timestamp);
+  }
+
+  // Live strikes. The layer polls and accumulates on its own, so there is no
+  // frame to resolve, nothing to double-buffer and no URL to key on — which is
+  // why it cannot go through the tile path below. It used to be handed to the
+  // Xweather renderer, which has no case for it, so the product had never drawn
+  // anything since the rewrite.
+  if (def.kind === 'windy-lightning') {
+    let layer = slot.front;
+    if (!layer) {
+      layer = createWindyLightningLayer({
+        pane: paneFor(group),
+        opacity: slot.opacity,
+        // Polling repaints between renders, and a mirrored still would go stale
+        // for as long as the view sat there. Re-capturing on paint is what keeps
+        // 3D showing the strikes that 2D is showing.
+        onPainted: () => {
+          if (is3D()) mirrorTo3D(group, def, layer, LIVE_STRIKE_KEY, slot.opacity);
+        },
+      });
+      layer.addTo(map);
+    }
+    promote(slot, layer, timestamp, LIVE_STRIKE_KEY);
+    if (is3D()) mirrorTo3D(group, def, layer, LIVE_STRIKE_KEY, slot.opacity);
+    return;
   }
 
   const key = frameKey(slot, def, timestamp);
@@ -10870,6 +11374,9 @@ async function renderSlot(group, timestamp, generation, activeLayers) {
  * cache, so asking for one that will be thrown away has a real cost.
  */
 const SLOW_TO_RENDER = new Set(['wms']);
+
+/** Stands in for a frame URL on the live feed, which has none. */
+const LIVE_STRIKE_KEY = 'live-strikes';
 
 /** Groups holding their frame while the timeline moves, to be caught up after. */
 const deferred = new Set();
@@ -11658,293 +12165,6 @@ __exports.fetchStrikes = fetchStrikes;
 __exports.filterWindow = filterWindow;
 __exports.pruneBefore = pruneBefore;
 __exports.lastUpdated = lastUpdated;
-});
-
-__define('lightning/render.js', (__exports, __mod) => {
-/**
- * Strike rendering.
- *
- * ## Why this is a single canvas layer
- *
- * The legacy renderer created one `L.crossMarker` per strike — up to 9,000 live
- * Leaflet layers, each with its own popup binding, style object and entry in the
- * renderer's redraw list. Every colour update walked all of them calling
- * `setStyle`, and every pan asked Leaflet to reposition all of them.
- *
- * Here all strikes are drawn onto one canvas in a single pass. Cost per frame is
- * one loop over the visible strikes with no per-strike allocation, so ten
- * thousand strikes cost roughly what a hundred markers used to. Click-to-inspect
- * is preserved through a hit test rather than per-marker interactivity.
- */
-const { DEVICE, TUNING } = __mod('config.js');
-const { map } = __mod('core/map.js');
-const { lightning, runtime } = __mod('core/state.js');
-/** Age ramp, newest to oldest. Thresholds are fractions of the lifespan. */
-const AGE_STOPS = [
-  [0.05, '#ffd700'],
-  [0.2, '#ff00ff'],
-  [0.5, '#ff69b4'],
-  [0.8, '#800080'],
-  [Infinity, '#4b0082'],
-];
-
-function colourForAge(fraction) {
-  for (const [limit, colour] of AGE_STOPS) if (fraction < limit) return colour;
-  return AGE_STOPS[AGE_STOPS.length - 1][1];
-}
-
-/** Colour used when age colouring is switched off. */
-const STATIC_COLOUR = '#111111';
-
-/* ------------------------------------------------------------------ *
- * The layer
- * ------------------------------------------------------------------ */
-
-const StrikeCanvasLayer = L.Layer.extend({
-  initialize(options = {}) {
-    L.setOptions(this, options);
-    this._strikes = [];
-    this._windowEnd = Date.now();
-    this._lifespanMs = 3 * 3600 * 1000;
-    this._flashes = [];
-    this._frame = null;
-    this._onViewChange = () => this._schedule();
-  },
-
-  onAdd(leafletMap) {
-    this._map = leafletMap;
-    this._canvas = L.DomUtil.create('canvas', 'strike-canvas');
-    leafletMap.getPane(this.options.pane || 'lightningPane').appendChild(this._canvas);
-    leafletMap.on('move zoom viewreset resize', this._onViewChange);
-    leafletMap.on('click', this._onClick, this);
-    this._schedule();
-    return this;
-  },
-
-  onRemove(leafletMap) {
-    cancelAnimationFrame(this._frame);
-    leafletMap.off('move zoom viewreset resize', this._onViewChange);
-    leafletMap.off('click', this._onClick, this);
-    this._canvas?.remove();
-    this._canvas = null;
-    this._map = null;
-    return this;
-  },
-
-  /** Replaces the drawn set. `newKeys` marks strikes that should flash. */
-  setStrikes(strikes, { end, lifespanHours, newKeys } = {}) {
-    this._strikes = strikes;
-    if (end) this._windowEnd = end instanceof Date ? end.getTime() : end;
-    if (lifespanHours) this._lifespanMs = Math.max(1, lifespanHours * 3600 * 1000);
-
-    if (newKeys?.size) {
-      const now = performance.now();
-      let budget = DEVICE.mobile ? 6 : 14;
-      for (const strike of strikes) {
-        if (budget <= 0) break;
-        if (!newKeys.has(strike.ms)) continue;
-        this._flashes.push({ lat: strike.lat, lon: strike.lon, start: now });
-        budget -= 1;
-      }
-    }
-    this._schedule();
-    return this;
-  },
-
-  setOpacity(value) {
-    if (this._canvas) this._canvas.style.opacity = String(value);
-    return this;
-  },
-
-  _schedule() {
-    if (this._frame) return;
-    this._frame = requestAnimationFrame(() => {
-      this._frame = null;
-      this._render();
-    });
-  },
-
-  _render() {
-    const leafletMap = this._map;
-    const canvas = this._canvas;
-    if (!leafletMap || !canvas) return;
-
-    const size = leafletMap.getSize();
-    const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
-    if (canvas.width !== Math.round(size.x * dpr) || canvas.height !== Math.round(size.y * dpr)) {
-      canvas.width = Math.round(size.x * dpr);
-      canvas.height = Math.round(size.y * dpr);
-      canvas.style.width = `${size.x}px`;
-      canvas.style.height = `${size.y}px`;
-    }
-    L.DomUtil.setPosition(canvas, leafletMap.containerPointToLayerPoint([0, 0]));
-
-    const ctx = canvas.getContext('2d');
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, size.x, size.y);
-
-    const bounds = leafletMap.getBounds().pad(0.15);
-    const colourByAge = lightning.colorByAge;
-    const end = this._windowEnd;
-    const lifespan = this._lifespanMs;
-    const arm = runtime.lowEnd ? 3.5 : 4.5;
-
-    ctx.lineWidth = runtime.lowEnd ? 1.4 : 1.8;
-    ctx.lineCap = 'round';
-    ctx.globalAlpha = 0.92;
-
-    // Batching by colour means at most five path/stroke pairs for the whole
-    // field instead of one stroke per strike.
-    const batches = new Map();
-
-    for (let i = 0; i < this._strikes.length; i += 1) {
-      const s = this._strikes[i];
-      if (s.lat < bounds.getSouth() || s.lat > bounds.getNorth()) continue;
-      if (s.lon < bounds.getWest() || s.lon > bounds.getEast()) continue;
-
-      const colour = colourByAge ? colourForAge((end - s.ms) / lifespan) : STATIC_COLOUR;
-      let batch = batches.get(colour);
-      if (!batch) {
-        batch = [];
-        batches.set(colour, batch);
-      }
-      const point = leafletMap.latLngToContainerPoint([s.lat, s.lon]);
-      batch.push(point.x, point.y);
-    }
-
-    for (const [colour, points] of batches) {
-      ctx.strokeStyle = colour;
-      ctx.beginPath();
-      for (let i = 0; i < points.length; i += 2) {
-        const x = points[i];
-        const y = points[i + 1];
-        ctx.moveTo(x - arm, y - arm);
-        ctx.lineTo(x + arm, y + arm);
-        ctx.moveTo(x + arm, y - arm);
-        ctx.lineTo(x - arm, y + arm);
-      }
-      ctx.stroke();
-    }
-
-    this._renderFlashes(ctx, leafletMap);
-  },
-
-  /** Expanding rings for strikes that arrived in the last poll. */
-  _renderFlashes(ctx, leafletMap) {
-    if (!this._flashes.length) return;
-    const now = performance.now();
-    const DURATION = 900;
-    const alive = [];
-
-    for (const flash of this._flashes) {
-      const t = (now - flash.start) / DURATION;
-      if (t >= 1) continue;
-      alive.push(flash);
-      const point = leafletMap.latLngToContainerPoint([flash.lat, flash.lon]);
-      ctx.globalAlpha = (1 - t) * 0.8;
-      ctx.strokeStyle = '#fff8c4';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(point.x, point.y, 4 + t * 22, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-
-    ctx.globalAlpha = 1;
-    this._flashes = alive;
-    if (alive.length) this._schedule();
-  },
-
-  /** Finds the nearest strike to a click and shows its time. */
-  _onClick(event) {
-    if (!this._strikes.length) return;
-    const clickPoint = this._map.latLngToContainerPoint(event.latlng);
-    let best = null;
-    let bestDistance = 12 * 12; // squared pixels
-
-    for (const s of this._strikes) {
-      const point = this._map.latLngToContainerPoint([s.lat, s.lon]);
-      const dx = point.x - clickPoint.x;
-      const dy = point.y - clickPoint.y;
-      const distance = dx * dx + dy * dy;
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        best = s;
-      }
-    }
-    if (!best) return;
-
-    L.popup({ className: 'wx-popup-shell', closeButton: true })
-      .setLatLng([best.lat, best.lon])
-      .setContent(
-        `<div class="wx-popup"><header class="wx-popup__head" style="--accent:#ffd700">
-           <strong>Lightning strike</strong></header>
-         <dl class="wx-popup__rows">
-           <dt>Time</dt><dd>${new Date(best.ms).toISOString().replace('T', ' ').slice(0, 19)} UTC</dd>
-           <dt>Position</dt><dd>${best.lat.toFixed(3)}, ${best.lon.toFixed(3)}</dd>
-         </dl></div>`,
-      )
-      .openOn(this._map);
-  },
-});
-
-/* ------------------------------------------------------------------ *
- * Controller
- * ------------------------------------------------------------------ */
-
-let layer = null;
-let previousKeys = new Set();
-
-function ensureStrikeLayer() {
-  if (!layer) layer = new StrikeCanvasLayer({ pane: 'lightningPane' });
-  if (!map.hasLayer(layer)) layer.addTo(map);
-  return layer;
-}
-
-function removeStrikeLayer() {
-  if (layer && map.hasLayer(layer)) map.removeLayer(layer);
-}
-
-/**
- * Draws a filtered set. Strikes are decimated above the render ceiling so a
- * multi-day archive selection cannot stall the frame.
- */
-function drawStrikes(filtered, { end, lifespanHours }) {
-  if (!lightning.showLayer) {
-    removeStrikeLayer();
-    return { drawn: 0, fresh: 0 };
-  }
-
-  const ceiling = runtime.lowEnd ? 4000 : TUNING.maxRenderedStrikes;
-  let visible = filtered;
-  if (filtered.length > ceiling) {
-    const stride = Math.ceil(filtered.length / ceiling);
-    visible = [];
-    for (let i = 0; i < filtered.length; i += stride) visible.push(filtered[i]);
-  }
-
-  const keys = new Set(visible.map((s) => s.ms));
-  const fresh = new Set();
-  for (const key of keys) if (!previousKeys.has(key)) fresh.add(key);
-  previousKeys = keys;
-
-  ensureStrikeLayer().setStrikes(visible, { end, lifespanHours, newKeys: fresh });
-  return { drawn: visible.length, fresh: fresh.size, decimated: visible.length < filtered.length };
-}
-
-/** Forces a redraw after a colour-mode change, without refiltering. */
-function refreshColours() {
-  layer?._schedule();
-}
-
-const getStrikeLayer = () => layer;
-
-__exports.colourForAge = colourForAge;
-__exports.StrikeCanvasLayer = StrikeCanvasLayer;
-__exports.ensureStrikeLayer = ensureStrikeLayer;
-__exports.removeStrikeLayer = removeStrikeLayer;
-__exports.drawStrikes = drawStrikes;
-__exports.refreshColours = refreshColours;
-__exports.getStrikeLayer = getStrikeLayer;
 });
 
 __define('lightning/audio.js', (__exports, __mod) => {
@@ -19713,6 +19933,7 @@ const { registerOverlayLayers } = __mod('layers/registerOverlays.js');
 const { trackDockedChrome } = __mod('ui/layout.js');
 const { refreshOverlayMirror, remirrorAll, stats: mirrorStats } = __mod('layers/mirrorBridge.js');
 const { poolStats } = __mod('layers/windyPool.js');
+const { decodeFeed, decodeStrike, feedStats } = __mod('layers/windyLightning.js');
 const { archiveFrameTime, composeChannels, daylightGrid, deinvertBlocks, frameTimeFromUrl, isArchiveOnly, toArchiveUrl, toLiveUrl } = __mod('layers/windySat.js');
 const { prefetchIdle } = __mod('core/deps.js');
 const synoptic = __mod('layers/synoptic.js');
@@ -20245,6 +20466,10 @@ window.__layers = { LAYER_CATALOG, LAYER_ORDER };
 // Tile addressing has to agree between the two views, so the rule is reachable
 // from the harness that compares them.
 window.__mirror3d = { tileScheme, usesFlippedY };
+// The live strike feed's decoder and counters, for its own checks: the
+// projection was settled by where the strikes land, so the test needs to look
+// at decoded positions rather than at pixels alone.
+window.__windyLightning = { decodeFeed, decodeStrike, feedStats };
 // The catalog as the pickers see it — after the merge, the scrub and the
 // ordering pass — so the list checks read the same thing the interface does.
 window.__catalog = { LAYER_CATALOG, LAYER_ORDER };

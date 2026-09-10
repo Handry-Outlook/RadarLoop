@@ -26,6 +26,7 @@ import { prefetchNeighbours, resolveFrame } from './resolver.js';
 import { createOperaLayer } from './opera.js';
 import { getSignature } from './radarScale.js';
 import { createWindyRadarLayer, isWindyRadar } from './windy.js';
+import { createWindyLightningLayer } from './windyLightning.js';
 import { channelFor, createWindySatLayer, isWindySat } from './windySat.js';
 import { renderMapsGLLayer, clearMapsGLLayer } from './mapsgl.js';
 import { renderXweatherLayer, clearXweatherLayer } from './xweather.js';
@@ -314,8 +315,33 @@ async function renderSlot(group, timestamp, generation, activeLayers) {
     if (is3D()) mirrorMapsGLSoon(group, slot.opacity);
     return pending;
   }
-  if (def.kind === 'xweather' || def.kind === 'windy-lightning') {
+  if (def.kind === 'xweather') {
     return renderXweatherLayer(group, slot.type, slot, timestamp);
+  }
+
+  // Live strikes. The layer polls and accumulates on its own, so there is no
+  // frame to resolve, nothing to double-buffer and no URL to key on — which is
+  // why it cannot go through the tile path below. It used to be handed to the
+  // Xweather renderer, which has no case for it, so the product had never drawn
+  // anything since the rewrite.
+  if (def.kind === 'windy-lightning') {
+    let layer = slot.front;
+    if (!layer) {
+      layer = createWindyLightningLayer({
+        pane: paneFor(group),
+        opacity: slot.opacity,
+        // Polling repaints between renders, and a mirrored still would go stale
+        // for as long as the view sat there. Re-capturing on paint is what keeps
+        // 3D showing the strikes that 2D is showing.
+        onPainted: () => {
+          if (is3D()) mirrorTo3D(group, def, layer, LIVE_STRIKE_KEY, slot.opacity);
+        },
+      });
+      layer.addTo(map);
+    }
+    promote(slot, layer, timestamp, LIVE_STRIKE_KEY);
+    if (is3D()) mirrorTo3D(group, def, layer, LIVE_STRIKE_KEY, slot.opacity);
+    return;
   }
 
   const key = frameKey(slot, def, timestamp);
@@ -470,6 +496,9 @@ async function renderSlot(group, timestamp, generation, activeLayers) {
  * cache, so asking for one that will be thrown away has a real cost.
  */
 const SLOW_TO_RENDER = new Set(['wms']);
+
+/** Stands in for a frame URL on the live feed, which has none. */
+const LIVE_STRIKE_KEY = 'live-strikes';
 
 /** Groups holding their frame while the timeline moves, to be caught up after. */
 const deferred = new Set();

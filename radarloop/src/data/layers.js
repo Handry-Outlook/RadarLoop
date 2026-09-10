@@ -900,8 +900,11 @@ export const LAYER_CATALOG = {
   lightning: {
     "windy-live-lightning": {
       kind: "windy-lightning",
-      label: "Live + past 24 hours Global Lightning",
-      listed: false
+      // Not "past 24 hours": the only endpoint that still answers returns a
+      // rolling seven-minute window, so history accumulates from the moment the
+      // layer is switched on and no further back.
+      label: "Live Global Strikes",
+      listed: true
     },
     "xweather-lightning": {
       kind: "geojson",

@@ -1443,17 +1443,51 @@ fills out.
     `["radar","satellite"]`, while the map check still passed.
     `tools/test-layer-reset.mjs`.
 
-## Known limitations
+## Live global strikes
 
-- **`windy-live-lightning` draws nothing, in either view.** The catalog lists
-  "Live + past 24 hours Global Lightning" with its own kind, but no ingestion was
-  ported for it, so selecting it is a no-op — a 2D gap that the 3D audit
-  surfaced, not a 3D one. The original polled Windy's blitz service: a binary
-  five-minute archive at `ims.windy.com/blitz/v3/5mins/<frameMs>` (no auth)
-  alongside a `node.windy.com/blitz/v3/hot` poll carrying a JWT. Both still
-  answer 200. Reviving it needs the binary decoder, the localStorage archive and
-  the marker renderer porting; the rest of the strike machinery — age colouring,
-  lifespan, the 3D circle layer — already exists and would be reused.
+`layers/windyLightning.js`. The catalog has carried this product since the
+rewrite and it never drew anything, in either view. Two endpoints for it sat in
+`config.js` unread by any module, and `kind: 'windy-lightning'` was routed to
+the Xweather renderer, which has no case for it — so selecting it was a silent
+no-op.
+
+**One endpoint still answers.** The 5-minute frame endpoint is 404. The live one
+returns a rolling window of roughly the last seven minutes worldwide, refreshed
+continuously, so the layer polls every 30 seconds and accumulates rather than
+fetching a frame per timestamp. That also settles what the product can honestly
+claim: history builds from the moment it is switched on and no further back, so
+the label "Live + past 24 hours Global Lightning" became "Live Global Strikes".
+
+**The coordinates took working out.** Each strike is four integers with no
+projection stated: centiseconds, then two values on an 18-bit grid, then a flag.
+Four readings are possible — linear or Mercator latitude, either sign convention
+— and they are separated by where they put the lightning, not by anything in the
+data:
+
+| reading | where the strikes land |
+|---|---|
+| Web Mercator, either sign | 33% poleward of 55°, which does not happen |
+| linear, north-origin | the Southern Ocean and the empty South Pacific |
+| **linear, south-origin** | the Mediterranean, Sumatra, the Gulf coast, Texas |
+
+The last is a textbook global distribution for the hour it was sampled — 0.4%
+poleward of 55°, afternoon convection over the Americas, the maritime continent
+overnight. Rendered over the satellite composite it agrees with an entirely
+independent dataset: the dense Sahel cluster sits exactly on the bright
+convective cloud, which is the check no amount of arithmetic gives you.
+
+The fourth integer is not age. Its classes average about five minutes old
+regardless of value, so it is left alone.
+
+**Drawn through the existing strike canvas.** Reusing `StrikeCanvasLayer` rather
+than writing a second renderer is what makes these look like strikes: the same
+age colouring, lifespan, decimation ceiling and arrival flash. 3D takes the
+canvas the same way the OPERA composite does — the layer is drawn, not fetched,
+so there is no URL for GL to load and only the pixels exist. It re-captures on
+every repaint, because polling repaints between renders and a mirrored still
+would otherwise sit stale for as long as the view did.
+
+## Known limitations
 
 - **Auto HOCO geometry fails from an unlisted origin.** The Cloud Storage bucket
   allows CORS only for the deployed origin, so `localhost` and `file://` get
