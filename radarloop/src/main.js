@@ -38,7 +38,9 @@ import { registerOverlayLayers } from './layers/registerOverlays.js';
 import { trackDockedChrome } from './ui/layout.js';
 import { refreshOverlayMirror, remirrorAll, stats as mirrorStats } from './layers/mirrorBridge.js';
 import { poolStats } from './layers/windyPool.js';
-import { decodeFeed, decodeStrike, feedStats } from './layers/windyLightning.js';
+import {
+  decodeFeed, decodeStrike, feedStats, framesCovering, parseFrame,
+} from './layers/windyLightning.js';
 import {
   archiveFrameTime, composeChannels, daylightGrid, deinvertBlocks,
   frameTimeFromUrl, isArchiveOnly, toArchiveUrl, toLiveUrl,
@@ -578,7 +580,7 @@ window.__mirror3d = { tileScheme, usesFlippedY };
 // The live strike feed's decoder and counters, for its own checks: the
 // projection was settled by where the strikes land, so the test needs to look
 // at decoded positions rather than at pixels alone.
-window.__windyLightning = { decodeFeed, decodeStrike, feedStats };
+window.__windyLightning = { decodeFeed, decodeStrike, parseFrame, framesCovering, feedStats };
 // The catalog as the pickers see it — after the merge, the scrub and the
 // ordering pass — so the list checks read the same thing the interface does.
 window.__catalog = { LAYER_CATALOG, LAYER_ORDER };

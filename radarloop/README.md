@@ -1451,12 +1451,11 @@ rewrite and it never drew anything, in either view. Two endpoints for it sat in
 the Xweather renderer, which has no case for it — so selecting it was a silent
 no-op.
 
-**One endpoint still answers.** The 5-minute frame endpoint is 404. The live one
-returns a rolling window of roughly the last seven minutes worldwide, refreshed
-continuously, so the layer polls every 30 seconds and accumulates rather than
-fetching a frame per timestamp. That also settles what the product can honestly
-claim: history builds from the moment it is switched on and no further back, so
-the label "Live + past 24 hours Global Lightning" became "Live Global Strikes".
+**Two endpoints, two formats.** The live one returns JSON: a rolling window of
+roughly the last seven minutes worldwide, refreshed continuously, polled every 30
+seconds for the minutes since the last archive frame was published. The frame
+endpoint wants a five-minute timestamp in its path — without one it answers 404,
+which is what made it look dead at first.
 
 **The coordinates took working out.** Each strike is four integers with no
 projection stated: centiseconds, then two values on an 18-bit grid, then a flag.
@@ -1478,6 +1477,46 @@ convective cloud, which is the check no amount of arithmetic gives you.
 
 The fourth integer is not age. Its classes average about five minutes old
 regardless of value, so it is left alone.
+
+**Archive frames, and how the format was got.** Five-minute frames go back 24
+hours — served at 24 h old, empty by 26 — which is exactly what the product's
+name always claimed. They are binary, and the bytes did not give the format up:
+fixed bit-fields at every offset and width from 16 to 20 bits, both byte orders,
+both axis assignments and all four latitude conventions scored at chance, as did
+cumulative delta decoding. The result that mattered was negative — no byte's
+histogram correlated with the real distribution of lightning (max |r| = 0.35),
+and the high byte of a packed coordinate has to. That ruled out the whole family
+of layouts a search could reach, so the answer came from the provider's client
+instead: their radar view loads a script that carries the parser, and reading it
+took ten minutes where the analysis had taken an afternoon.
+
+A record is six bytes, occasionally eight:
+
+| bytes | meaning |
+|---|---|
+| 0–1 | x, big-endian, low 16 bits |
+| 2–3 | y, big-endian, low 16 bits |
+| 4 | bits 7–6 are x's high bits, 5–4 are y's, 3–0 the intensity |
+| 5 | time since the previous strike, in centiseconds |
+
+The two high bits of each coordinate sharing a fifth byte is what defeated every
+contiguous-field search. A time byte of 255 is an escape: elapsed time is then
+absolute, read as a big-endian pair from bytes 6–7, and that record is eight
+bytes long. Frames without an escape divide evenly by six, which is what made
+fixed-length records look certain. Coordinates are the same 18-bit grid and the
+same linear latitude the live feed uses — so the projection worked out from where
+the strikes fell was right all along; only the layout was wrong.
+
+Verified against the live feed over the same five minutes: **1960 of its 2212
+strikes appear in the archive frame at identical coordinates**, and 92.6% of the
+frame lands in cells the live feed also has.
+
+**Thinned on the way out.** A day of global lightning is approaching two million
+strikes. The renderer decimates above its own ceiling, but that is too late — the
+cost that hurt was assembling the array before handing it over, which locked the
+page hard enough that a screenshot timed out. Frames wholly inside the window
+skip the per-strike test, a stride keeps any one pass under 60,000, and repaints
+are throttled while a run of frames is still arriving.
 
 **Drawn through the existing strike canvas.** Reusing `StrikeCanvasLayer` rather
 than writing a second renderer is what makes these look like strikes: the same

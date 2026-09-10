@@ -79,6 +79,64 @@ ok('and pixels were actually painted', drawn.lit > 0, `${drawn.lit} lit samples`
 
 await page.screenshot({ path: 'shots/windy-lightning.png' });
 
+
+/* ================================================================== *
+ * The archive
+ * ================================================================== */
+console.log('\n=== archive frames ===');
+
+const archive = await page.evaluate(async () => {
+  const { parseFrame, framesCovering } = window.__windyLightning;
+  const bucket = Math.floor((Date.now() - 20 * 60000) / 300000) * 300000;
+  const buf = await (await fetch(`https://ims.windy.com/blitz/v3/5mins/${bucket}?version=3`)).arrayBuffer();
+  const strikes = parseFrame(buf, bucket);
+  const polar = strikes.filter((s) => Math.abs(s.lat) > 55).length;
+  const times = strikes.map((s) => s.ms);
+  return {
+    bytes: buf.byteLength,
+    count: strikes.length,
+    polarShare: +(100 * polar / strikes.length).toFixed(2),
+    // Every strike must fall inside the five minutes the frame covers.
+    insideFrame: strikes.every((s) => s.ms >= bucket && s.ms < bucket + 300000),
+    span: [Math.min(...times) - bucket, Math.max(...times) - bucket],
+    // A day's window asks for a day of frames, no further back than the horizon.
+    dayFrames: framesCovering(Date.now() - 24 * 3600000, Date.now()).length,
+    tooOld: framesCovering(Date.now() - 100 * 3600000, Date.now() - 90 * 3600000).length,
+  };
+});
+console.log(`  ${JSON.stringify(archive)}`);
+ok('a frame parses', archive.count > 100, JSON.stringify(archive));
+// The decode was settled against the live feed; this is the standing guard.
+ok('and lands where lightning lands', archive.polarShare < 5, `${archive.polarShare}%`);
+ok('every strike falls inside the frame it came from', archive.insideFrame === true,
+   JSON.stringify(archive.span));
+ok('a day of scrubbing asks for a day of frames', archive.dayFrames > 250 && archive.dayFrames < 300,
+   `${archive.dayFrames}`);
+ok('and nothing is requested past the horizon', archive.tooOld === 0, `${archive.tooOld}`);
+
+/* ---- scrubbing back actually draws archived strikes ---- */
+const past = await page.evaluate(async () => {
+  window.RadarLoop.playback.setHistorySpan(24);
+  window.RadarLoop.playback.setTime(Date.now() - 6 * 3600000, { immediate: true });
+  for (let i = 0; i < 60; i += 1) {
+    await new Promise((r) => setTimeout(r, 500));
+    if (window.__windyLightning.feedStats.framesLoaded > 3
+        && window.__windyLightning.feedStats.drawn > 0) break;
+  }
+  const canvases = [...document.querySelectorAll('.strike-canvas')];
+  let lit = 0;
+  for (const c of canvases) {
+    if (!c.width) continue;
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    for (let i = 3; i < d.length; i += 160) if (d[i] > 8) lit += 1;
+  }
+  return { showing: new Date(window.RadarLoop.time.current).toISOString(), lit, feed: window.__windyLightning.feedStats };
+});
+console.log(`  ${JSON.stringify(past)}`);
+ok('scrubbing six hours back loads frames', past.feed.framesLoaded > 3, JSON.stringify(past.feed));
+ok('and paints strikes from them', past.lit > 0 && past.feed.drawn > 0,
+   `${past.lit} lit, ${past.feed.drawn} drawn`);
+await page.screenshot({ path: 'shots/windy-lightning-archive.png' });
 /* ---- and in 3D ---- */
 console.log('\n=== 3D ===');
 await page.evaluate(() => document.getElementById('btn-3d').click());
