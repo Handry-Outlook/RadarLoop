@@ -238,8 +238,24 @@ export function moveLayer(group, delta) {
   return true;
 }
 
+/**
+ * Restores the default stacking.
+ *
+ * `LAYER_GROUPS` is only the catalog groups, so assigning it wholesale dropped
+ * every registered overlay — the station models, the outlooks, anything drawn —
+ * out of `order` entirely. They stayed on the map, because nothing had removed
+ * their layers, but `activeInOrder` reads `order`, so their rows vanished from
+ * the list: cards gone, map unchanged. Each one is re-seated at its preset
+ * instead, which is where it would have been had nobody moved anything.
+ *
+ * The record of what the user positioned by hand goes too. A reset means the
+ * arrangement is forgotten, and keeping those marks would leave an overlay
+ * pinned to wherever it last sat the next time it appeared.
+ */
 export function resetLayerOrder() {
+  positioned.clear();
   order = [...LAYER_GROUPS];
+  for (const id of externals.keys()) seatByPreset(id);
   applyOrder();
   emit(EVENTS.LAYER_ORDER, { order: [...order] });
 }

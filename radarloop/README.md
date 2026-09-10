@@ -1425,6 +1425,24 @@ fills out.
     shaves the top — so the artefact and the real fault looked identical. The
     geometry had to be printed to tell them apart.
 
+64. **Resetting the layer order deleted layers from the list.** Not from the
+    map — which is what made it puzzling to look at: the rows for the station
+    models, the outlooks and anything drawn simply stopped being listed, while
+    everything carried on being drawn exactly as before.
+
+    `order` holds catalog groups and registered overlays in one list, but the
+    default it was reset to, `LAYER_GROUPS`, is only the catalog groups.
+    Assigning it wholesale dropped every overlay out of the ordering, and
+    `activeInOrder` reads `order`, so they left the list. Nothing had touched
+    the layers themselves, hence the map not changing. They are re-seated at
+    their presets now, and the record of what the user had positioned by hand is
+    cleared, since that is what a reset means.
+
+    Reproduced before fixing: with the old code the run lost "Surface
+    observations" and "Manual outlook" and `layerOrder()` fell to
+    `["radar","satellite"]`, while the map check still passed.
+    `tools/test-layer-reset.mjs`.
+
 ## Known limitations
 
 - **`windy-live-lightning` draws nothing, in either view.** The catalog lists
