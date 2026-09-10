@@ -39,7 +39,7 @@ import { trackDockedChrome } from './ui/layout.js';
 import { refreshOverlayMirror, remirrorAll, stats as mirrorStats } from './layers/mirrorBridge.js';
 import { poolStats } from './layers/windyPool.js';
 import {
-  decodeFeed, decodeStrike, feedStats, framesCovering, parseFrame,
+  bufferStrikes, decodeFeed, decodeStrike, feedStats, framesCovering, parseFrame,
 } from './layers/windyLightning.js';
 import {
   archiveFrameTime, composeChannels, daylightGrid, deinvertBlocks,
@@ -48,6 +48,7 @@ import {
 import { prefetchIdle } from './core/deps.js';
 import * as synoptic from './layers/synoptic.js';
 import { buildStationCard } from './ui/stationPopup.js';
+import { mercatorX, mercatorY } from './lightning/render.js';
 
 /* ------------------------------------------------------------------ *
  * Session restore
@@ -580,7 +581,12 @@ window.__mirror3d = { tileScheme, usesFlippedY };
 // The live strike feed's decoder and counters, for its own checks: the
 // projection was settled by where the strikes land, so the test needs to look
 // at decoded positions rather than at pixels alone.
-window.__windyLightning = { decodeFeed, decodeStrike, parseFrame, framesCovering, feedStats };
+// The projection the bulk renderer inlines, so a check can hold it against
+// Leaflet's own — every strike lands in the wrong place if these disagree.
+window.__strikeRender = { mercatorX, mercatorY };
+window.__windyLightning = {
+  decodeFeed, decodeStrike, parseFrame, bufferStrikes, framesCovering, feedStats,
+};
 // The catalog as the pickers see it — after the merge, the scrub and the
 // ordering pass — so the list checks read the same thing the interface does.
 window.__catalog = { LAYER_CATALOG, LAYER_ORDER };

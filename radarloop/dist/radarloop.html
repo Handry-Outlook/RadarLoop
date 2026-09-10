@@ -8203,6 +8203,83 @@ function colourForAge(fraction) {
 /** Colour used when age colouring is switched off. */
 const STATIC_COLOUR = '#111111';
 
+
+/* ------------------------------------------------------------------ *
+ * Bulk strikes
+ * ------------------------------------------------------------------ */
+
+/**
+ * Strike sets big enough that an object per strike is the wrong shape.
+ *
+ * A day of global lightning is approaching two million strikes. As objects that
+ * is a couple of hundred megabytes and a garbage collector under permanent
+ * load; as three typed arrays it is sixteen megabytes and nothing to collect.
+ *
+ * The important part is that the position is stored already projected. Web
+ * Mercator needs a logarithm and a tangent per point, and doing that two million
+ * times per frame is most of a second; done once when the strike arrives, a
+ * frame costs one multiply and one subtract per strike. The provider's own
+ * client stores its strikes the same way, which is a good sign it is the right
+ * shape rather than a clever idea.
+ *
+ * A buffer is `{ mx, my, t, base, count }`: normalised Mercator x and y in
+ * `[0, 1]` as Float32, milliseconds after `base` as Uint32, which covers 49
+ * days per buffer.
+ */
+
+/** Normalised Mercator x for a longitude, in [0, 1]. */
+const mercatorX = (lon) => (lon + 180) / 360;
+
+/** Normalised Mercator y for a latitude, in [0, 1], clamped at the poles. */
+function mercatorY(lat) {
+  const clamped = Math.max(-85.05112878, Math.min(85.05112878, lat));
+  const s = Math.sin((clamped * Math.PI) / 180);
+  return 0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI);
+}
+
+/** Inverse of `mercatorY`, for turning a hit test back into a position. */
+function latFromMercatorY(y) {
+  return (2 * Math.atan(Math.exp((0.5 - y) * 2 * Math.PI)) - Math.PI / 2) * (180 / Math.PI);
+}
+
+/**
+ * Above this many strikes in view, each is drawn as a point rather than a cross.
+ *
+ * Not a cap: every strike in view is still drawn either way. At this density the
+ * crosses overlap into solid colour, so the arms cost four path operations each
+ * to draw something indistinguishable from a dot — and the dot path writes
+ * pixels straight into an image buffer, which is roughly a hundred times faster
+ * than asking the canvas to stroke two million line segments.
+ */
+const DENSE_THRESHOLD = 24000;
+
+/** Age ramp as packed pixels, for the dense path. */
+const AGE_PIXELS = AGE_STOPS.map(([, colour]) => packColour(colour));
+const STATIC_PIXEL = packColour(STATIC_COLOUR);
+
+/** `#rrggbb` to the little-endian ABGR word an ImageData buffer wants. */
+function packColour(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return (255 << 24) | (b << 16) | (g << 8) | r;
+}
+
+/** First index in a buffer whose strike is at or after a moment. */
+function firstAtOrAfter(buffer, ms) {
+  const target = ms - buffer.base;
+  const { t, count } = buffer;
+  let lo = 0;
+  let hi = count;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (t[mid] < target) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
 /* ------------------------------------------------------------------ *
  * The layer
  * ------------------------------------------------------------------ */
@@ -8211,6 +8288,9 @@ const StrikeCanvasLayer = L.Layer.extend({
   initialize(options = {}) {
     L.setOptions(this, options);
     this._strikes = [];
+    this._buffers = [];
+    this._image = null;
+    this._pixels = null;
     this._windowEnd = Date.now();
     this._lifespanMs = 3 * 3600 * 1000;
     this._flashes = [];
@@ -8256,6 +8336,167 @@ const StrikeCanvasLayer = L.Layer.extend({
     }
     this._schedule();
     return this;
+  },
+
+  /**
+   * Replaces the drawn set with typed-array buffers.
+   *
+   * Used for the bulk sources. `setStrikes` stays for the ones small enough that
+   * an object each is no trouble, and the two can be shown at once.
+   */
+  setStrikeBuffers(buffers, { end, lifespanHours } = {}) {
+    this._buffers = buffers || [];
+    if (end) this._windowEnd = end instanceof Date ? end.getTime() : end;
+    if (lifespanHours) this._lifespanMs = Math.max(1, lifespanHours * 3600 * 1000);
+    this._schedule();
+    return this;
+  },
+
+  /**
+   * Draws every buffered strike inside the view.
+   *
+   * Two things keep this cheap at two million strikes.
+   *
+   * **No counting pass.** Choosing between the two draw modes needs to know how
+   * many strikes are on screen, and finding that out exactly meant walking every
+   * buffer twice. The count from the previous frame decides instead: it is the
+   * same view a sixtieth of a second earlier, and being one frame late in
+   * switching mode is invisible, where walking two million entries twice is not.
+   *
+   * **No colour lookup per strike.** Strikes are stored in time order and the age
+   * ramp is a set of time bands, so each band is a contiguous run. A binary
+   * search per band per buffer replaces a comparison chain per strike, and the
+   * inner loop draws a run of one colour with no branching in it at all.
+   */
+  _renderBuffers(ctx, size, dpr) {
+    if (!this._buffers.length) return 0;
+
+    // Leaflet's projection, inlined: at this zoom the whole world is `scale`
+    // pixels across, so a normalised Mercator position is one multiply away from
+    // a pixel. Anything else would put a tangent and a logarithm in this loop.
+    const scale = this._map.getPixelWorldBounds().getSize().x;
+    const origin = this._map.getPixelBounds().min;
+    const dense = (this._lastVisible || 0) > DENSE_THRESHOLD;
+    const view = {
+      scale, originX: origin.x, originY: origin.y, pad: 8, w: size.x, h: size.y, dpr,
+    };
+
+    const runs = this._ageRuns();
+    const drawn = dense ? this._splatRuns(ctx, view, runs) : this._strokeRuns(ctx, view, runs);
+    this._lastVisible = drawn;
+    return drawn;
+  },
+
+  /**
+   * The buffers cut into runs of one colour.
+   *
+   * Each run is `[buffer, from, to, colourIndex]`, and because a buffer is in
+   * time order the cut points are two binary searches per band.
+   */
+  _ageRuns() {
+    const end = this._windowEnd;
+    const lifespan = this._lifespanMs;
+    const runs = [];
+
+    for (const buffer of this._buffers) {
+      if (!buffer.count) continue;
+      if (!lightning.colorByAge) {
+        runs.push([buffer, 0, buffer.count, -1]);
+        continue;
+      }
+      // Age rises with time-before-`end`, so the youngest band is the newest
+      // strikes: walk the stops from the newest boundary backwards.
+      let to = buffer.count;
+      for (let band = 0; band < AGE_STOPS.length && to > 0; band += 1) {
+        const limit = AGE_STOPS[band][0];
+        const from = limit === Infinity
+          ? 0
+          : firstAtOrAfter(buffer, end - limit * lifespan);
+        if (from < to) runs.push([buffer, from, to, band]);
+        to = from;
+      }
+    }
+    return runs;
+  },
+
+  /** The sparse mode: the same crosses the object path draws. */
+  _strokeRuns(ctx, view, runs) {
+    const { scale, originX, originY, pad, w, h } = view;
+    const arm = runtime.lowEnd ? 3.5 : 4.5;
+    let drawn = 0;
+
+    for (const [buffer, from, to, band] of runs) {
+      const { mx, my } = buffer;
+      ctx.strokeStyle = band < 0 ? STATIC_COLOUR : AGE_STOPS[band][1];
+      ctx.beginPath();
+      let any = false;
+      for (let i = from; i < to; i += 1) {
+        const x = mx[i] * scale - originX;
+        if (x < -pad || x > w + pad) continue;
+        const y = my[i] * scale - originY;
+        if (y < -pad || y > h + pad) continue;
+        ctx.moveTo(x - arm, y - arm);
+        ctx.lineTo(x + arm, y + arm);
+        ctx.moveTo(x + arm, y - arm);
+        ctx.lineTo(x - arm, y + arm);
+        any = true;
+        drawn += 1;
+      }
+      if (any) ctx.stroke();
+    }
+    return drawn;
+  },
+
+  /**
+   * The dense mode: one array write per strike, straight into an image buffer.
+   *
+   * At this density the canvas path API is the whole cost — two million strokes
+   * is seconds, two million array writes is milliseconds. The buffer is kept
+   * between frames because allocating a canvas-sized `ImageData` every frame is
+   * itself a noticeable expense at 4K.
+   */
+  _splatRuns(ctx, view, runs) {
+    const { scale, originX, originY, w: cssW, h: cssH, dpr } = view;
+    const w = Math.round(cssW * dpr);
+    const h = Math.round(cssH * dpr);
+    if (!this._image || this._image.width !== w || this._image.height !== h) {
+      this._image = ctx.createImageData(w, h);
+      this._pixels = new Uint32Array(this._image.data.buffer);
+    }
+    const pixels = this._pixels;
+    pixels.fill(0);
+    // A single device pixel disappears on a dense field; a 2x2 block is what
+    // makes an individual strike visible without merging its neighbours.
+    const block = dpr >= 2 ? 2 : 1;
+    let drawn = 0;
+
+    for (const [buffer, from, to, band] of runs) {
+      const { mx, my } = buffer;
+      const colour = band < 0 ? STATIC_PIXEL : AGE_PIXELS[band];
+      for (let i = from; i < to; i += 1) {
+        const px = (mx[i] * scale - originX) * dpr;
+        if (px < 0 || px >= w) continue;
+        const py = (my[i] * scale - originY) * dpr;
+        if (py < 0 || py >= h) continue;
+        const x0 = px | 0;
+        const y0 = py | 0;
+        for (let dy = 0; dy < block; dy += 1) {
+          const row = y0 + dy;
+          if (row >= h) break;
+          const at = row * w + x0;
+          pixels[at] = colour;
+          if (block > 1 && x0 + 1 < w) pixels[at + 1] = colour;
+        }
+        drawn += 1;
+      }
+    }
+
+    // putImageData ignores the transform, so it goes on at device scale.
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.putImageData(this._image, 0, 0);
+    ctx.restore();
+    return drawn;
   },
 
   setOpacity(value) {
@@ -8319,7 +8560,9 @@ const StrikeCanvasLayer = L.Layer.extend({
       batch.push(point.x, point.y);
     }
 
+    let drawn = 0;
     for (const [colour, points] of batches) {
+      drawn += points.length / 2;
       ctx.strokeStyle = colour;
       ctx.beginPath();
       for (let i = 0; i < points.length; i += 2) {
@@ -8333,7 +8576,13 @@ const StrikeCanvasLayer = L.Layer.extend({
       ctx.stroke();
     }
 
+    this._drawn = drawn + this._renderBuffers(ctx, size, dpr);
     this._renderFlashes(ctx, leafletMap);
+  },
+
+  /** How many strikes the last frame actually put on screen. */
+  drawnCount() {
+    return this._drawn || 0;
   },
 
   /** Expanding rings for strikes that arrived in the last poll. */
@@ -8446,6 +8695,9 @@ function refreshColours() {
 const getStrikeLayer = () => layer;
 
 __exports.colourForAge = colourForAge;
+__exports.mercatorX = mercatorX;
+__exports.mercatorY = mercatorY;
+__exports.latFromMercatorY = latFromMercatorY;
 __exports.StrikeCanvasLayer = StrikeCanvasLayer;
 __exports.ensureStrikeLayer = ensureStrikeLayer;
 __exports.removeStrikeLayer = removeStrikeLayer;
@@ -8493,7 +8745,7 @@ __define('layers/windyLightning.js', (__exports, __mod) => {
 const { ENDPOINTS } = __mod('config.js');
 const { EVENTS, on } = __mod('core/bus.js');
 const { lightning, time } = __mod('core/state.js');
-const { StrikeCanvasLayer } = __mod('lightning/render.js');
+const { latFromMercatorY, mercatorY, StrikeCanvasLayer } = __mod('lightning/render.js');
 /** The grid the provider quantises positions onto: 18 bits per axis. */
 const GRID = 1 << 18;
 
@@ -8503,13 +8755,9 @@ const FRAME_VERSION = 2;
 /** Archive frames fetched at once. A full day's window is 288 of them. */
 const FRAME_CONCURRENCY = 6;
 
-/**
- * Most strikes handed to the renderer in one pass.
- *
- * The renderer decimates above its own ceiling, but that is too late: the cost
- * that hurt was assembling a two-million-entry array in the first place.
- */
-const PAINT_CAP = 60000;
+/** Shared empty arrays, so an empty frame allocates nothing. */
+const EMPTY_F = new Float32Array(0);
+const EMPTY_U = new Uint32Array(0);
 
 /** Minimum gap between repaints while frames are still arriving. */
 const PAINT_THROTTLE_MS = 400;
@@ -8587,14 +8835,18 @@ function decodeFeed(payload) {
  */
 function parseFrame(buffer, frameMs) {
   const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-  if (bytes.length < 3) return [];
+  const empty = { mx: EMPTY_F, my: EMPTY_F, t: EMPTY_U, base: frameMs, count: 0 };
+  if (bytes.length < 3) return empty;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (view.getUint8(0) !== FRAME_VERSION) return [];
+  if (view.getUint8(0) !== FRAME_VERSION) return empty;
 
   const count = view.getUint16(1);
-  const strikes = [];
+  const mx = new Float32Array(count);
+  const my = new Float32Array(count);
+  const t = new Uint32Array(count);
   let at = 3;
   let elapsed = 0;
+  let n = 0;
 
   for (let i = 0; i < count && at + 6 <= bytes.length; i += 1) {
     const high = view.getUint8(at + 4);
@@ -8612,14 +8864,66 @@ function parseFrame(buffer, frameMs) {
       size = 8;
     }
 
-    strikes.push({
-      ms: frameMs + elapsed,
-      lon: (x / GRID) * 360 - 180,
-      lat: (y / GRID) * 180 - 90,
-    });
+    // Projected here, once, rather than two million times per frame.
+    mx[n] = x / GRID;
+    my[n] = mercatorY((y / GRID) * 180 - 90);
+    t[n] = elapsed;
+    n += 1;
     at += size;
   }
-  return strikes;
+
+  return n === count
+    ? { mx, my, t, base: frameMs, count }
+    : { mx: mx.subarray(0, n), my: my.subarray(0, n), t: t.subarray(0, n), base: frameMs, count: n };
+}
+
+/** One strike out of a buffer, as a position. For hit tests and checks. */
+function strikeAt(buffer, i) {
+  return {
+    ms: buffer.base + buffer.t[i],
+    lat: latFromMercatorY(buffer.my[i]),
+    lon: buffer.mx[i] * 360 - 180,
+  };
+}
+
+/** A whole buffer as positions. Only for small ones — checks, mostly. */
+function bufferStrikes(buffer) {
+  const out = new Array(buffer.count);
+  for (let i = 0; i < buffer.count; i += 1) out[i] = strikeAt(buffer, i);
+  return out;
+}
+
+/**
+ * The slice of a frame that falls inside a window.
+ *
+ * Times ascend within a frame, so this is a binary search and a `subarray`:
+ * no copying, and an edge frame costs the same as an interior one.
+ */
+function sliceBuffer(buffer, startMs, endMs) {
+  const { base, t, count } = buffer;
+  const lo = lowerBound(t, count, Math.max(0, startMs - base));
+  const hi = lowerBound(t, count, Math.max(0, endMs - base + 1));
+  if (lo === 0 && hi === count) return buffer;
+  if (hi <= lo) return null;
+  return {
+    mx: buffer.mx.subarray(lo, hi),
+    my: buffer.my.subarray(lo, hi),
+    t: t.subarray(lo, hi),
+    base,
+    count: hi - lo,
+  };
+}
+
+/** First index whose value is at or above `target`. */
+function lowerBound(values, count, target) {
+  let lo = 0;
+  let hi = count;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (values[mid] < target) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
 }
 
 /** Frames are published on five-minute boundaries. */
@@ -8652,7 +8956,7 @@ function framesCovering(startMs, endMs, now = Date.now()) {
 /** Diagnostics, surfaced through window.RadarLoop for the checks. */
 const feedStats = {
   polls: 0, failed: 0, received: 0, held: 0, drawn: 0, lastAt: 0,
-  framesWanted: 0, framesLoaded: 0, framesHeld: 0, available: 0, stride: 1,
+  framesWanted: 0, framesLoaded: 0, framesHeld: 0, available: 0,
 };
 
 /**
@@ -8739,14 +9043,14 @@ const WindyLightningLayer = StrikeCanvasLayer.extend({
       });
       // 204 is the provider's "nothing for this slot", not a failure.
       if (response.status === 204) {
-        this._frames.set(at, []);
+        this._frames.set(at, { mx: EMPTY_F, my: EMPTY_F, t: EMPTY_U, base: at, count: 0 });
         return;
       }
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const strikes = parseFrame(await response.arrayBuffer(), at);
-      this._frames.set(at, strikes);
+      const frame = parseFrame(await response.arrayBuffer(), at);
+      this._frames.set(at, frame);
       feedStats.framesLoaded += 1;
-      feedStats.received += strikes.length;
+      feedStats.received += frame.count;
     } catch (error) {
       feedStats.failed += 1;
       console.warn('[lightning] archive frame:', error?.message || error);
@@ -8803,45 +9107,60 @@ const WindyLightningLayer = StrikeCanvasLayer.extend({
   },
 
   /**
-   * Hands the renderer whatever falls inside the scrubber's window.
+   * Hands the renderer every strike inside the scrubber's window.
    *
-   * Thinned on the way out rather than after. A day of global lightning is
-   * getting on for two million strikes, and building that array before handing
-   * it over locked the page hard enough that a screenshot timed out — the
-   * renderer's own decimation ceiling never got the chance to help, because the
-   * cost was already paid in assembling the list.
+   * Nothing is sampled away. Frames are already typed arrays sorted by time, so
+   * the ones wholly inside the window are passed straight through and the two at
+   * the edges are sliced with a binary search — no copying, no per-strike work
+   * here at all. What used to be an assembly pass over two million objects is now
+   * a few hundred subarray views.
    */
   _paint() {
     const { start, end, lifespanHours } = this._window();
-
-    // Frames wholly inside the window need no per-strike test; only the two at
-    // the edges do.
-    const sources = [];
+    const buffers = [];
     let total = 0;
-    for (const [at, strikes] of this._frames) {
+
+    for (const [at, frame] of this._frames) {
       if (at + FRAME_MS < start || at > end) continue;
-      const whole = at >= start && at + FRAME_MS <= end;
-      sources.push({ strikes, whole });
-      total += strikes.length;
-    }
-    sources.push({ strikes: [...this._held.values()], whole: false });
-    total += this._held.size;
-
-    const stride = Math.max(1, Math.ceil(total / PAINT_CAP));
-    const visible = [];
-    for (const { strikes, whole } of sources) {
-      for (let i = 0; i < strikes.length; i += stride) {
-        const strike = strikes[i];
-        if (whole || (strike.ms >= start && strike.ms <= end)) visible.push(strike);
-      }
+      const slice = at >= start && at + FRAME_MS <= end ? frame : sliceBuffer(frame, start, end);
+      if (!slice || !slice.count) continue;
+      buffers.push(slice);
+      total += slice.count;
     }
 
-    visible.sort((a, b) => a.ms - b.ms);
+    const tail = this._tailBuffer(start, end);
+    if (tail) {
+      buffers.push(tail);
+      total += tail.count;
+    }
+
     feedStats.available = total;
-    feedStats.drawn = visible.length;
-    feedStats.stride = stride;
-    this.setStrikes(visible, { end, lifespanHours, newKeys: new Set() });
+    this.setStrikeBuffers(buffers, { end, lifespanHours });
+    feedStats.drawn = total;
     this.options.onPainted?.();
+  },
+
+  /**
+   * The live tail as a buffer.
+   *
+   * Small — a few thousand at most — so it is rebuilt each paint rather than
+   * maintained incrementally, which keeps the deduplicating map as the only
+   * copy of the truth.
+   */
+  _tailBuffer(start, end) {
+    const held = [...this._held.values()].filter((s) => s.ms >= start && s.ms <= end);
+    if (!held.length) return null;
+    held.sort((a, b) => a.ms - b.ms);
+    const base = held[0].ms;
+    const mx = new Float32Array(held.length);
+    const my = new Float32Array(held.length);
+    const t = new Uint32Array(held.length);
+    for (let i = 0; i < held.length; i += 1) {
+      mx[i] = (held[i].lon + 180) / 360;
+      my[i] = mercatorY(held[i].lat);
+      t[i] = held[i].ms - base;
+    }
+    return { mx, my, t, base, count: held.length };
   },
 
   /** Repaints at most this often while a run of frames is arriving. */
@@ -8862,6 +9181,9 @@ function createWindyLightningLayer(options = {}) {
 __exports.decodeStrike = decodeStrike;
 __exports.decodeFeed = decodeFeed;
 __exports.parseFrame = parseFrame;
+__exports.strikeAt = strikeAt;
+__exports.bufferStrikes = bufferStrikes;
+__exports.sliceBuffer = sliceBuffer;
 __exports.FRAME_MS = FRAME_MS;
 __exports.ARCHIVE_HOURS = ARCHIVE_HOURS;
 __exports.frameStart = frameStart;
@@ -20164,11 +20486,12 @@ const { registerOverlayLayers } = __mod('layers/registerOverlays.js');
 const { trackDockedChrome } = __mod('ui/layout.js');
 const { refreshOverlayMirror, remirrorAll, stats: mirrorStats } = __mod('layers/mirrorBridge.js');
 const { poolStats } = __mod('layers/windyPool.js');
-const { decodeFeed, decodeStrike, feedStats, framesCovering, parseFrame } = __mod('layers/windyLightning.js');
+const { bufferStrikes, decodeFeed, decodeStrike, feedStats, framesCovering, parseFrame } = __mod('layers/windyLightning.js');
 const { archiveFrameTime, composeChannels, daylightGrid, deinvertBlocks, frameTimeFromUrl, isArchiveOnly, toArchiveUrl, toLiveUrl } = __mod('layers/windySat.js');
 const { prefetchIdle } = __mod('core/deps.js');
 const synoptic = __mod('layers/synoptic.js');
 const { buildStationCard } = __mod('ui/stationPopup.js');
+const { mercatorX, mercatorY } = __mod('lightning/render.js');
 /* ------------------------------------------------------------------ *
  * Session restore
  * ------------------------------------------------------------------ */
@@ -20700,7 +21023,12 @@ window.__mirror3d = { tileScheme, usesFlippedY };
 // The live strike feed's decoder and counters, for its own checks: the
 // projection was settled by where the strikes land, so the test needs to look
 // at decoded positions rather than at pixels alone.
-window.__windyLightning = { decodeFeed, decodeStrike, parseFrame, framesCovering, feedStats };
+// The projection the bulk renderer inlines, so a check can hold it against
+// Leaflet's own — every strike lands in the wrong place if these disagree.
+window.__strikeRender = { mercatorX, mercatorY };
+window.__windyLightning = {
+  decodeFeed, decodeStrike, parseFrame, bufferStrikes, framesCovering, feedStats,
+};
 // The catalog as the pickers see it — after the merge, the scrub and the
 // ordering pass — so the list checks read the same thing the interface does.
 window.__catalog = { LAYER_CATALOG, LAYER_ORDER };

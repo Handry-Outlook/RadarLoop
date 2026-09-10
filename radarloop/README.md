@@ -1511,12 +1511,45 @@ Verified against the live feed over the same five minutes: **1960 of its 2212
 strikes appear in the archive frame at identical coordinates**, and 92.6% of the
 frame lands in cells the live feed also has.
 
-**Thinned on the way out.** A day of global lightning is approaching two million
-strikes. The renderer decimates above its own ceiling, but that is too late — the
-cost that hurt was assembling the array before handing it over, which locked the
-page hard enough that a screenshot timed out. Frames wholly inside the window
-skip the per-strike test, a stride keeps any one pass under 60,000, and repaints
-are throttled while a run of frames is still arriving.
+**Every strike is drawn.** A day of global lightning is about 1.66 million of
+them, and the first version sampled that down to 60,000 because assembling the
+list at all locked the page. Sampling was the wrong answer; four changes make the
+whole set cheap enough that none is needed.
+
+*Typed arrays, not objects.* 1.66 million strike objects is a couple of hundred
+megabytes and a garbage collector under permanent load. Three typed arrays —
+Float32 x, Float32 y, Uint32 milliseconds-into-the-frame — is sixteen megabytes
+and nothing to collect.
+
+*The projection is stored, not computed.* Web Mercator costs a logarithm and a
+tangent per point, and doing that 1.66 million times a frame is most of a second.
+Positions are projected once, when the strike arrives, so a frame costs one
+multiply and one subtract each. The provider's own client stores its strikes the
+same way, which is a fair sign it is the right shape rather than a clever idea.
+The inlined projection is checked against Leaflet's own every run: worst
+disagreement 0.43 px.
+
+*Colour is a run, not a lookup.* Strikes are in time order and the age ramp is a
+set of time bands, so each band is a contiguous run — two binary searches per
+band per frame replace a comparison chain per strike, and the inner loop draws
+one colour with no branching in it.
+
+*Dense views splat pixels.* Above 24,000 strikes on screen the crosses overlap
+into solid colour anyway, so each strike becomes a direct write into an
+`ImageData` buffer instead of four canvas path operations. Not a cap — every
+strike in view is still drawn, and below that threshold they are still crosses.
+
+There is no counting pass to decide between the two modes: the previous frame's
+count decides, because it is the same view a sixtieth of a second earlier and
+being one frame late to switch is invisible, where walking 1.66 million entries
+twice is not.
+
+Measured on a full day at world zoom: **1,657,257 strikes drawn in 45 ms**, down
+from 154 ms before the runs and the dropped counting pass. A regional view of the
+same set is 50 ms, most of which is culling the off-screen 99%; a spatial index
+would fix that if it ever matters. Idle, the layer renders zero times in four
+seconds — there is no redraw loop.
+
 
 **Drawn through the existing strike canvas.** Reusing `StrikeCanvasLayer` rather
 than writing a second renderer is what makes these look like strikes: the same

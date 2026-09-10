@@ -37,7 +37,7 @@
 import { ENDPOINTS } from '../config.js';
 import { EVENTS, on } from '../core/bus.js';
 import { lightning, time } from '../core/state.js';
-import { StrikeCanvasLayer } from '../lightning/render.js';
+import { latFromMercatorY, mercatorY, StrikeCanvasLayer } from '../lightning/render.js';
 
 /** The grid the provider quantises positions onto: 18 bits per axis. */
 const GRID = 1 << 18;
@@ -48,13 +48,9 @@ const FRAME_VERSION = 2;
 /** Archive frames fetched at once. A full day's window is 288 of them. */
 const FRAME_CONCURRENCY = 6;
 
-/**
- * Most strikes handed to the renderer in one pass.
- *
- * The renderer decimates above its own ceiling, but that is too late: the cost
- * that hurt was assembling a two-million-entry array in the first place.
- */
-const PAINT_CAP = 60000;
+/** Shared empty arrays, so an empty frame allocates nothing. */
+const EMPTY_F = new Float32Array(0);
+const EMPTY_U = new Uint32Array(0);
 
 /** Minimum gap between repaints while frames are still arriving. */
 const PAINT_THROTTLE_MS = 400;
@@ -132,14 +128,18 @@ export function decodeFeed(payload) {
  */
 export function parseFrame(buffer, frameMs) {
   const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-  if (bytes.length < 3) return [];
+  const empty = { mx: EMPTY_F, my: EMPTY_F, t: EMPTY_U, base: frameMs, count: 0 };
+  if (bytes.length < 3) return empty;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (view.getUint8(0) !== FRAME_VERSION) return [];
+  if (view.getUint8(0) !== FRAME_VERSION) return empty;
 
   const count = view.getUint16(1);
-  const strikes = [];
+  const mx = new Float32Array(count);
+  const my = new Float32Array(count);
+  const t = new Uint32Array(count);
   let at = 3;
   let elapsed = 0;
+  let n = 0;
 
   for (let i = 0; i < count && at + 6 <= bytes.length; i += 1) {
     const high = view.getUint8(at + 4);
@@ -157,14 +157,66 @@ export function parseFrame(buffer, frameMs) {
       size = 8;
     }
 
-    strikes.push({
-      ms: frameMs + elapsed,
-      lon: (x / GRID) * 360 - 180,
-      lat: (y / GRID) * 180 - 90,
-    });
+    // Projected here, once, rather than two million times per frame.
+    mx[n] = x / GRID;
+    my[n] = mercatorY((y / GRID) * 180 - 90);
+    t[n] = elapsed;
+    n += 1;
     at += size;
   }
-  return strikes;
+
+  return n === count
+    ? { mx, my, t, base: frameMs, count }
+    : { mx: mx.subarray(0, n), my: my.subarray(0, n), t: t.subarray(0, n), base: frameMs, count: n };
+}
+
+/** One strike out of a buffer, as a position. For hit tests and checks. */
+export function strikeAt(buffer, i) {
+  return {
+    ms: buffer.base + buffer.t[i],
+    lat: latFromMercatorY(buffer.my[i]),
+    lon: buffer.mx[i] * 360 - 180,
+  };
+}
+
+/** A whole buffer as positions. Only for small ones — checks, mostly. */
+export function bufferStrikes(buffer) {
+  const out = new Array(buffer.count);
+  for (let i = 0; i < buffer.count; i += 1) out[i] = strikeAt(buffer, i);
+  return out;
+}
+
+/**
+ * The slice of a frame that falls inside a window.
+ *
+ * Times ascend within a frame, so this is a binary search and a `subarray`:
+ * no copying, and an edge frame costs the same as an interior one.
+ */
+export function sliceBuffer(buffer, startMs, endMs) {
+  const { base, t, count } = buffer;
+  const lo = lowerBound(t, count, Math.max(0, startMs - base));
+  const hi = lowerBound(t, count, Math.max(0, endMs - base + 1));
+  if (lo === 0 && hi === count) return buffer;
+  if (hi <= lo) return null;
+  return {
+    mx: buffer.mx.subarray(lo, hi),
+    my: buffer.my.subarray(lo, hi),
+    t: t.subarray(lo, hi),
+    base,
+    count: hi - lo,
+  };
+}
+
+/** First index whose value is at or above `target`. */
+function lowerBound(values, count, target) {
+  let lo = 0;
+  let hi = count;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (values[mid] < target) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
 }
 
 /** Frames are published on five-minute boundaries. */
@@ -197,7 +249,7 @@ export function framesCovering(startMs, endMs, now = Date.now()) {
 /** Diagnostics, surfaced through window.RadarLoop for the checks. */
 export const feedStats = {
   polls: 0, failed: 0, received: 0, held: 0, drawn: 0, lastAt: 0,
-  framesWanted: 0, framesLoaded: 0, framesHeld: 0, available: 0, stride: 1,
+  framesWanted: 0, framesLoaded: 0, framesHeld: 0, available: 0,
 };
 
 /**
@@ -284,14 +336,14 @@ const WindyLightningLayer = StrikeCanvasLayer.extend({
       });
       // 204 is the provider's "nothing for this slot", not a failure.
       if (response.status === 204) {
-        this._frames.set(at, []);
+        this._frames.set(at, { mx: EMPTY_F, my: EMPTY_F, t: EMPTY_U, base: at, count: 0 });
         return;
       }
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const strikes = parseFrame(await response.arrayBuffer(), at);
-      this._frames.set(at, strikes);
+      const frame = parseFrame(await response.arrayBuffer(), at);
+      this._frames.set(at, frame);
       feedStats.framesLoaded += 1;
-      feedStats.received += strikes.length;
+      feedStats.received += frame.count;
     } catch (error) {
       feedStats.failed += 1;
       console.warn('[lightning] archive frame:', error?.message || error);
@@ -348,45 +400,60 @@ const WindyLightningLayer = StrikeCanvasLayer.extend({
   },
 
   /**
-   * Hands the renderer whatever falls inside the scrubber's window.
+   * Hands the renderer every strike inside the scrubber's window.
    *
-   * Thinned on the way out rather than after. A day of global lightning is
-   * getting on for two million strikes, and building that array before handing
-   * it over locked the page hard enough that a screenshot timed out — the
-   * renderer's own decimation ceiling never got the chance to help, because the
-   * cost was already paid in assembling the list.
+   * Nothing is sampled away. Frames are already typed arrays sorted by time, so
+   * the ones wholly inside the window are passed straight through and the two at
+   * the edges are sliced with a binary search — no copying, no per-strike work
+   * here at all. What used to be an assembly pass over two million objects is now
+   * a few hundred subarray views.
    */
   _paint() {
     const { start, end, lifespanHours } = this._window();
-
-    // Frames wholly inside the window need no per-strike test; only the two at
-    // the edges do.
-    const sources = [];
+    const buffers = [];
     let total = 0;
-    for (const [at, strikes] of this._frames) {
+
+    for (const [at, frame] of this._frames) {
       if (at + FRAME_MS < start || at > end) continue;
-      const whole = at >= start && at + FRAME_MS <= end;
-      sources.push({ strikes, whole });
-      total += strikes.length;
-    }
-    sources.push({ strikes: [...this._held.values()], whole: false });
-    total += this._held.size;
-
-    const stride = Math.max(1, Math.ceil(total / PAINT_CAP));
-    const visible = [];
-    for (const { strikes, whole } of sources) {
-      for (let i = 0; i < strikes.length; i += stride) {
-        const strike = strikes[i];
-        if (whole || (strike.ms >= start && strike.ms <= end)) visible.push(strike);
-      }
+      const slice = at >= start && at + FRAME_MS <= end ? frame : sliceBuffer(frame, start, end);
+      if (!slice || !slice.count) continue;
+      buffers.push(slice);
+      total += slice.count;
     }
 
-    visible.sort((a, b) => a.ms - b.ms);
+    const tail = this._tailBuffer(start, end);
+    if (tail) {
+      buffers.push(tail);
+      total += tail.count;
+    }
+
     feedStats.available = total;
-    feedStats.drawn = visible.length;
-    feedStats.stride = stride;
-    this.setStrikes(visible, { end, lifespanHours, newKeys: new Set() });
+    this.setStrikeBuffers(buffers, { end, lifespanHours });
+    feedStats.drawn = total;
     this.options.onPainted?.();
+  },
+
+  /**
+   * The live tail as a buffer.
+   *
+   * Small — a few thousand at most — so it is rebuilt each paint rather than
+   * maintained incrementally, which keeps the deduplicating map as the only
+   * copy of the truth.
+   */
+  _tailBuffer(start, end) {
+    const held = [...this._held.values()].filter((s) => s.ms >= start && s.ms <= end);
+    if (!held.length) return null;
+    held.sort((a, b) => a.ms - b.ms);
+    const base = held[0].ms;
+    const mx = new Float32Array(held.length);
+    const my = new Float32Array(held.length);
+    const t = new Uint32Array(held.length);
+    for (let i = 0; i < held.length; i += 1) {
+      mx[i] = (held[i].lon + 180) / 360;
+      my[i] = mercatorY(held[i].lat);
+      t[i] = held[i].ms - base;
+    }
+    return { mx, my, t, base, count: held.length };
   },
 
   /** Repaints at most this often while a run of frames is arriving. */

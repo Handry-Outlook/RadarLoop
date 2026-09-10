@@ -86,10 +86,10 @@ await page.screenshot({ path: 'shots/windy-lightning.png' });
 console.log('\n=== archive frames ===');
 
 const archive = await page.evaluate(async () => {
-  const { parseFrame, framesCovering } = window.__windyLightning;
+  const { parseFrame, bufferStrikes, framesCovering } = window.__windyLightning;
   const bucket = Math.floor((Date.now() - 20 * 60000) / 300000) * 300000;
   const buf = await (await fetch(`https://ims.windy.com/blitz/v3/5mins/${bucket}?version=3`)).arrayBuffer();
-  const strikes = parseFrame(buf, bucket);
+  const strikes = bufferStrikes(parseFrame(buf, bucket));
   const polar = strikes.filter((s) => Math.abs(s.lat) > 55).length;
   const times = strikes.map((s) => s.ms);
   return {
@@ -137,6 +137,52 @@ ok('scrubbing six hours back loads frames', past.feed.framesLoaded > 3, JSON.str
 ok('and paints strikes from them', past.lit > 0 && past.feed.drawn > 0,
    `${past.lit} lit, ${past.feed.drawn} drawn`);
 await page.screenshot({ path: 'shots/windy-lightning-archive.png' });
+
+/* ---- every strike, and fast enough ---- */
+const bulk = await page.evaluate(async () => {
+  const map = window.RadarLoop.map();
+  const { mercatorX, mercatorY } = window.__strikeRender;
+  // The inlined projection must agree with Leaflet's, or every strike is drawn
+  // in the wrong place very efficiently.
+  const scale = map.getPixelWorldBounds().getSize().x;
+  const origin = map.getPixelBounds().min;
+  let worst = 0;
+  for (const [lat, lon] of [[51.5, -0.1], [-33.9, 151.2], [0, 0], [70, -160], [-60, 30]]) {
+    const theirs = map.latLngToContainerPoint([lat, lon]);
+    worst = Math.max(worst,
+      Math.abs(mercatorX(lon) * scale - origin.x - theirs.x),
+      Math.abs(mercatorY(lat) * scale - origin.y - theirs.y));
+  }
+
+  window.RadarLoop.lightning.lifespanHours = 12;
+  map.setView([15, 15], 3);
+  const layer = window.RadarLoop.slots.get('lightning').front;
+  for (let i = 0; i < 90; i += 1) {
+    await new Promise((r) => setTimeout(r, 1000));
+    const s = window.__windyLightning.feedStats;
+    if (s.framesLoaded >= s.framesWanted - 1) break;
+  }
+  const at = performance.now();
+  layer._render();
+  return {
+    projectionError: +worst.toFixed(2),
+    renderMs: +(performance.now() - at).toFixed(1),
+    onScreen: layer.drawnCount(),
+    feed: window.__windyLightning.feedStats,
+  };
+});
+console.log(`  ${JSON.stringify(bulk)}`);
+ok('the inlined projection agrees with Leaflet', bulk.projectionError < 1, `${bulk.projectionError}px`);
+// The point of the whole exercise: nothing is sampled away.
+ok('every strike in the window is handed to the renderer',
+   bulk.feed.available === bulk.feed.drawn && bulk.feed.drawn > 100000,
+   `${bulk.feed.drawn} of ${bulk.feed.available}`);
+ok('and the whole field is drawn on screen at world zoom',
+   bulk.onScreen > bulk.feed.drawn * 0.9, `${bulk.onScreen} of ${bulk.feed.drawn}`);
+// Measured at 45 ms for 1.66 million; the bound is loose enough for a loaded
+// machine but would catch a return to per-strike canvas calls, which was 20x.
+ok('a frame stays well under a freeze', bulk.renderMs < 400, `${bulk.renderMs}ms`);
+
 /* ---- and in 3D ---- */
 console.log('\n=== 3D ===');
 await page.evaluate(() => document.getElementById('btn-3d').click());
