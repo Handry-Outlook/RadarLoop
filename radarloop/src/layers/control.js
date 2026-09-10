@@ -274,6 +274,7 @@ export function paneFor(group) {
     case 'satellite': return 'satellitePane';
     case 'radar': return 'radarPane';
     case 'observation': return 'observationPane';
+    case 'roadWeather': return 'roadWeatherPane';
     case 'isobar': return 'isobarPane';
     case 'surfaceFront': return 'frontPane';
     case 'warning': return 'warningPane';

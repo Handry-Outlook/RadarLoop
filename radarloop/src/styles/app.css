@@ -1305,3 +1305,153 @@
     bottom: calc(var(--timeline-dock, 96px) + var(--rail-dock, 52px) + var(--space-2));
   }
 }
+
+/* ------------------------------------------------------------------ *
+ * Station card
+ * ------------------------------------------------------------------ */
+
+/* The two series colours, from the validated categorical pair. Assigned by
+   meaning rather than by order — the warm hue is the warm variable in every
+   panel — and stepped for each surface rather than flipped between them. */
+:root {
+  --viz-cool: #2a78d6;
+  --viz-warm: #eb6834;
+}
+:root:not([data-theme='light']) {
+  --viz-cool: #3987e5;
+  --viz-warm: #d95926;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) { --viz-cool: #3987e5; --viz-warm: #d95926; }
+}
+:root[data-theme='dark'] { --viz-cool: #3987e5; --viz-warm: #d95926; }
+
+/* Bounded and scrollable: the full card runs to about 560px, which is most of a
+   phone screen and can overflow a short window entirely — the header was the
+   part that went. */
+.wxcard {
+  width: 336px;
+  max-width: 78vw;
+  max-height: min(66vh, 560px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  font-family: var(--font-sans);
+}
+/* The header stays put while the charts scroll under it. */
+.wxcard__head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-1);
+}
+.wxcard__head { padding-bottom: var(--space-2); border-bottom: 1px solid var(--border); }
+.wxcard__name { font-weight: 650; font-size: var(--text-md); color: var(--text-primary); }
+.wxcard__sub {
+  display: flex; gap: var(--space-2); align-items: baseline;
+  font-size: 11px; color: var(--text-tertiary);
+}
+.wxcard__id {
+  font-weight: 650; letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+.wxcard__readings {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 2px var(--space-3); padding: var(--space-2) 0;
+}
+.wxcard__reading { display: flex; justify-content: space-between; gap: var(--space-2); font-size: 11.5px; }
+.wxcard__reading-label { color: var(--text-tertiary); }
+/* Values wear text tokens, never a series colour. */
+.wxcard__reading-value { color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.wxcard__panels { padding-top: var(--space-1); }
+.wxcard__loading { padding: var(--space-3) 0; font-size: 11.5px; color: var(--text-tertiary); }
+/* The chart picker. A native select: it is one control, it is reachable from the
+   keyboard without any work, and on a phone it opens the platform's own list
+   rather than a menu built out of divs. */
+.wxcard__pick {
+  width: 100%; margin-top: var(--space-2); padding: 5px var(--space-2);
+  font: inherit; font-size: 11.5px; font-weight: 600;
+  color: var(--text-primary); background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.wxcard__pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* The reported condition, as words, beside the station id. */
+.wxcard__wx { color: var(--text-secondary); text-transform: capitalize; }
+
+.wxchart { display: block; overflow: visible; touch-action: none; }
+.wxchart__grid { stroke: var(--border); stroke-width: 1; }
+/* The time axis is a touch stronger than the grid: it is a frame, not a guide. */
+.wxchart__axis { stroke: var(--border-strong, var(--border)); stroke-width: 1; }
+.wxchart__tick { fill: var(--text-tertiary); font-size: 9px; font-variant-numeric: tabular-nums; }
+.wxchart__line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+/* A 1px surface gap between neighbouring bars, drawn as a stroke so the gap
+   holds at any width. */
+.wxchart__bar { stroke: var(--surface-1); stroke-width: 1; }
+.wxchart__arrow { stroke: var(--text-secondary); stroke-width: 1.4; fill: none; stroke-linecap: round; }
+.wxchart__note { font-size: 10px; color: var(--text-tertiary); margin-top: 2px; }
+/* A 2px ring in the surface colour, so an end dot stays legible over a line. */
+.wxchart__end { stroke: var(--surface-1); stroke-width: 2; }
+.wxchart__hair { stroke: var(--text-tertiary); stroke-width: 1; }
+
+.wxchart__legend { display: flex; gap: var(--space-3); font-size: 10px; color: var(--text-tertiary); }
+.wxchart__legend-item { display: inline-flex; align-items: center; gap: 5px; }
+/* A line key rather than a box: at this density a filled square is data-weight
+   ink doing a label's job. */
+.wxchart__legend-key { width: 12px; height: 2px; border-radius: 1px; flex: none; }
+
+.wxchart__readout {
+  display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3);
+  min-height: 20px; padding-top: var(--space-2);
+  font-size: 11px; color: var(--text-tertiary);
+}
+.wxchart__readout-time { font-weight: 650; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.wxchart__readout-item { display: inline-flex; align-items: center; gap: 5px; }
+.wxchart__readout-item strong { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+
+.wxcard__table-toggle { width: 100%; margin-top: var(--space-2); font-size: 11px; }
+.wxcard__table {
+  width: 100%; margin-top: var(--space-2);
+  border-collapse: collapse; font-size: 10.5px;
+  max-height: 190px; display: block; overflow: auto;
+}
+.wxcard__table th, .wxcard__table td {
+  padding: 2px var(--space-1); text-align: right;
+  border-bottom: 1px solid var(--border);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.wxcard__table th { color: var(--text-tertiary); font-weight: 600; position: sticky; top: 0; background: var(--surface-2); }
+.wxcard__table td { color: var(--text-secondary); }
+.wxcard__table td:first-child, .wxcard__table th:first-child { text-align: left; }
+
+/* The station card is wider than a normal popup and carries its own padding. */
+.wxcard-shell .leaflet-popup-content { margin: var(--space-3); width: auto !important; }
+.wxcard-shell .leaflet-popup-content-wrapper {
+  background: var(--surface-1); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+.wxcard-shell .leaflet-popup-tip { background: var(--surface-1); border: 1px solid var(--border); }
+/* The same card, in the GL view. Mapbox brings its own popup chrome, so the
+   surface, border and radius have to be restated for it; everything inside is
+   the shared .wxcard markup. */
+.wxcard-shell.mapboxgl-popup { max-width: 360px !important; }
+.wxcard-shell .mapboxgl-popup-content {
+  padding: var(--space-3);
+  background: var(--surface-1); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+.wxcard-shell .mapboxgl-popup-close-button {
+  width: 26px; height: 26px; font-size: 16px; line-height: 1;
+  color: var(--text-tertiary); background: none; border: 0;
+}
+.wxcard-shell .mapboxgl-popup-close-button:hover { color: var(--text-primary); background: none; }
+.wxcard-shell .mapboxgl-popup-tip { border-top-color: var(--surface-1); border-bottom-color: var(--surface-1); }
+.wxcard-shell.mapboxgl-popup-anchor-left .mapboxgl-popup-tip { border-right-color: var(--surface-1); }
+.wxcard-shell.mapboxgl-popup-anchor-right .mapboxgl-popup-tip { border-left-color: var(--surface-1); }
+
+
+/* Hold roughly the height the charts will take, so the popup does not jump by
+   four hundred pixels when the history lands. */
+.wxcard__charts--pending { min-height: 300px; }

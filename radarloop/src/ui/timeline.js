@@ -11,8 +11,9 @@
  */
 
 import { byId, el, formatClock, relativeTime } from '../core/util.js';
-import { on, EVENTS } from '../core/bus.js';
-import { lightning, time } from '../core/state.js';
+import { emit, on, EVENTS } from '../core/bus.js';
+import { lightning, runtime, time } from '../core/state.js';
+import { flushPending, renderAll } from '../layers/renderer.js';
 import * as timeCtl from '../time/controller.js';
 
 /** Scrubber resolution. The domain is mapped onto this many steps. */
@@ -171,12 +172,18 @@ export function buildTimeline() {
   // readout showed the raw one, and the two drifted apart mid-drag. Pointer
   // events answer the question directly on both.
   for (const type of ['pointerdown', 'touchstart']) {
-    slider.addEventListener(type, () => { scrubbing = true; }, { passive: true });
+    slider.addEventListener(type, () => { scrubbing = true; runtime.scrubbing = true; }, { passive: true });
   }
   for (const type of ['pointerup', 'pointercancel', 'touchend', 'touchcancel']) {
     window.addEventListener(type, () => {
       if (!scrubbing) return;
       scrubbing = false;
+      runtime.scrubbing = false;
+      // Products deferred during the drag get their one request now. The commit
+      // is re-announced because the one during the drag was deliberately ignored.
+      flushPending();
+      renderAll(time.current);
+      emit(EVENTS.TIME_COMMITTED, time.current);
       // Settle the thumb on whatever the clamped time actually became.
       slider.value = String(toSliderValue(time.current));
       paintReadout(time.current);

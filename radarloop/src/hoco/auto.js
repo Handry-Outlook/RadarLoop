@@ -12,7 +12,7 @@
 import { emit, EVENTS } from '../core/bus.js';
 import { map, safeRemove } from '../core/map.js';
 import { dateKey, escapeHtml, toDate } from '../core/util.js';
-import { firestoreTimestamp, mainDb, storageUrl } from './firebase.js';
+import { firestoreTimestamp, mainDb, storageUrl, loadFirebase } from './firebase.js';
 import { riskColour } from './risk.js';
 import { refreshOverlayMirror } from '../layers/mirrorBridge.js';
 
@@ -36,6 +36,7 @@ let layer = null;
  * One document covers one day offset, so each is expanded into its valid date.
  */
 export async function loadRunIndex() {
+  await loadFirebase().catch(() => {});
   const db = mainDb();
   if (!db) return { ok: false, reason: 'Firebase unavailable' };
 

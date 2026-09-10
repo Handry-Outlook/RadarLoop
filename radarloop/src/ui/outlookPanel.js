@@ -15,6 +15,7 @@ import * as published from '../hoco/published.js';
 import * as auto from '../hoco/auto.js';
 import { publishedRisk, riskColour } from '../hoco/risk.js';
 import { describeWindow, focusOutlook, SOURCE_AUTO, SOURCE_MANUAL } from '../hoco/focus.js';
+import { loadFirebase } from '../hoco/firebase.js';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
@@ -454,11 +455,11 @@ function outlookBrand() {
 }
 
 export function buildOutlookPanel() {
-  if (typeof firebase === 'undefined') {
-    return el('div', { class: 'stack' }, [
-      el('p', { class: 'tiny dim' }, 'Outlook feeds need the Firebase SDK, which did not load.'),
-    ]);
-  }
+  // The SDK is fetched on demand rather than in the shell, so it is normally
+  // still arriving at this point. Checking for it here — as this did — reported
+  // 'Firebase did not load' every time the panel was opened. Each section awaits
+  // the SDK itself and reports honestly if it never turns up.
+  loadFirebase().catch(() => {});
   return el('div', { class: 'stack' }, [
     outlookBrand(),
     buildPublishedSection(),

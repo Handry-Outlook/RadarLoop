@@ -11,12 +11,12 @@
  * first paint on the lightning archives.
  */
 
-import { MAP_DEFAULTS } from './config.js';
+import { MAP_DEFAULTS, DEVICE } from './config.js';
 import { emit, on, EVENTS } from './core/bus.js';
 import { initMap, invalidateSizeIfChanged, map, safeRemove, setBasemap } from './core/map.js';
 import { lightning as lightningState, runtime, setTheme, slots, time, restoreSelection, serialiseSelection } from './core/state.js';
 import { byId, debounce, loadSetting, saveSetting } from './core/util.js';
-import { flushPending, renderAll } from './layers/renderer.js';
+import { exitGlDirect, flushPending, renderAll, whenRenderSettled } from './layers/renderer.js';
 import { getLayerDef, LAYER_CATALOG, LAYER_ORDER } from './data/layers.js';
 import * as timeCtl from './time/controller.js';
 import { initLightning, refresh as refreshLightning, strikeCueState } from './lightning/index.js';
@@ -30,7 +30,7 @@ import { toast } from './ui/components.js';
 import * as draw from './tools/draw.js';
 import { applyIcon } from './ui/icons.js';
 import { initOutlookFocus, focusOutlook } from './hoco/focus.js';
-import { exit3D, getGl, mirrorKind, mirroredGroups, refresh3DTheme, toggle3D } from './core/map3d.js';
+import { exit3D, getGl, is3D, mirrorKind, mirroredGroups, mirrorMagnification, refresh3DTheme, toggle3D } from './core/map3d.js';
 import { tileScheme, usesFlippedY } from './core/mirror3d.js';
 import { activeInOrder, applyOrder, bindMap as bindLayerControl, selectProduct, setLayerEnabled, setLayerOpacity, moveLayer } from './layers/control.js';
 import { initLayerManager } from './ui/layerManager.js';
@@ -38,6 +38,13 @@ import { registerOverlayLayers } from './layers/registerOverlays.js';
 import { trackDockedChrome } from './ui/layout.js';
 import { refreshOverlayMirror, remirrorAll, stats as mirrorStats } from './layers/mirrorBridge.js';
 import { poolStats } from './layers/windyPool.js';
+import {
+  archiveFrameTime, composeChannels, daylightGrid, deinvertBlocks,
+  frameTimeFromUrl, isArchiveOnly, toArchiveUrl, toLiveUrl,
+} from './layers/windySat.js';
+import { prefetchIdle } from './core/deps.js';
+import * as synoptic from './layers/synoptic.js';
+import { buildStationCard } from './ui/stationPopup.js';
 
 /* ------------------------------------------------------------------ *
  * Session restore
@@ -96,12 +103,16 @@ function bindTopbar() {
   });
 
   const btn3d = byId('btn-3d');
-  btn3d?.addEventListener('click', () => {
-    if (typeof mapboxgl === 'undefined') {
+  btn3d?.addEventListener('click', async () => {
+    // Mapbox GL is fetched on the first press, so a slow link shows progress
+    // rather than an unresponsive button.
+    btn3d.classList.add('btn--busy');
+    const on = await toggle3D();
+    btn3d.classList.remove('btn--busy');
+    if (!on && typeof mapboxgl === 'undefined') {
       toast('3D needs Mapbox GL, which did not load', { tone: 'error' });
       return;
     }
-    const on = toggle3D();
     btn3d.setAttribute('aria-pressed', String(on));
     btn3d.classList.toggle('btn--active', on);
     if (!on) return;
@@ -172,6 +183,104 @@ function bindTopbar() {
 /* ------------------------------------------------------------------ *
  * Your location
  * ------------------------------------------------------------------ */
+
+/* ------------------------------------------------------------------ *
+ * Station cards in 3D
+ * ------------------------------------------------------------------ */
+
+/**
+ * Slides the camera until an open popup fits on screen.
+ *
+ * Leaflet pans for its own popups; Mapbox does not, and this card grows to
+ * roughly four hundred pixels once the history arrives, which runs off the
+ * bottom of the map from anywhere below the middle of it.
+ */
+function panPopupIntoView(glMap, popup, margin = 16) {
+  const element = popup.getElement();
+  const canvas = glMap.getCanvas();
+  if (!element || !canvas) return;
+  const card = element.getBoundingClientRect();
+  const view = canvas.getBoundingClientRect();
+  // Positive means the popup hangs off that edge by that many pixels.
+  const dx = Math.max(0, view.left + margin - card.left) - Math.max(0, card.right - view.right + margin);
+  const dy = Math.max(0, view.top + margin - card.top) - Math.max(0, card.bottom - view.bottom + margin);
+  if (!dx && !dy) return;
+  glMap.panBy([-dx, -dy], { duration: 220 });
+}
+
+/**
+ * Opens the card for a station, in whichever view is showing.
+ *
+ * 2D and 3D need different popups — one is Leaflet's, one is Mapbox's — but the
+ * card itself is the same DOM either way, and both have the same problem: it
+ * opens one line tall and grows by several hundred pixels when the history
+ * lands, so both are told to re-measure then.
+ */
+function openStationCard(station, glMap = null) {
+  if (glMap) {
+    const popup = new mapboxgl.Popup({
+      className: 'wxcard-shell', maxWidth: '360px', closeButton: true, offset: 14,
+    }).setLngLat([station.lon, station.lat]);
+    popup.setDOMContent(buildStationCard(station, {
+      // Mapbox recomputes the anchor on a position change, so setting the
+      // position it already has is how it is asked to look again — and then the
+      // camera is nudged, because unlike Leaflet's it will not do that itself
+      // and the card is taller than the space below a mid-screen station.
+      onReady: () => {
+        if (!popup.isOpen()) return;
+        popup.setLngLat(popup.getLngLat());
+        panPopupIntoView(glMap, popup);
+      },
+    }));
+    popup.addTo(glMap);
+    return;
+  }
+  const popup = L.popup({ className: 'wxcard-shell', maxWidth: 360, autoPanPadding: [24, 24] })
+    .setLatLng([station.lat, station.lon]);
+  popup.setContent(buildStationCard(station, { onReady: () => popup.update() }));
+  popup.openOn(map);
+}
+
+/**
+ * Makes the station plots clickable on the GL map.
+ *
+ * The plots reach 3D as a picture — the 2D canvas, captured and draped over the
+ * scene — so there is nothing there to hit-test and Leaflet never sees the
+ * click. The stations' positions are known, though, and GL can project them, so
+ * the nearest one to the pointer is found in screen space the same way the 2D
+ * path finds it. Only the stations that survived thinning are considered: the
+ * rest are not drawn, and a card for a plot nobody can see is a magic trick.
+ *
+ * `style.load` fires again on every restyle, so the handler is bound per map
+ * instance rather than per event.
+ */
+let clickableGl = null;
+function bindStationClicks3D(glMap) {
+  if (!glMap || clickableGl === glMap) return;
+  clickableGl = glMap;
+  glMap.on('click', (event) => {
+    if (!synoptic.options.enabled) return;
+    let best = null;
+    let bestDistance = 26;
+    for (const station of synoptic.plottedStations()) {
+      const at = glMap.project([station.lon, station.lat]);
+      const distance = Math.hypot(at.x - event.point.x, at.y - event.point.y);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = station;
+      }
+    }
+    if (best) openStationCard(best, glMap);
+  });
+  glMap.on('mousemove', (event) => {
+    if (!synoptic.options.enabled) return;
+    const near = synoptic.plottedStations().some((station) => {
+      const at = glMap.project([station.lon, station.lat]);
+      return Math.hypot(at.x - event.point.x, at.y - event.point.y) < 26;
+    });
+    glMap.getCanvas().style.cursor = near ? 'pointer' : '';
+  });
+}
 
 /**
  * Marks where the browser thinks the user is.
@@ -268,6 +377,12 @@ function bindEvents() {
   // The GL style follows the base map choice, so changing it in 3D restyles.
   on(EVENTS.BASEMAP_CHANGED, () => refresh3DTheme());
 
+  // The 3D mirror is captured at half resolution while playing; take it again at
+  // full resolution once the frame being looked at stops changing.
+  on(EVENTS.ANIMATION_STATE, ({ playing }) => {
+    if (!playing) remirrorAll({ canvasOnly: true });
+  });
+
   // A restyle drops every layer the GL map held, so re-feed it. The renderer
   // skips slots whose frame is already drawn, so the mirror is fed from the
   // layers the 2D map already holds rather than through a re-render.
@@ -280,10 +395,31 @@ function bindEvents() {
   // Leaving 3D by any route must reset the toggle's pressed state.
   on(EVENTS.MODE_CHANGED, ({ mode }) => {
     const btn = byId('btn-3d');
-    if (!btn) return;
-    btn.setAttribute('aria-pressed', String(mode === '3d'));
-    btn.classList.toggle('btn--active', mode === '3d');
+    if (btn) {
+      btn.setAttribute('aria-pressed', String(mode === '3d'));
+      btn.classList.toggle('btn--active', mode === '3d');
+    }
+    // Products GL fetched for itself never had a Leaflet layer on the map;
+    // rebuild them so 2D is not empty on the way back.
+    if (mode === '2d' && exitGlDirect()) renderAll(time.current);
   });
+
+  // Station models are fetched for the window on screen, so a pan to somewhere
+  // the cached window does not cover needs a new request.
+  map.on('moveend zoomend', debounce(() => synoptic.onViewChanged(), 400));
+
+  // The station canvas is click-through, so the map delivers the click and the
+  // nearest plot is looked up rather than hit-tested against painted pixels.
+  map.on('click', (event) => {
+    const station = synoptic.stationNear(event.containerPoint);
+    if (station) openStationCard(station);
+  });
+
+  // The same, for the GL view, where Leaflet sees no clicks at all.
+  on(EVENTS.MAP3D_READY, ({ gl }) => bindStationClicks3D(gl));
+
+  // Station models follow the scrubber like every other layer.
+  on(EVENTS.TIME_COMMITTED, debounce(() => synoptic.onTimeChanged(), 350));
 
   window.addEventListener('resize', debounce(invalidateSizeIfChanged, 150));
 
@@ -302,6 +438,16 @@ async function boot() {
   // 1. Theme and performance profile before any rendering decision is made.
   document.documentElement.dataset.theme = runtime.theme;
   applyPerformanceMode();
+
+  // Playback paces itself on the rendered frame; the controller cannot import
+  // the renderer without dragging the map stack into a module that must load
+  // without a DOM.
+  timeCtl.setFramePacer(whenRenderSettled);
+  // Products that hold their frame while the timeline moves catch up here.
+  timeCtl.setPlaybackSettled(() => {
+    flushPending();
+    renderAll(time.current);
+  });
 
   // 2. Map first, so the user sees something immediately.
   initMap();
@@ -332,14 +478,23 @@ async function boot() {
   timeCtl.goLive();
   timeCtl.startAutoFollow();
 
-  // 5. Lightning loads in parallel; it must not gate the weather render.
+  // 5. With the map drawn, fetch what the session is most likely to want next.
+  //    Outlooks are this application's reason for existing, so the storage SDK is
+  //    pulled in while the browser is idle — off the critical path, but usually
+  //    there before the panel is opened.
+  prefetchIdle();
+
+  // 6. Lightning loads in parallel; it must not gate the weather render.
   initLightning().catch((error) => {
     console.error('[boot] lightning init failed:', error);
     toast('Lightning data is unavailable', { tone: 'error' });
   });
 
-  // Open the radar panel on a first visit so the controls are discoverable.
-  if (!loadSetting('layers', null)) openGroup('precip');
+  // Open the radar panel on a first visit so the controls are discoverable —
+  // but not on a phone, where the panel is a bottom sheet that covers most of
+  // the map. There the first thing to show is the map itself; the rail is
+  // already visible and says what the panels are.
+  if (!loadSetting('layers', null) && !DEVICE.mobile) openGroup('precip');
 
   emit(EVENTS.STATUS, { ready: true });
 }
@@ -357,6 +512,7 @@ window.RadarLoop = {
   time,
   runtime,
   renderAll,
+  playback: timeCtl,
   map: () => map,
   lightningAll: () => lightningState.all,
   lightningFiltered: () => lightningState.filtered,
@@ -369,7 +525,29 @@ window.RadarLoop = {
   mirrorKind,
   phases: () => ({ ...(runtime.phases || {}) }),
   tileWorkers: () => ({ ...poolStats }),
+  mapsglLayerIds: () => (window.__mapsglController?.weatherLayerIds || []).slice(),
+  /** The stations a click can land on, for the 3D hit-test check. */
+  plottedStations: () => synoptic.plottedStations(),
+  observations: () => ({
+    held: synoptic.stationCount(),
+    plotted: synoptic.plottedCount(),
+    at: synoptic.lastUpdated(),
+    enabled: synoptic.options.enabled,
+    scale: synoptic.plotScale(),
+    forTime: synoptic.observationTime()?.toISOString() ?? null,
+    sampleTemps: synoptic.sampleTemps(),
+    magnification: mirrorMagnification(),
+  }),
   refreshOverlayMirror,
+  /** Opens the card for whichever station is plotted nearest the view centre. */
+  openNearestStation: () => {
+    const centre = map.getSize().divideBy(2);
+    let found = null;
+    for (let r = 20; r <= 260 && !found; r += 20) found = synoptic.stationNear(centre, r);
+    if (!found) return null;
+    openStationCard(found, is3D() ? getGl() : null);
+    return found.id;
+  },
   showLocation,
   startDrawing: () => draw.toggleDrawing(true),
   isDrawing: () => draw.isDrawing(),
@@ -396,3 +574,13 @@ window.__layers = { LAYER_CATALOG, LAYER_ORDER };
 // Tile addressing has to agree between the two views, so the rule is reachable
 // from the harness that compares them.
 window.__mirror3d = { tileScheme, usesFlippedY };
+// The catalog as the pickers see it — after the merge, the scrub and the
+// ordering pass — so the list checks read the same thing the interface does.
+window.__catalog = { LAYER_CATALOG, LAYER_ORDER };
+// The satellite decode, reachable for its own checks: the two candidate
+// polarities are exact negatives, so the test needs the rule and the pixels
+// rather than a screenshot.
+window.__windySat = {
+  deinvertBlocks, daylightGrid, composeChannels,
+  toLiveUrl, toArchiveUrl, frameTimeFromUrl, isArchiveOnly, archiveFrameTime,
+};

@@ -21,6 +21,8 @@
  * internal (for example radar-nowcast-forecast, used for future timestamps).
  */
 
+import { mergeMapsGLLayers } from './mapsglLayers.js';
+import { orderProducts } from './productOrder.js';
 import { scrubCatalog } from './sourceNames.js';
 
 export const LAYER_CATALOG = {
@@ -31,7 +33,7 @@ export const LAYER_CATALOG = {
       interval: 300000,
       attribution: "X weather",
       label: "Low Resolution Satellite Derived Radar",
-      listed: true
+      listed: false
     },
     radar: {
       kind: "raster",
@@ -39,7 +41,7 @@ export const LAYER_CATALOG = {
       interval: 300000,
       attribution: "X weather",
       label: "Low Resolution Global Radar",
-      listed: true
+      listed: false
     },
     "uk-precip-intensity": {
       kind: "raster",
@@ -89,7 +91,7 @@ export const LAYER_CATALOG = {
       interval: 300000,
       attribution: "DTN Meteoguard",
       label: "Europe High Resolution Precipitation Type 3",
-      listed: true
+      listed: false
     },
     "europe-precip-type-foreca": {
       kind: "raster",
@@ -105,7 +107,7 @@ export const LAYER_CATALOG = {
       interval: 300000,
       attribution: "Foreca",
       label: "Europe High Resolution Precipitation Type 2",
-      listed: true
+      listed: false
     },
     "uk-precip-type": {
       kind: "raster",
@@ -121,7 +123,7 @@ export const LAYER_CATALOG = {
       interval: 900000,
       attribution: "DTN Meteoguard",
       label: "Europe High Resolution Rainfall Intensity",
-      listed: true
+      listed: false
     },
     "radar-nowcast-forecast": {
       kind: "raster",
@@ -139,7 +141,7 @@ export const LAYER_CATALOG = {
       interval: 900000,
       attribution: "DTN Meteoguard",
       label: "Australia High Resolution Rainfall Intensity",
-      listed: true
+      listed: false
     },
     "radar-precip-intensity-us-canada-contours": {
       kind: "raster",
@@ -147,7 +149,7 @@ export const LAYER_CATALOG = {
       interval: 600000,
       attribution: "DTN Meteoguard",
       label: "North America High Resolution Rainfall Intensity",
-      listed: true
+      listed: false
     },
     "radar-precip-type-us-canada-contours": {
       kind: "raster",
@@ -155,7 +157,7 @@ export const LAYER_CATALOG = {
       interval: 600000,
       attribution: "DTN Meteoguard",
       label: "North America High Resolution Precipitation Type",
-      listed: true
+      listed: false
     },
     "europe-precip-type": {
       kind: "raster",
@@ -197,7 +199,7 @@ export const LAYER_CATALOG = {
       interval: 300000,
       attribution: "dtn",
       label: "Precipitation - NASA Global Precipitation Intensity",
-      listed: true
+      listed: false
     },
     "radar-base-ref-precip-type-na-contours": {
       kind: "raster",
@@ -205,7 +207,7 @@ export const LAYER_CATALOG = {
       interval: 300000,
       attribution: "dtn",
       label: "North America Base Reflectivity Precip - Contour",
-      listed: true
+      listed: false
     },
     "radar-base-ref-precip-type-europe-contours": {
       kind: "raster",
@@ -221,7 +223,7 @@ export const LAYER_CATALOG = {
       interval: 300000,
       attribution: "dtn",
       label: "Australia Base Reflectivity Precip - Contour",
-      listed: true
+      listed: false
     },
     "radar-base-ref-precip-type-westpacific-contours": {
       kind: "raster",
@@ -229,7 +231,7 @@ export const LAYER_CATALOG = {
       interval: 300000,
       attribution: "dtn",
       label: "West Pacific Base Reflectivity Precip - Contour",
-      listed: true
+      listed: false
     },
     "radar-max-ref-precip-type-na-contours": {
       kind: "raster",
@@ -237,7 +239,7 @@ export const LAYER_CATALOG = {
       interval: 300000,
       attribution: "dtn",
       label: "North America Max Reflectivity Precip",
-      listed: true
+      listed: false
     },
     "radar-max-ref-precip-type-australia-contours": {
       kind: "raster",
@@ -245,7 +247,7 @@ export const LAYER_CATALOG = {
       interval: 300000,
       attribution: "dtn",
       label: "Australia Max Reflectivity Precip",
-      listed: true
+      listed: false
     },
     "radar-precip-rate-europe-raster": {
       kind: "raster",
@@ -261,7 +263,7 @@ export const LAYER_CATALOG = {
       interval: 300000,
       attribution: "dtn",
       label: "Radar Precipitation Rate - Contour (Europe)",
-      listed: true
+      listed: false
     },
     "radar-reflectivity-mosaic-global-contours": {
       kind: "raster",
@@ -269,7 +271,7 @@ export const LAYER_CATALOG = {
       interval: 300000,
       attribution: "dtn",
       label: "Synthetic Radar - Contour (Global)",
-      listed: true
+      listed: false
     },
     "radar-reflectivity-mosaic-global-raster": {
       kind: "raster",
@@ -277,7 +279,7 @@ export const LAYER_CATALOG = {
       interval: 300000,
       attribution: "dtn",
       label: "Synthetic Radar - Grid (Global)",
-      listed: true
+      listed: false
     },
     "precip-qpe-168hrs-eu-contours": {
       kind: "raster",
@@ -555,15 +557,39 @@ export const LAYER_CATALOG = {
       interval: 300000,
       attribution: "X weather",
       label: "Global infrared (alternative)",
-      listed: true
+      listed: false
     },
     "windy-optical-flow": {
       kind: "raster",
       url: "https://sat.windy.com/satellite/composite/${windyIso}/{z}/{x}/{y}/opticalflow.jpg?maxt=${windyMaxt}",
       interval: 600000,
       attribution: "Global High Resolution Satellite / EUMETSAT / NOAA / JMA",
-      label: "windy-optical-flow",
+      label: "Cloud Motion Vectors",
       listed: false
+    },
+    "windy-visir": {
+      kind: "raster",
+      url: "https://sat.windy.com/satellite/composite/${windyIso}/{z}/{x}/{y}/visir.png?mosaic=true&maxt=${windyMaxt}",
+      interval: 600000,
+      attribution: "Global High Resolution Satellite / EUMETSAT / NOAA / JMA",
+      label: "Global High Resolution Satellite",
+      listed: true
+    },
+    "windy-infrared": {
+      kind: "raster",
+      url: "https://sat.windy.com/satellite/composite/${windyIso}/{z}/{x}/{y}/visir.png?mosaic=true&maxt=${windyMaxt}",
+      interval: 600000,
+      attribution: "Global High Resolution Satellite / EUMETSAT / NOAA / JMA",
+      label: "Global High Resolution Infrared",
+      listed: true
+    },
+    "windy-visible": {
+      kind: "raster",
+      url: "https://sat.windy.com/satellite/composite/${windyIso}/{z}/{x}/{y}/visir.png?mosaic=true&maxt=${windyMaxt}",
+      interval: 600000,
+      attribution: "Global High Resolution Satellite / EUMETSAT / NOAA / JMA",
+      label: "Global High Resolution Visible (daylight)",
+      listed: true
     },
     "eumetsat-geocolor": {
       kind: "wms",
@@ -571,7 +597,7 @@ export const LAYER_CATALOG = {
       interval: 900000,
       attribution: "© EUMETSAT",
       label: "EUMETSAT MTG GeoColour (Full Disc)",
-      listed: true
+      listed: false
     },
     "satellite-water-vapor": {
       kind: "raster",
@@ -587,7 +613,7 @@ export const LAYER_CATALOG = {
       interval: 300000,
       attribution: "X weather",
       label: "Global Infrared with Cloud Top Temperature",
-      listed: true
+      listed: false
     },
     "satellite-visible": {
       kind: "raster",
@@ -595,7 +621,7 @@ export const LAYER_CATALOG = {
       interval: 300000,
       attribution: "X weather",
       label: "North America Visible Satellite",
-      listed: true
+      listed: false
     },
     "satellite-geocolor": {
       kind: "raster",
@@ -611,7 +637,7 @@ export const LAYER_CATALOG = {
       interval: 600000,
       attribution: "DTN Meteoguard",
       label: "Global infrared (GOES)",
-      listed: true
+      listed: false
     },
     "europe-vis": {
       kind: "raster",
@@ -619,7 +645,7 @@ export const LAYER_CATALOG = {
       interval: 900000,
       attribution: "DTN Meteoguard",
       label: "Europe visible (MeteoSat)",
-      listed: true
+      listed: false
     },
     "europe-ir": {
       kind: "raster",
@@ -627,7 +653,7 @@ export const LAYER_CATALOG = {
       interval: 900000,
       attribution: "DTN Meteoguard",
       label: "Europe infrared (MeteoSat)",
-      listed: true
+      listed: false
     },
     "europe-water": {
       kind: "raster",
@@ -635,7 +661,7 @@ export const LAYER_CATALOG = {
       interval: 900000,
       attribution: "DTN Meteoguard",
       label: "Europe water vapor (MeteoSat)",
-      listed: true
+      listed: false
     },
     "us-visible": {
       kind: "raster",
@@ -643,7 +669,7 @@ export const LAYER_CATALOG = {
       interval: 300000,
       attribution: "NOAA/GOES",
       label: "North America visible (GOES)",
-      listed: true
+      listed: false
     },
     "us-ir": {
       kind: "raster",
@@ -651,7 +677,7 @@ export const LAYER_CATALOG = {
       interval: 300000,
       attribution: "NOAA/GOES",
       label: "North America infrared (GOES)",
-      listed: true
+      listed: false
     },
     "satellite-infrared-enhanced-global-raster": {
       kind: "raster",
@@ -667,7 +693,7 @@ export const LAYER_CATALOG = {
       interval: 600000,
       attribution: "DTN Meteoguard",
       label: "Global Visible",
-      listed: true
+      listed: false
     },
     "satellite-water-vapor-global-raster": {
       kind: "raster",
@@ -686,7 +712,10 @@ export const LAYER_CATALOG = {
       listed: true
     },
     __order: [
+      "windy-visir",
       "eumetsat-geocolor",
+      "windy-infrared",
+      "windy-visible",
       "europe-vis",
       "global-ir",
       "satellite-geocolor",
@@ -735,7 +764,7 @@ export const LAYER_CATALOG = {
       interval: 1800000,
       attribution: "X weather",
       label: "Mean Sea Level Pressure (every 4 hPa)",
-      listed: true
+      listed: false
     },
     __order: [
       "pressure_two",
@@ -798,7 +827,7 @@ export const LAYER_CATALOG = {
       interval: 3600000,
       attribution: "dtn",
       label: "Current Direction",
-      listed: true
+      listed: false
     },
     "fcst-manta-mean-wave-direction-grid": {
       kind: "raster",
@@ -806,7 +835,7 @@ export const LAYER_CATALOG = {
       interval: 3600000,
       attribution: "dtn",
       label: "Mean Wave Direction",
-      listed: true
+      listed: false
     },
     "fcst-manta-significant-wave-symbol-grid": {
       kind: "raster",
@@ -814,7 +843,7 @@ export const LAYER_CATALOG = {
       interval: 3600000,
       attribution: "dtn",
       label: "Significant Wave Height Direction",
-      listed: true
+      listed: false
     },
     "fcst-manta-current-speed-grid": {
       kind: "raster",
@@ -830,7 +859,7 @@ export const LAYER_CATALOG = {
       interval: 3600000,
       attribution: "dtn",
       label: "Swell Wave Direction",
-      listed: true
+      listed: false
     },
     "fcst-sea-wave-height-swell-waves-period-grid": {
       kind: "raster",
@@ -838,7 +867,7 @@ export const LAYER_CATALOG = {
       interval: 3600000,
       attribution: "dtn",
       label: "Swell Waves Period Direction",
-      listed: true
+      listed: false
     },
     "fcst-manta-wind-wave-symbol-grid": {
       kind: "raster",
@@ -846,7 +875,7 @@ export const LAYER_CATALOG = {
       interval: 3600000,
       attribution: "dtn",
       label: "Wind Wave Directions",
-      listed: true
+      listed: false
     },
     "fcst-sea-wave-height-wind-waves-period-grid": {
       kind: "raster",
@@ -854,7 +883,7 @@ export const LAYER_CATALOG = {
       interval: 3600000,
       attribution: "dtn",
       label: "Wind Waves Period Direction",
-      listed: true
+      listed: false
     },
     __order: [
       "wind-dir",
@@ -872,13 +901,13 @@ export const LAYER_CATALOG = {
     "windy-live-lightning": {
       kind: "windy-lightning",
       label: "Live + past 24 hours Global Lightning",
-      listed: true
+      listed: false
     },
     "xweather-lightning": {
       kind: "geojson",
       url: "https://data.api.xweather.com/lightning",
       label: "Global Live Strikes",
-      listed: true
+      listed: false
     },
     "sevwx-lightning-global-plot": {
       kind: "raster",
@@ -894,7 +923,7 @@ export const LAYER_CATALOG = {
       interval: 300000,
       attribution: "X weather",
       label: "Global Lightning (last 5 minutes)",
-      listed: true
+      listed: false
     },
     "lightning-all": {
       kind: "raster",
@@ -902,12 +931,12 @@ export const LAYER_CATALOG = {
       interval: 300000,
       attribution: "X weather",
       label: "Global Lightning (last 15 minutes)",
-      listed: true
+      listed: false
     },
     "lightning-all-tile": {
       kind: "mapsgl",
       id: "lightning-all",
-      label: "Lightning All (Tile)",
+      label: "Current Lightning",
       listed: true
     },
     "lightning-density": {
@@ -940,7 +969,7 @@ export const LAYER_CATALOG = {
       interval: 3600000,
       attribution: "X weather",
       label: "Tropical Cyclones",
-      listed: true
+      listed: false
     },
     "sevwx-dtn-tropical-cyclones-plot": {
       kind: "raster",
@@ -1724,7 +1753,18 @@ export const LAYER_CATALOG = {
  * before anything can read them. Done here rather than at each render point so
  * that regenerating this file cannot reintroduce one.
  */
+// The original file used nine MapsGL products; the rest of the SDK catalogue is
+// declared by hand in mapsglLayers.js and merged here, before the order table is
+// derived, so regenerating this file cannot drop them.
+mergeMapsGLLayers(LAYER_CATALOG);
+
 scrubCatalog(LAYER_CATALOG);
+
+// Membership and order are both derived from the entries above rather than kept
+// in step by hand: `listed: false` retires a product from every drop-list, and
+// what remains is ordered by provider within each header's section. See
+// productOrder.js for why that is derived rather than written out.
+orderProducts(LAYER_CATALOG);
 
 export const LAYER_ORDER = Object.fromEntries(
   Object.entries(LAYER_CATALOG).map(([group, defs]) => [group, defs.__order || []]),

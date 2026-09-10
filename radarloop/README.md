@@ -39,10 +39,12 @@ src/
     map3d.js               Mapbox GL 3D view: terrain, buildings, lifecycle
     mirror3d.js            per-kind GL representations for every layer type
     util.js                timing, geometry, colour, DOM, storage, formatting
+    deps.js                third-party libraries, fetched at the point of use
     worker.js              starts a worker from either build (module URL or Blob)
   data/
     layers.js              GENERATED — 186 weather product definitions
     sourceNames.js         keeps weather-provider names out of the interface
+    mapsglLayers.js        the MapsGL catalogue, merged into the generated one
     palettes.js            GENERATED — 12 rainfall colour presets
     basemaps.js            base map catalog (built lazily)
   layers/
@@ -52,6 +54,7 @@ src/
     radarScale.js          shared mm/h colour scale + encoded-value LUT
     opera.js               OPERA binary grid, reprojected to canvas
     windy.js               Windy composite: recolouring + live/archive endpoints
+    synoptic.js            surface observations, drawn as station models
     windyPool.js           worker pool: colour table, dispatch, fallback
     windyTile.worker.js    fetch, decode, crop and recolour, off the main thread
     control.js             single entry point: enable, select, opacity, order
@@ -84,6 +87,7 @@ src/
     draw3d.js              collects polygon vertices from the GL canvas
   ui/
     icons.js               the drawn icon set, replacing the old text glyphs
+    stationPopup.js        the station card: readings, three charts, a table view
     layout.js              measures the docked chrome so the phone sheet clears it
     panels.js              rail + slide-over panel, built from a group declaration
     components.js          shared control builders
@@ -211,6 +215,22 @@ node tools/test-3d-layers.mjs       # MapsGL, overlays, stacking, tile addressin
 node tools/test-mapsgl-and-cue.mjs  # MapsGL opacity/stacking, strike cue, 3D resize, attribution
 node tools/test-overlays-ui.mjs     # outlooks/drawings as layers, 3D drawing, icons, phone scrubber
 node tools/test-cue-and-draw3d.mjs  # thunder cue gating and persistence, drawn shapes in 3D
+node tools/test-mapsgl-catalog.mjs  # the MapsGL catalogue reaches the picker and renders (SAMPLE=all for every one)
+node tools/test-observations.mjs    # station models load, thin, restack, reach 3D; WMS scrub deferral
+node tools/shot-observations.mjs    # a look at the station plot at two zooms
+node tools/shot-station-card.mjs    # the station card in both themes
+node tools/probe-3d-symbol-scale.mjs # station model size against camera pitch
+node tools/probe-stack-anim.mjs     # pane stacking, and what a slow layer does to playback
+node tools/probe-obs-time.mjs       # station models following the scrubber
+node tools/test-wms-slow.mjs        # a slow WMS still resolves instead of reading as a missing frame
+node tools/soak.mjs                 # does it get slower the longer it runs? (ROUNDS=14)
+node tools/test-animation-phone.mjs # playback pacing, and a phone opening on the map
+node tools/probe-animation-3d.mjs   # 2D vs 3D playback, cold context each, CPU-throttled runs
+node tools/probe-gl-cost.mjs        # what terrain/fog/buildings cost during playback
+node tools/test-3d-plot.mjs         # tile products fetched once in 3D, and 2D restored on exit
+node tools/probe-3d-plot-cost.mjs   # time to plot a layer, 2D vs 3D, cold cache each run
+node tools/probe-boot-weight.mjs    # what the shell downloads before the first tile
+node tools/probe-mapsgl-supported.mjs  # asks the SDK which layer ids it accepts
 node tools/diag-3d-layers.mjs       # sweeps every listed product for a 3D representation
 node tools/test-3d-perf.mjs         # latest-frame fallback, 3D scrub cost, 3D resolution parity
 node tools/probe-scrub-cost.mjs     # attributes a scrubber step: 2D vs 3D, by phase
@@ -408,6 +428,57 @@ canvas-backed products are mirrored by capturing what Leaflet has already
 painted; taking the map out of layout collapses its size and its tiles' box
 metrics, so those captures come back empty or stale and the 3D radar stops
 following the scrubber.
+
+## What the pickers offer
+
+`data/productOrder.js`, applied to the catalog at load, after the MapsGL merge
+and the name scrub. Both membership and order are derived from the entries
+themselves rather than kept in step by hand, because the catalog is edited
+directly and a parallel array is a thing to forget.
+
+**`listed` decides membership.** It always meant "offer this one", but only the
+search box read it: `listLayers` walked `__order` alone, so turning a product
+off left it in every drop-list. Forty-two products were retired in one editing
+pass and every one of them was still on offer.
+
+**Provider decides order**, matched on the request URL — the one field that
+cannot be edited into disagreeing with where the data actually comes from, since
+labels are scrubbed of provider names before anything reads them. Global
+high-resolution composites first, then the regional model and radar products,
+then the wide-coverage commercial feeds, then the rest. Within each of those the
+catalog's own order survives, so a deliberate arrangement of related products is
+not scrambled.
+
+**Ordering happens inside a heading's section, never across it.** A heading names
+what follows it — "Marine Data", "Global Accumulated Precipitation" — and sorting
+through one files products under a description that does not fit them.
+
+Three things fall out of doing it this way rather than by hand:
+
+- **A heading with nothing left under it is dropped.** Retiring the last product
+  under "Satellite Precipitation Estimation" would otherwise have left the
+  heading with an empty list beneath it.
+- **Merged products get a section of their own.** `mergeMapsGLLayers` used to
+  push its entries onto the end of `__order`, which put them under whatever
+  heading happened to be last — a radar layer was filed under "Satellite
+  Precipitation Estimation". It now declares them and leaves the filing to the
+  ordering pass. The trailing section needs its own heading rather than none,
+  because headings become `optgroup`s and a picker cannot get back out of one:
+  every option after the first heading joins whichever group is open.
+- **A retired product does not survive a session restore.** The remembered
+  selection is checked against what the group now offers and replaced if it is
+  gone. Doing this only when the panel card is built was not enough — on a phone
+  the cards start collapsed, so the layer would render something no picker
+  listed.
+
+One provider name was reaching the interface through a route the scrub did not
+cover: the section headings inside `__order` are display text like any label,
+and one of them read "--- MapsGL Severe Layers ---". `scrubCatalog` cleans them
+now.
+
+`tools/test-product-lists.mjs` checks all of it: nothing offered that the catalog
+no longer defines, nothing offered that has been retired, no empty headings, no
+section whose provider order runs backwards, and no heading naming a provider.
 
 ## Layer manager
 
@@ -825,6 +896,534 @@ are worth recording because three of them are easy to reintroduce:
     both shapes drawn in 2D and shapes drawn in 3D, since both end up in the same
     feature group.
 
+
+49. **A slow WMS was mistaken for a missing frame.** EUMETSAT answers 502 for a
+    frame it has not published yet and 200 once it has, which the resolver
+    already handled by stepping back a frame. The failure was a different one:
+    the service renders on demand and is highly variable — a warm tile comes back
+    in about 0.3 s, a cold one in seconds — and the probe deadline was a flat
+    4 s. A probe that times out is indistinguishable from a frame that does not
+    exist, so the resolver stepped back, paid the same slow probe again,
+    exhausted its attempts and drew nothing at all. With every response held back
+    six seconds the layer produced `drew: false, tiles: 0`; WMS probes now get
+    12 s and it resolves normally. `tools/test-wms-slow.mjs` delays the service
+    deliberately, because the real one is too fast and too variable to show it.
+
+    **Do not "optimise" the probe by shrinking the request.** A probe only asks
+    whether the service will answer, so asking for 1×1 instead of 256×256 looks
+    like free savings — 69 bytes instead of 130 KB — and makes it *slower*.
+    EUMETSAT is served with `tiled=true`, so a standard 256px tile request is
+    answered from GeoServer's tile cache in ~0.3 s, while a non-standard size
+    misses that cache and forces a fresh render: measured at 3 s, and once at
+    11 s. A probe is by definition the first request for a frame, so it would pay
+    that cold cost every single time. This was tried, measured, and reverted.
+
+
+50. **Asking playback to go faster made it draw less and download more.** The
+    loop scheduled the next step on a bare timer without waiting for the current
+    frame to reach the screen — despite a comment claiming the opposite. At 4×
+    that requested a frame every 250 ms while frames were taking around 700 ms:
+    `renderAll` dropped the requests it could not service, but `time.current` had
+    already advanced past them, so tiles were fetched for frames that were
+    superseded before they finished.
+
+    | | frames drawn | tiles | per frame |
+    | --- | --- | --- | --- |
+    | 4×, unpaced | 14–16 | 455–490 | 21–33 |
+    | 4×, paced | 22–25 | 175–315 | 12–13 |
+
+    Each step now waits for the frame to land, capped at `FRAME_DEADLINE_MS` so a
+    stalled provider degrades playback rather than freezing it. Speed becomes a
+    ceiling rather than a demand: it runs as fast as the data allows and no
+    faster. The worst-case gap at 1× fell from about 3.0 s to 1.2 s.
+
+    `tools/test-animation-phone.mjs` asserts on **tiles per frame**, not frames
+    per second — the frame count swings with the provider run to run, but the
+    ratio is stable and is exactly what the unpaced loop got wrong.
+
+    **Raising `fetchConcurrency` during animation was tried and did not help.**
+    The theory was that a single frame in flight could use the whole connection
+    pool. Run-to-run variance was wide enough that the two settings could not be
+    separated, so the conservative value stays.
+
+    **The pacer is injected, not imported.** `whenRenderSettled` lives in the
+    renderer, which pulls in the whole map stack; importing it into
+    `time/controller.js` made that module impossible to load without a DOM and
+    broke the equivalence harness — the same coupling mistake as an earlier one
+    where the Windy tile layer imported `is3D`. `main.js` supplies it through
+    `setFramePacer`, and the controller simply does not wait without one.
+
+51. **A phone opened onto a panel instead of the map.** A first visit opens the
+    radar panel so the controls are discoverable, which on a phone is a bottom
+    sheet covering most of the map — the one thing someone opening a weather map
+    wants to see. Desktop still opens it; phones get the map, with the rail
+    already visible to say what the panels are.
+
+
+52. **3D playback stalled and showed nothing on a slow device.** Two separate
+    causes, and neither is reproducible on a capable GPU — there 3D playback is
+    consistently *faster* than 2D (40 frames against 30 at 4×, median 323 ms
+    against 425 ms), because the Leaflet map is `visibility: hidden` so the
+    browser skips painting it, and the GL upload costs 1–2 ms. Emulating a slow
+    device with 6× CPU throttling is what surfaced it.
+
+    **The frame deadline was fixed at 4 s.** A throttled machine takes around
+    3.5 s to load a 3D frame, so frames timed out and were skipped just as they
+    were about to appear — which reads as nothing being plotted rather than as
+    slow playback. The budget now follows the recent frames (median × 3, bounded
+    to 4–15 s), so a slow device degrades to a slideshow that still shows every
+    frame. Throttled 6×: **1 frame per 14 s → 3–4**.
+
+    **The mirrored composite was captured at full device resolution during
+    playback.** On a 2× display that is a 3000×1804 texture uploaded several
+    times a second. It is halved while playing and taken again at full resolution
+    the moment playback stops, so the frame anyone actually studies is unchanged.
+    Throttled, the mirror phase fell from 47 ms to 25–30 ms.
+
+    **Stripping the 3D scenery was measured and rejected.** Terrain, fog and
+    extruded buildings draw every GL frame and looked like the obvious suspects.
+    `tools/probe-gl-cost.mjs` removes each in turn under the same throttling:
+    with everything on, 4 frames at a 2619 ms median; without terrain, 3 frames
+    at 5599 ms; without terrain, fog and buildings, 3 frames at 4495 ms. Run-to-run
+    variance swamps any difference, so the scenery is not the bottleneck and
+    degrading the view would have bought nothing.
+
+    What remains on a slow device is CPU-bound: decoding and recolouring roughly
+    24 tiles per frame while GL renders. 3D playback there is still several times
+    2D, and that is honest rather than fixed.
+
+
+53. **Tile products were downloaded twice in 3D, and the wait was for the copy
+    nobody could see.** GL is handed a raster source and fetches the tiles by
+    URL itself, but the renderer still loaded the same tiles into the hidden
+    Leaflet map first — and blocked on them — before mirroring. Leaflet only
+    requests tiles once its layer is on a map, so simply not adding it removes
+    both the duplicate download and the wait.
+
+    | time to visible | 2D | 3D before | 3D after |
+    | --- | --- | --- | --- |
+    | radar (plain tiles) | 2409 ms | 6518 ms | **2380 ms** |
+    | satellite (plain tiles) | 1982 ms | 2711 ms | **2844 ms** |
+    | EUMETSAT WMS | — | ~5965 ms | **~5220 ms** |
+
+    `slot.glDirect` marks a slot whose Leaflet layer was skipped, and
+    `exitGlDirect` rebuilds those on the way back to 2D — without it the 2D map
+    returns empty, which is most of what `tools/test-3d-plot.mjs` checks.
+
+    **One measurement said to exclude WMS and was wrong.** Skipping the Leaflet
+    copy appeared to take EUMETSAT from 2.0 s to 7.2 s, which suggested the 2D
+    load was warming GeoServer for that timestamp. Three runs each way said the
+    opposite — 5.2 s direct against 6.0 s with the preload — and that service is
+    variable enough (0.3 s to 11 s for the same tile) that no single run means
+    anything. It is included.
+
+    **This nearly shipped the Windy composite as raw data tiles.**
+    `isCanvasBacked` identified the composite by `layer._tiles`, which Leaflet
+    does not create until the layer is added to a map — and the new question is
+    asked *before* the add, to decide whether the add is needed. It quietly
+    answered "not canvas-backed", which would have handed GL the unrecoloured
+    tiles, with reflectivity still sitting in the red and green channels. It now
+    tests the class the layer was constructed with. `tools/test-3d-perf.mjs`
+    caught it: `kind=raster` where `canvas` was expected.
+
+
+## Load speed
+
+The shell used to pull **4.7 MB of blocking third-party JavaScript** before the
+first tile was requested — on every load, whether or not the session ever touched
+the feature it belonged to.
+
+| library | KB | reachable only through |
+| --- | --- | --- |
+| mapbox-gl (+css) | 1263 | the 3D button |
+| maptiler-sdk (+leaflet plugin) | 1137 | four of the eighteen base maps |
+| aerisweather.mapsgl (+css) | 826 | MapsGL products |
+| turf | 590 | storm projections and the area tools |
+| firebase ×3 | 399 | the outlook panels |
+| proj4 | 89 | the OPERA grid |
+| esri-leaflet | 67 | one product |
+| leaflet-draw (+css) | 71 | the drawing tool |
+| Leaflet.VectorGrid | 40 | `pbf` products |
+| togeojson | 18 | KML import |
+| leaflet.heat | 5 | the strike heatmap |
+
+`core/deps.js` fetches each of these at the point of use and caches the promise,
+so the cost is paid once, by whoever needs it, and never by someone who does not.
+Only Leaflet stays in the shell, because the map is the first thing drawn.
+
+| | before | after |
+| --- | --- | --- |
+| third-party assets at boot | 22, **4675 KB** | 3, **168 KB** |
+| DOM content loaded | 1150–1454 ms | **594–798 ms** |
+| shell ready | 1224–1540 ms | **658–881 ms** |
+
+**A deferred library must be awaited where it is used, not checked for.** The
+outlook panel opened with `if (typeof firebase === 'undefined')` and reported
+"Firebase did not load" — which had been true zero times before and was true
+every time afterwards. Each section awaits the SDK itself and reports honestly if
+it never arrives.
+
+**One library is warmed deliberately.** Deferring everything makes the first
+paint fast and moves the wait to the first click. The storage SDK is pre-paid
+during an idle callback after boot, because outlooks are the point of this
+application; it is off the critical path, so nobody waits for it. The outlook
+panel populates in about 1.3 s.
+
+### It does not get slower the longer it runs
+
+`tools/soak.mjs` drives fourteen rounds of scrubbing and layer toggling, sampling
+the same counters each round, because "getting slower" and "slow to load" want
+opposite fixes and only measurement separates them.
+
+```
+round  1  scrub  776ms  heap 118.1MB  nodes 1440  listeners  688  canvases 36  imgs 47
+round 14  scrub  420ms  heap 155.7MB  nodes 2753  listeners 1176  canvases 36  imgs 47
+```
+
+Scrub cost is flat — round one is warm-up. Canvases, images and pane children are
+exactly flat, and heap, nodes and listeners oscillate rather than climb, which is
+collection rather than accumulation. The problem was never runtime drift.
+
+
+## Surface observations
+
+Live station models — the classic plot: a sky-cover circle with a wind barb,
+temperature above-left, dew point below-left, sea-level pressure coded to three
+digits above-right, station identifier below-right. Six variables in something
+the eye reads at a glance, which is why the notation has outlived every attempt
+to replace it.
+
+`layers/synoptic.js` draws them; `ui/panels.js` has the Station observations tab.
+
+**Three networks, not all of them.** Synoptic carries about 35,000 active
+stations over the continental US alone — every mesonet, road sensor and hobby
+gauge — and asking for all of them costs 16 MB a refresh. ASOS/AWOS (1), Global
+METAR (239) and the WMO synoptic feed (284) are the ones reporting a full station
+model on a regular cycle: roughly 13,000 worldwide, and a continental view under
+2 MB. That is the difference between a layer that can auto-update and one that
+cannot.
+
+| request | stations | payload |
+| --- | --- | --- |
+| CONUS, all networks | 35,691 | 16.5 MB |
+| CONUS, these three | 2,399 | 1.8 MB |
+| 30°×20° window | 886 | 0.7 MB |
+
+`fields` trims the metadata, which halves what is left; none of it is drawn.
+
+**Bounded by window, not by radius.** The service caps `radius` at 300 miles and
+refuses a whole-world `bbox`, so the request is the viewport clamped to 46°×30°
+about its centre. Past that the plots would be unreadably dense anyway, and the
+panel says "zoom in for full coverage" rather than quietly showing less.
+
+**Drawn on a canvas, thinned on a grid.** A station model is a dozen strokes and
+a busy view holds several hundred — as markers that is thousands of DOM nodes
+rebuilt on every pan. Thinning keeps one plot per cell of a screen-space grid
+rather than comparing every pair, which is quadratic and shows up as a stutter
+while panning. A regional view holds about 1,100 stations and plots 280 of them.
+
+**It refreshes itself** every five minutes by default, and re-requests when the
+view moves somewhere the cached window does not cover. It registers as an
+ordinary overlay, so it appears in the layer list, can be restacked and reaches
+the 3D view — and it starts at the top of the stack, because a station model is
+read rather than looked at and anything drawn over one is a number you cannot
+take.
+
+
+## The MapsGL catalogue
+
+The original file used nine MapsGL products. The SDK offers far more, and
+`data/mapsglLayers.js` declares the rest — **211 in total** across ten groups.
+
+| group | products |
+| --- | --- |
+| roadWeather | 80 |
+| observation | 69 |
+| warning | 17 |
+| lightning | 16 |
+| wind | 9 |
+| nowcast | 9 |
+| satellite | 5 |
+| isobar | 3 |
+| tropicalStorms | 2 |
+| radar | 1 |
+
+**The list was verified against the SDK, not copied from the documentation.**
+`tools/probe-mapsgl-supported.mjs` calls `addWeatherLayer` for every candidate id
+and records what the controller accepts: 210 of 215 documented ids, the five
+rejections being names that turned out not to exist. Acceptance means the SDK
+holds a configuration for that layer — whether the account is entitled to the
+data is a separate question, and one the renderer already fails softly on.
+
+**Declared by hand, merged into the generated catalog.** `data/layers.js` is
+extracted from the original file, so anything added there would be lost on the
+next regeneration. `mergeMapsGLLayers` runs at load, before the order table is
+derived, and the generator emits the call — so regenerating cannot drop them.
+Existing entries win: the nine products carried over from the original keep their
+own keys and labels, because changing those would change what a saved session
+restores. Duplicates are matched on the MapsGL id rather than the catalog key.
+
+**Labels are derived, not typed.** Two hundred hand-written strings is two
+hundred chances to leave a typo somewhere nobody looks. `humanise()` splits the
+id, peels trailing qualifiers into a parenthetical (`-accum-text` becomes
+"(accumulation, text)"), and applies a table of the genuinely irregular parts —
+`pm2p5` to PM2.5, `msl` to Mean Sea Level, `vpd` to Vapour Pressure Deficit.
+Road weather also carries a forecast marker and a region, so
+`froad-weather-risk-low-viz-fog-europe` reads as
+"Road Forecast · Low Visibility Fog Risk — Europe".
+`tools/test-mapsgl-catalog.mjs` asserts no two products share a label and none
+falls back to a raw id, which is how a broken rule would show up.
+
+**Road weather has its own group.** Eight risk types across five regions, current
+and extended forecast, is eighty entries; dropped into observations they would
+bury the surface fields already there. The group has its own pane at z-index 165
+and appears under the Observations panel alongside them.
+
+
+54. **A render-on-demand WMS was asked for every position of a drag.** EUMETSAT
+    generates each frame on request — a warm tile in 0.3 s, a cold one in
+    seconds — so dragging across a hundred scrubber positions asked GeoServer
+    for a hundred frames, every one superseded before it arrived, with the frame
+    the user actually stopped on queued behind all of them. Kinds in
+    `SLOW_TO_RENDER` now defer while `runtime.scrubbing` is set and the release
+    flushes them: measured at **0 requests during a fourteen-position drag** and
+    25 on release.
+
+55. **Station models were drawn under the satellite they were stacked above.**
+    `synopticPane` was a top-level pane, a sibling of `overlayPane`, but the
+    layer list assigns z-indexes from the weather stack's range — so it was
+    handed 200 while `overlayPane`, holding the satellite, sits at 400. A
+    z-index only orders against its own siblings, so the pane the list said was
+    on top was underneath everything. It now lives inside `overlayPane` with the
+    layers it is ordered against.
+
+56. **One slow layer set the frame rate for all of them.** Playback waits for
+    each frame to reach the screen before asking for the next, which is what
+    makes speed a ceiling rather than a demand — but it waits for *every* layer,
+    so a render-on-demand WMS gated the radar it was sitting on top of. With
+    EUMETSAT enabled: **3 radar frames in 14 s, an eight-second gap**. Without
+    it: 39 frames at a third of a second.
+
+    Slow kinds now hold their current frame while the timeline is moving —
+    during playback as well as during a drag — and catch up when it stops. With
+    EUMETSAT enabled that is **41 frames at 327 ms**, indistinguishable from
+    having it switched off.
+
+    **The first attempt made it worse, not better.** Marking the deferred layer
+    by setting `pending` looked natural — it does mean "there is a render still
+    owed" — but `pending` is exactly what the playback pacer waits on, so every
+    frame then waited for a layer that had deliberately opted out of it and
+    playback stopped dead: 0 frames in 14 s. Deferral is tracked in its own set.
+
+57. **Station models grew with the camera pitch in 3D.** The plot is drawn at a
+    fixed pixel size onto the hidden 2D map, and that image is stretched over the
+    GL scene by however much lower a zoom it was captured at — and a pitched
+    camera sees far more than a flat view holds at the same scale, so the
+    composite drops a zoom level for every step of tilt.
+
+    | pitch | capture zoom | symbol size before | after |
+    | --- | --- | --- | --- |
+    | 0–30° | 7 | 1.0× | 1.0× |
+    | 45° | 6 | **2.0×** | 1.0× |
+    | 60° | 5 | **4.0×** | 1.0× |
+    | 70° | 4 | **8.0×** | 1.0× |
+
+    `mirrorMagnification()` reports the stretch and the plot divides by it, so
+    every dimension — circle, barb, glyph sizes, offsets and the thinning grid —
+    is drawn correspondingly smaller and lands the right size on screen.
+
+
+58. **Station models ignored the timeline.** They were fetched from the
+    `latest` endpoint, which is exactly what it says, so they were the one layer
+    that did not move with the scrubber. Away from the live edge the request now
+    goes to `nearesttime` with the moment being shown, bucketed to ten minutes so
+    a nudge costs nothing, and the drag deferral applies here too — the release
+    asks once.
+
+    Staleness had to move with it. `maxAgeMinutes` was measured against *now*,
+    which discarded every historical report the instant the scrubber left live:
+    473 stations held, none drawn. It is measured against the moment being shown,
+    with the same tolerance either side, because a nearest-time lookup can
+    legitimately return a report a little after the time asked for.
+
+59. **A test that could not fail.** The scrub-deferral check counted requests to
+    the WMS, which measured two wrong things: the tile layer retries a failed
+    frame on a multi-second backoff, so a drag starting soon after a load sees
+    dozens of requests that predate it, and a probe for a frame carries the same
+    `TIME` as a tile for it. Rewritten to watch the frame the layer holds, it
+    passed with the deferral disabled — because `renderAll` already drops a
+    request while one is in flight, and a slow WMS is always in flight during a
+    drag. The drag case was covered before the change; **playback** was not, and
+    that is what the test asserts now: 3 radar frames in 14 s against 39 before,
+    39 against 35 after.
+
+60. **A dead product failed the suite.** `test-layers` asserted that the *first*
+    listed wind product renders, as a guard against the wind group being empty —
+    which it once was. `wind-dir-dk` now answers 400 for every timestamp, so the
+    guard fired for a reason it was not built to detect. It tries several
+    products and passes if any of them draws.
+
+## The high-resolution satellite composite
+
+`layers/windySat.js`, decoded in the same worker pool as the radar composite.
+Three products come off one source: the visible/infrared composite, and each
+channel on its own.
+
+The source is not a picture. One 256×512 PNG serves each 256×256 map tile, and
+its pixels look like structured noise under a checkerboard until two things are
+undone.
+
+**Alternate 16px blocks are stored inverted.** The giveaway was a low-zoom tile
+whose western half was empty: the void rendered as pure black squares against
+pure white ones, which are the two ways a single value can appear if half the
+blocks carry `255 - v`. Undoing it turns the noise into cloud.
+
+**The two halves are two channels, not two rows.** The lower half of a tile
+compared against the upper half of its southern neighbour gave a mean difference
+of 42.8, where an identical region scores 0 and an unrelated one 84.9. They are
+the visible and infrared views of the same ground, as `visir` says: visible on
+top (mean neighbour difference 10.5, the sharper picture), infrared below (3.2).
+
+**The two halves do not share a parity.** This is the part that was got wrong
+first, and it shipped a visible channel that was a photographic negative —
+daylight cloud black, ocean white. Nothing local catches it: the two candidate
+decodes are exact negatives of one another, so every measure of smoothness is
+identical and every seam between tiles joins equally well either way. Tile-seam
+continuity was tested first and answered "consistent" for both, which is true and
+useless. It takes ground truth. Over the Atlantic coast of the western Sahara the
+desert is the brightest thing a visible channel sees and the open ocean nearly
+the darkest, while in the infrared the baking sand is darkest and the cold cloud
+tops brightest; only one assignment puts both the right way up, and it puts the
+inverted blocks on opposite parities in the two halves.
+
+An earlier round of the same measurement pointed at a Sahara tile and a South
+Atlantic tile that disagreed, which looked like the parity varying per tile. It
+does not — that was one correct reading and one taken over a tile the sun had
+almost left. `tools/test-windy-sat.mjs` keeps both halves of the finding: the
+rule as a deterministic check against a synthetic image, and the desert against
+the sea as the check that says which way up.
+
+**Night is handled by arithmetic, not by the imagery.** The visible channel is a
+photograph and carries nothing on the unlit side, so the composite blends the two
+by solar elevation — visible where the sun is more than 10° up, infrared where it
+is down, faded across the terminator. Deciding that from the pixels would not
+work: a fully lit cumulonimbus top and an unlit ocean are both flat fields.
+`layers/solar.js` computes the sun's position once per frame and the elevation is
+sampled on a 17×17 grid per tile, which the worker interpolates — it varies
+smoothly enough over 256px that this is exact to far better than a pixel. A tile
+entirely in the dark skips the blend and takes infrared outright.
+
+Native tiles stop at zoom 7, where the provider answers 400 rather than 404;
+deeper zooms crop and scale the z7 parent, as the radar composite does. No
+credentials are needed — `mosaic=true` and a `maxt` bound are enough — so none
+are embedded for it.
+
+**Old frames come from a second endpoint, at a coarser cadence.** The live path
+carries ten-minute frames for roughly the last sixteen hours — measured 200 at
+fourteen hours old and 404 at fifteen and a half, with the boundary close enough
+to midnight UTC that one afternoon's samples cannot separate a rolling window
+from a since-midnight rule. Past that, `/satellite/archive/composite/` serves
+frames going back at least thirty days.
+
+The archive is **hourly only**, and that is the part worth knowing. An early
+reading of it concluded it held nothing older than a day, because the probe asked
+for the same ten-minute stamps the live endpoint uses and five requests in six
+were for frames that were never written. `toArchiveUrl` therefore does two
+things at once: it inserts the `archive` segment and snaps the frame down to the
+hour, moving the `maxt` bound with it. The layer tries live first unless the
+frame is already known to be too old, falls back to the archive, and remembers
+where the boundary was so later frames skip the wasted request — the same
+learned-cutoff arrangement the radar composite uses, kept separate because the
+two products differ in window, in path and in whether the fallback re-buckets the
+time. Snapping moves the sun by up to half an hour, under four degrees, which is
+well inside the ten-degree band the day/night blend fades across.
+
+Scrubbing thirty hours back requests the archive for every tile, gets 200 for
+every one, and paints; `tools/shot-sat-archive.mjs` drives that.
+
+**3D takes the decoded canvas.** `isCanvasBacked` recognises the class the layer
+is constructed with, so GL mirrors what the workers drew rather than fetching the
+source tiles itself and drawing the checkerboard raw.
+
+## The station card
+
+Clicking a station model opens the current observation in full plus a day of
+history. `ui/stationPopup.js`.
+
+**One chart at a time, chosen from a picker.** Temperature, pressure, wind, rain
+and snow share nothing but a time axis. One plot would need five value scales,
+and a chart with two y-axes is the most reliable way to make unrelated series
+look related. Stacking five panels is honest but turns the card into a page
+nobody scrolls to the end of, so a picker names them and shows one — which also
+buys the visible chart enough height to read. Only the charts a station actually
+reports are offered: most airfields send no snow and many send no rain, and an
+empty axis is worse than a shorter menu.
+
+**A time axis on every chart**, aligned to round local hours rather than to the
+first reading, because an axis reading 06:00 09:00 12:00 is a clock and one
+reading 06:47 09:47 12:47 is a puzzle.
+
+**Wind direction as arrows, not a second line.** A bearing plotted against a
+speed axis is the dual-axis mistake wearing a disguise — and it wraps at 360°, so
+a westerly veering by ten degrees would draw a full-height cliff. It becomes a
+row of arrows under the plot instead, flying the way the air is going, sharing
+the same time axis, and it still reports itself to the crosshair and the table.
+
+**Rainfall as bars, accumulation as a line.** Rain in an hour is a magnitude per
+interval, which is what bars are for; the running total is a level, which is what
+a line is for. Both come from the hourly reports, and the subtlety is that a
+station reporting every twenty minutes repeats the same hourly figure three
+times — summing the samples would treble the rainfall. The largest reading in
+each clock hour is taken, so each hour is counted once. Snow is handled the same
+way, and snow depth is a state rather than an accumulation, so it gets its own
+line.
+
+**Celsius and mph**, with precipitation in millimetres, requested from the
+service rather than converted here.
+
+**Colour by meaning, and validated.** Two series per panel from the categorical
+pair, with the warm hue on the warm variable in every panel — temperature over
+dew point, gust over mean wind. Run through the palette validator against both
+surfaces, all pairs: worst CVD ΔE 26.8 dark / 24.7 light, worst normal-vision
+ΔE 31.8 / 33.6, both above 3:1 contrast. A legend where there is more than one
+series; a single-series panel has none, because its title already names it.
+Values wear text tokens, never the series colour. A table view carries every
+reading without hovering.
+
+**Gaps break the line.** A missing report is not a straight-line hour of weather,
+so the path restarts rather than bridging.
+
+**The card opens in both views.** In 3D the plots arrive as a captured picture
+with nothing to hit-test and Leaflet never sees the click, so the GL map's own
+click is resolved against projected station positions — only the stations that
+survived thinning, because a card for a plot nobody can see is a magic trick.
+The card itself is the same DOM either way; only the popup around it differs.
+Mapbox does not pan for its own popups, so the camera is nudged once the card
+fills out.
+
+61. **Pressure is spelled out in hectopascals.** The station model traditionally
+    codes sea-level pressure to three digits — 1013.2 hPa as `132` — which saves
+    two characters and costs anyone who has not met the convention any chance of
+    reading it.
+
+62. **Two chart series were drawn as a single dot.** Synoptic returns both a
+    measured series and a derived one, and preferring `_set_1` outright looked
+    obviously right. Plenty of stations carry that key with almost every entry
+    null and put the real readings in `_set_1d`: dew point and pressure both came
+    out empty at KPHL, giving a panel with no line and one end marker. Whichever
+    series actually has readings is used.
+
+63. **The card opened, then pushed its own header off the map.** It opens small —
+    one line of loading text — so the popup positions itself against that, then
+    grows by four hundred pixels when the history lands, and Leaflet does not
+    re-pan. The card signals when it is complete and the popup re-measures; the
+    pending state also reserves roughly the height the charts will need, so the
+    jump is small. Measured: popup top went from y=10 (under the top bar) to y=71.
+
+    This was nearly missed. The first screenshots looked like the header was
+    clipped, and the clip was `boundingBox().y - 12`, which clamps to zero and
+    shaves the top — so the artefact and the real fault looked identical. The
+    geometry had to be printed to tell them apart.
 
 ## Known limitations
 

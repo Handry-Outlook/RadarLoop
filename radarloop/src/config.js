@@ -16,6 +16,7 @@ export const CREDENTIALS = {
   xweatherId: 'wgE96YE3scTQLKjnqiMsv',
   xweatherSecret: '1XwHqbCjiTqtzWi8txyN4JtM0ezVNuEfaDXQdkjq',
   accuweather: '34d63eadb3384b4b86e1f5a5741f9820',
+  synoptic: '62836fb21d9b422b878d830b31bdf0df',
 };
 
 /** Convenience: the `id_secret` pair Aeris/Xweather tile URLs embed in their path. */
@@ -178,12 +179,20 @@ export const PANES = [
   { name: 'radarPane', z: 150, parent: 'overlayPane' },
   { name: 'operaRadarPane', z: 155, parent: 'overlayPane' },
   { name: 'observationPane', z: 160, parent: 'overlayPane' },
+  { name: 'roadWeatherPane', z: 165, parent: 'overlayPane' },
   { name: 'isobarPane', z: 170, parent: 'overlayPane' },
   { name: 'frontPane', z: 180, parent: 'overlayPane' },
   { name: 'warningFillPane', z: 190, parent: 'overlayPane', clickThrough: true },
   // Hand-drawn shapes start above the weather; like the outlooks they can be
   // restacked from the layer list.
   { name: 'drawPane', z: 192, parent: 'overlayPane' },
+  // Station models are read, not looked at, so they start at the top of the
+  // stack. Inside overlayPane rather than beside it: the layer list orders by
+  // z-index, and a z-index only orders against its own siblings. As a top-level
+  // pane it was handed a value from the weather stack range — 200, against an
+  // overlayPane sitting at 400 — which put it underneath every weather layer it
+  // was supposedly above.
+  { name: 'synopticPane', z: 196, parent: 'overlayPane', clickThrough: true },
 
   // --- top-level: above the whole weather stack ---
   { name: 'warningPane', z: 550 },
@@ -204,6 +213,7 @@ export const LAYER_Z = {
   rotation: 510,
   lightning: 520,
   warning: 550,
+  roadWeather: 165,
 };
 
 /* ------------------------------------------------------------------ *
@@ -233,5 +243,11 @@ export const DEVICE = detectProfile();
 export function fetchConcurrency({ animating = false, lowEndMode = false } = {}) {
   if (DEVICE.mobile) return 2;
   if (lowEndMode) return 2;
+  // Fewer parallel fetches while animating, not more. Raising this to 6 was
+  // tried once playback became frame-paced, on the theory that a single frame in
+  // flight could have the whole pool; it did not draw more frames. Run-to-run
+  // variance against the provider is wide enough that the two settings could not
+  // be separated, so the conservative one stays: saturating the connection can
+  // only delay the frame that is actually on screen.
   return animating ? 4 : 6;
 }

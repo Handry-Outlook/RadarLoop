@@ -70,7 +70,17 @@ export function clearAllCaches() {
  * Probing
  * ------------------------------------------------------------------ */
 
-/** Substitutes a representative tile / bbox into a template so it can be fetched. */
+/**
+ * Substitutes a representative tile / bbox into a template so it can be fetched.
+ *
+ * The request deliberately keeps the product's own tile size. Shrinking a WMS
+ * probe to 1x1 looks like an obvious saving — 69 bytes instead of 130 KB — and
+ * makes it *slower*: EUMETSAT is served with `tiled=true`, so a standard 256px
+ * tile request is answered from GeoServer's tile cache in about 0.3 s, while a
+ * non-standard size misses that cache and forces a fresh render, measured at
+ * 3 s and once at 11 s. A probe is by definition the first request for a frame,
+ * so it would pay that cold cost every time.
+ */
 function toProbeUrl(url) {
   return url.replace(
     /(\{z\}\/\{x\}\/\{y\}|z=\{z\}&x=\{x\}&y=\{y\}|\{bbox\})/,
@@ -83,11 +93,26 @@ function toProbeUrl(url) {
 }
 
 /**
+ * Deadline for an availability probe.
+ *
+ * Static tiles answer in milliseconds. A WMS renders on demand and is slower and
+ * far more variable — EUMETSAT answers a warm tile in about 0.3 s but a cold one
+ * in seconds — so it gets much longer before we conclude the frame is missing.
+ *
+ * Too short is the dangerous direction: a probe that times out is indistinguishable
+ * from a frame that does not exist, so the resolver steps back, pays the same slow
+ * probe again, exhausts its attempts and draws nothing at all. Waiting costs a few
+ * seconds once; giving up costs the layer.
+ */
+const PROBE_TIMEOUT_MS = 4000;
+const WMS_PROBE_TIMEOUT_MS = 12000;
+
+/**
  * Some providers (notably the EUMETSAT WMS) send no CORS headers, so `fetch`
  * cannot read the response even when the frame exists. An `<img>` load is the
  * only reliable availability signal for those.
  */
-function probeWithImage(url, timeoutMs = 4000) {
+function probeWithImage(url, timeoutMs = PROBE_TIMEOUT_MS) {
   return new Promise((resolve) => {
     const image = new Image();
     let settled = false;
@@ -127,7 +152,10 @@ const needsImageProbe = (def, type) =>
 
 async function probe(url, def, type) {
   runtime.stats.probes += 1;
-  if (needsImageProbe(def, type)) return probeWithImage(toProbeUrl(url));
+  if (needsImageProbe(def, type)) {
+    const deadline = def.kind === 'wms' ? WMS_PROBE_TIMEOUT_MS : PROBE_TIMEOUT_MS;
+    return probeWithImage(toProbeUrl(url), deadline);
+  }
   return probeWithFetch(toProbeUrl(url), { noStore: type === 'windy-radar' });
 }
 

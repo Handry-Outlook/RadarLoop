@@ -1,0 +1,12 @@
+# Screenshots the test harness writes. The nine the README illustrates itself
+# with are tracked already and stay tracked; the rest are run output, and there
+# are 25 MB of them.
+/shots/
+
+# The pre-rewrite monolith and a scratch extraction of it, kept locally for
+# reference against the modular build.
+/extract/
+UK (9).html
+
+node_modules/
+.DS_Store

@@ -202,29 +202,108 @@ export const hasFilter = () => time.mode === 'inputs' && !!time.filterStart && !
 let timer = null;
 
 /**
+ * How long a single frame may take before playback moves on regardless.
+ *
+ * Without a cap, one provider stalling would freeze the animation rather than
+ * degrade it.
+ */
+/**
+ * How long a single frame may take before playback moves on regardless.
+ *
+ * A fixed 4 s was wrong on a slow device: a throttled machine takes around
+ * 3.5 s to load a 3D frame, so frames timed out and were skipped just as they
+ * were about to appear — which reads as nothing being plotted at all rather
+ * than as slow playback. The budget follows the recent frames instead, so a
+ * slow device degrades to a slideshow that still shows every frame.
+ */
+const FRAME_DEADLINE_MIN_MS = 4000;
+const FRAME_DEADLINE_MAX_MS = 15000;
+
+/** Durations of the last few frames, for the adaptive budget. */
+const frameTimes = [];
+
+function frameDeadline() {
+  if (frameTimes.length < 3) return FRAME_DEADLINE_MIN_MS;
+  const sorted = [...frameTimes].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  // Generous against the median so an ordinary frame is never cut off, but
+  // still bounded so a genuinely stuck one cannot freeze playback.
+  return Math.min(FRAME_DEADLINE_MAX_MS, Math.max(FRAME_DEADLINE_MIN_MS, median * 3));
+}
+
+function noteFrameTime(ms) {
+  frameTimes.push(ms);
+  if (frameTimes.length > 8) frameTimes.shift();
+}
+
+/**
+ * Waits for the frame just requested to reach the screen.
+ *
+ * Injected rather than imported: the renderer pulls in the whole map stack, and
+ * importing it here made this module impossible to load without a DOM — which
+ * the equivalence harness does, and which is worth protecting. main.js supplies
+ * the real one; on its own the controller simply does not wait.
+ */
+let framePacer = () => Promise.resolve(true);
+
+export function setFramePacer(fn) {
+  if (typeof fn === 'function') framePacer = fn;
+}
+
+/** Called when playback ends; main.js supplies the catch-up. */
+let onStopped = () => {};
+
+export function setPlaybackSettled(fn) {
+  if (typeof fn === 'function') onStopped = fn;
+}
+
+/**
  * Plays forward through the domain, wrapping at its end.
  *
- * Driven by a self-scheduling timeout rather than a fixed interval: if a frame
- * takes longer than the step budget, the next step is not queued on top of it.
+ * Each step waits for the previous frame to actually reach the screen before
+ * scheduling the next. That is the whole point: the loop used to reschedule on a
+ * bare timer, so at 4x it asked for a frame every 250 ms while frames were
+ * taking around 700 ms. `renderAll` dropped the requests it could not service,
+ * but `time.current` had already advanced past them, so tiles were fetched for
+ * frames that were superseded before they finished — 455 tile requests to draw
+ * 16 frames, and the faster you asked it to go, the more of the connection went
+ * to frames nobody ever saw.
+ *
+ * Pacing on the frame instead makes speed a ceiling rather than a demand:
+ * playback runs as fast as the data allows, and no faster.
  */
 export function play({ stepMinutes = 5 } = {}) {
   if (time.playing) return;
   time.playing = true;
   emit(EVENTS.ANIMATION_STATE, { playing: true });
 
-  const tick = () => {
+  const tick = async () => {
     if (!time.playing) return;
+    const started = performance.now();
+
     const { start, end } = domain();
     const next = time.current + stepMinutes * 60000;
     setTime(next > end ? start : next, { immediate: true });
-    timer = setTimeout(tick, Math.max(60, 1000 / time.speed));
+
+    await framePacer(frameDeadline());
+    if (!time.playing) return;
+    noteFrameTime(performance.now() - started);
+
+    // Whatever is left of this frame's budget, if anything.
+    const budget = Math.max(60, 1000 / time.speed);
+    const remaining = budget - (performance.now() - started);
+    timer = setTimeout(tick, Math.max(0, remaining));
   };
+
   timer = setTimeout(tick, Math.max(60, 1000 / time.speed));
 }
 
 export function stop() {
   if (!time.playing) return;
   time.playing = false;
+  frameTimes.length = 0;
+  // Slow products held their frame while this was running; let them catch up.
+  onStopped();
   clearTimeout(timer);
   timer = null;
   emit(EVENTS.ANIMATION_STATE, { playing: false });

@@ -26,13 +26,15 @@ import { prefetchNeighbours, resolveFrame } from './resolver.js';
 import { createOperaLayer } from './opera.js';
 import { getSignature } from './radarScale.js';
 import { createWindyRadarLayer, isWindyRadar } from './windy.js';
+import { channelFor, createWindySatLayer, isWindySat } from './windySat.js';
 import { renderMapsGLLayer, clearMapsGLLayer } from './mapsgl.js';
 import { renderXweatherLayer, clearXweatherLayer } from './xweather.js';
 import { renderGeoJsonLayer } from './geojson.js';
 import { createWmsLayer } from './wms.js';
 import { is3D } from '../core/map3d.js';
-import { mirrorMapsGLSoon, mirrorTo3D } from './mirrorBridge.js';
+import { mirrorMapsGLSoon, mirrorTo3D, usesGlTileSource } from './mirrorBridge.js';
 import { clearMirror, usesFlippedY } from '../core/mirror3d.js';
+import { DEPS } from '../core/deps.js';
 
 /* ------------------------------------------------------------------ *
  * Layer construction
@@ -101,6 +103,7 @@ async function buildLayer(slot, def, url, timestamp) {
 
     case 'pbf':
       try {
+        await DEPS.vectorGrid();
         return L.vectorGrid.protobuf(url, {
           ...options,
           vectorTileLayerStyles: { geojsonLayer: dtnVectorStyle(slot.opacity) },
@@ -115,6 +118,7 @@ async function buildLayer(slot, def, url, timestamp) {
       return renderGeoJsonLayer(url, def, slot);
 
     case 'esri-feature':
+      await DEPS.esri();
       return L.esri.featureLayer({
         url: def.url,
         pane: paneFor(slot.group),
@@ -132,6 +136,11 @@ async function buildLayer(slot, def, url, timestamp) {
         // Same tile resolution in both modes; the recolour runs in workers, so
         // 3D no longer has to buy speed by rendering the composite softer.
         return createWindyRadarLayer(url, { ...options, timestamp });
+      }
+      if (isWindySat(slot.type)) {
+        // The frame time is not decoration here: the visible/infrared blend is
+        // decided by where the sun was when the image was taken, not now.
+        return createWindySatLayer(url, { ...options, timestamp, channel: channelFor(slot.type) });
       }
       return L.tileLayer(url, { ...options, tms: usesFlippedY(slot.group, url) });
   }
@@ -231,6 +240,26 @@ function promote(slot, layer, timestamp, url) {
 }
 
 /** Drops whatever a slot currently shows. */
+/**
+ * Restores the 2D layers that were skipped while 3D was showing.
+ *
+ * A GL-direct slot never had its Leaflet layer added to the map, so leaving 3D
+ * would otherwise reveal an empty one. Forgetting the frame key is what makes
+ * the next render actually rebuild rather than recognise it as already drawn.
+ */
+export function exitGlDirect() {
+  let restored = 0;
+  for (const slot of slots.values()) {
+    if (!slot.glDirect) continue;
+    slot.glDirect = false;
+    slot.frameKey = null;
+    safeRemove(slot.front);
+    slot.front = null;
+    restored += 1;
+  }
+  return restored;
+}
+
 export function clearSlot(group) {
   const slot = slots.get(group);
   if (!slot) return;
@@ -295,6 +324,30 @@ async function renderSlot(group, timestamp, generation, activeLayers) {
     return;
   }
 
+  // A WMS renders on demand, and nothing has cached the frame being asked for —
+  // EUMETSAT answers a warm tile in 0.3 s and a cold one in seconds. That is
+  // survivable when you stop on a frame and ruinous when you do not:
+  //
+  //   * dragging across a hundred positions asked GeoServer for a hundred
+  //     frames, each superseded before it arrived, with the one the user stopped
+  //     on queued behind all of them;
+  //   * during playback the pacer waits for every layer to settle, so one slow
+  //     product set the frame rate for all of them — 3 radar frames in 14 s with
+  //     EUMETSAT enabled against 39 without it, an eight-second gap against a
+  //     third of a second.
+  //
+  // So a slow product holds its current frame while the timeline is moving and
+  // catches up when it stops. The frame on screen stays correct for where the
+  // scrubber was; it simply does not try to follow every step.
+  if ((runtime.scrubbing || time.playing) && SLOW_TO_RENDER.has(def.kind)) {
+    // Recorded separately from `pending`, which means 'a render is queued' and is
+    // what the playback pacer waits on. Setting that here made every frame wait
+    // for a layer that had deliberately opted out of the frame, and playback
+    // stopped entirely: 0 frames in 14 s.
+    deferred.add(group);
+    return;
+  }
+
   const token = ++slot.token;
   const resolved = await resolveFrame(slot.type, def, timestamp, {
     animating: time.playing,
@@ -338,6 +391,33 @@ async function renderSlot(group, timestamp, generation, activeLayers) {
   // Retire any previous back buffer; only one candidate per slot may be loading.
   if (slot.back) safeRemove(slot.back);
   slot.back = layer;
+
+  // In 3D, a product GL fetches for itself does not need the Leaflet copy.
+  //
+  // Leaflet only requests tiles once its layer is on a map, and the gate below
+  // waits for all of them. So the old path downloaded every tile into a map
+  // nobody can see, waited for it, and only then handed GL a source — which
+  // downloaded the same tiles again. Radar took 2.4 s to appear in 2D and 6.5 s
+  // in 3D for that reason, and the EUMETSAT WMS was worse still, because its GL
+  // template is rewritten to a different projection so not one of those second
+  // requests could even be served from cache.
+  //
+  // Handing GL the source straight away skips both the duplicate download and
+  // the wait for it. `exitGlDirect` puts the 2D layers back when 3D is left.
+  if (is3D() && usesGlTileSource(def, layer)) {
+    const _tBuild = performance.now();
+    slot.frameKey = key;
+    slot.glDirect = true;
+    promote(slot, layer, resolved.timestamp, resolved.url);
+    mirrorTo3D(group, def, layer, resolved.url, slot.opacity);
+    runtime.phases = runtime.phases || {};
+    runtime.phases[group] = {
+      build: Math.round(_tBuild - _tResolve),
+      load: 0,
+      mirror: Math.round(performance.now() - _tBuild),
+    };
+    return;
+  }
 
   setLayerOpacity(layer, 0);
   layer.addTo(map);
@@ -384,6 +464,15 @@ async function renderSlot(group, timestamp, generation, activeLayers) {
 /* ------------------------------------------------------------------ *
  * Orchestration
  * ------------------------------------------------------------------ */
+
+/**
+ * Kinds whose frames are generated per request rather than served from a tile
+ * cache, so asking for one that will be thrown away has a real cost.
+ */
+const SLOW_TO_RENDER = new Set(['wms']);
+
+/** Groups holding their frame while the timeline moves, to be caught up after. */
+const deferred = new Set();
 
 let pending = null;
 let rendering = false;
@@ -460,6 +549,14 @@ export function applyOpacity(group) {
 
 /** Re-runs the pending render once the map settles. */
 export function flushPending() {
+  // Anything that sat out the drag or the playback wants rebuilding, and its
+  // frame key still says the old frame is current.
+  for (const group of deferred) {
+    const slot = slots.get(group);
+    if (slot) slot.frameKey = null;
+  }
+  deferred.clear();
+
   if (pending === null) return;
   const next = pending;
   pending = null;
@@ -467,3 +564,30 @@ export function flushPending() {
 }
 
 export const hasPending = () => pending !== null;
+
+/**
+ * Resolves once nothing is being rendered and nothing is queued.
+ *
+ * Playback uses this to pace itself. Without it the loop scheduled the next
+ * step on a bare timer, so at 4x it asked for a frame every 250 ms while frames
+ * were taking around 700 ms: `renderAll` dropped two out of three requests but
+ * the clock had already moved on, so tiles were fetched for frames that were
+ * immediately superseded — 455 tile requests to draw 16 frames. Waiting for the
+ * frame to land makes playback as fast as the data allows and no faster.
+ */
+export function whenRenderSettled(timeoutMs = 6000) {
+  if (!rendering && pending === null) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const started = Date.now();
+    const poll = setInterval(() => {
+      if (!rendering && pending === null) {
+        clearInterval(poll);
+        resolve(true);
+      } else if (Date.now() - started >= timeoutMs) {
+        // A stalled provider must not freeze playback.
+        clearInterval(poll);
+        resolve(false);
+      }
+    }, 30);
+  });
+}

@@ -25,8 +25,10 @@ function buildDrawingSection() {
 
   const drawButton = el('button', {
     class: 'btn btn--primary btn--block',
-    onClick: () => {
-      const on = draw.toggleDrawing();
+    onClick: async () => {
+      drawButton.classList.add('btn--busy');
+      const on = await draw.toggleDrawing();
+      drawButton.classList.remove('btn--busy');
       syncDrawButton(on);
       if (!on) toast('Drawing disabled');
       else if (is3D()) toast('Click to place corners, Enter to close, Esc to cancel');

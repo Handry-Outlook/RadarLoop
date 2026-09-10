@@ -22,6 +22,7 @@ import { refreshOverlayMirror } from './mirrorBridge.js';
 import * as published from '../hoco/published.js';
 import * as auto from '../hoco/auto.js';
 import * as draw from '../tools/draw.js';
+import * as synoptic from './synoptic.js';
 
 /** Sets a fill pane and its outline pane, keeping the outline just above. */
 function stackPanes(fillPane, outlinePane) {
@@ -35,6 +36,30 @@ function stackPanes(fillPane, outlinePane) {
 }
 
 export function registerOverlayLayers() {
+  // Station models sit above everything by default: they are read rather than
+  // looked at, and anything drawn over one is a number you cannot take. Like the
+  // rest they can be restacked from the layer list.
+  registerExternalLayer({
+    id: 'observations',
+    label: 'Surface observations',
+    group: 'Stations',
+    accent: 'var(--accent)',
+    defaultZ: 196,
+    isEnabled: () => synoptic.options.enabled,
+    setEnabled: (on) => synoptic.setVisible(on),
+    getOpacity: () => synoptic.options.opacity ?? 1,
+    setOpacity: (value) => {
+      synoptic.options.opacity = value;
+      const pane = map.getPane('synopticPane');
+      if (pane) pane.style.opacity = String(value);
+    },
+    applyZ: (z) => {
+      const pane = map.getPane('synopticPane');
+      if (pane) pane.style.zIndex = String(z);
+      refreshOverlayMirror();
+    },
+  });
+
   registerExternalLayer({
     id: 'outlookAuto',
     label: 'Automated outlook',

@@ -15,7 +15,8 @@ import { map, mapsglSurfaces } from '../core/map.js';
 import {
   clearMirror, mirrorCanvas, mirrorFrame, mirrorGeoJson, mirrorImage, mirrorReady, OVERLAY_PREFIX,
 } from '../core/mirror3d.js';
-import { devicePixelRatioStep as captureRatio, recolourTile } from './windy.js';
+import { devicePixelRatioStep, recolourTile } from './windy.js';
+import { time } from '../core/state.js';
 import { slots } from '../core/state.js';
 import { getLayerDef } from '../data/layers.js';
 
@@ -103,6 +104,22 @@ function textureLimit() {
   return maxTextureEdge;
 }
 
+
+/**
+ * How finely to sample the capture.
+ *
+ * Full device resolution when you are looking at a frame — that is the whole
+ * point of the mirror, and a 2x display gets a 3000x1804 composite. While
+ * playback is running it is halved, because at 4x that composite is uploaded as
+ * a texture several times a second and on a slower device the upload and the GL
+ * draw are competing with the tile workers for the same CPU. Nobody studies the
+ * detail of a frame that is on screen for 250 ms, and full resolution returns
+ * the moment playback stops.
+ */
+function captureRatio() {
+  const full = devicePixelRatioStep();
+  return time.playing ? Math.max(1, full / 2) : full;
+}
 
 /** One reusable canvas per group — a canvas source must keep the same element. */
 const captureCanvases = new Map();
@@ -225,8 +242,36 @@ export function isCanvasBacked(def, layer) {
   if (!def) return false;
   // MapsGL owns its render surface, so it is a still like the rest of these.
   if (def.kind === 'opera' || def.kind === 'mapsgl') return true;
-  return !!(layer?._tiles && layer.options?.className?.includes('windy-radar-tile'));
+  // Identified by the class it was constructed with, not by `_tiles`: Leaflet
+  // does not create that until the layer is added to a map, and this is now
+  // asked *before* the add, to decide whether the add is needed at all. Testing
+  // `_tiles` there quietly answered 'not canvas-backed' for the Windy composite,
+  // which would have handed GL the raw data tiles — the unrecoloured ones, where
+  // reflectivity is still sitting in the red and green channels.
+  const className = layer?.options?.className || '';
+  // Both decoded products: the radar composite, whose reflectivity is still in
+  // the red and green channels until a worker recolours it, and the satellite,
+  // whose source is two stacked channels with alternate blocks inverted. GL would
+  // draw either one raw.
+  return className.includes('windy-radar-tile') || className.includes('windy-sat-tile');
 }
+
+/**
+ * True when GL fetches this product itself, from its own tile source.
+ *
+ * These are the ones that do not need the Leaflet copy at all while 3D is
+ * showing: GL has the same tiles by URL. The canvas-backed products are one
+ * exception — GL has no URL for those, only the pixels Leaflet drew.
+ *
+ * WMS is included, which one measurement argued against: skipping the Leaflet
+ * copy appeared to take EUMETSAT from 2.0 s to 7.2 s, suggesting the 2D load was
+ * warming GeoServer for that timestamp. Repeating it three times each way showed
+ * the opposite — a median of 5.2 s with GL fetching directly against 6.0 s with
+ * the Leaflet preload — and that service is variable enough (0.3 s to 11 s for
+ * the same tile) that no single run means anything.
+ */
+export const usesGlTileSource = (def, layer) =>
+  ['raster', 'wms', 'pbf'].includes(def?.kind) && !isCanvasBacked(def, layer);
 
 /**
  * Mirrors one rendered frame into 3D.
@@ -315,6 +360,7 @@ const OVERLAY_PANES = [
   // orderable layer put them in the layer list but did nothing for 3D, where
   // they stayed invisible because this list is what reaches the GL view.
   ['drawings', ['drawPane']],
+  ['observations', ['synopticPane']],
 ];
 
 /** Every canvas element currently painted into a named Leaflet pane. */

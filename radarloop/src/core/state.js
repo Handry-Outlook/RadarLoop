@@ -8,6 +8,7 @@
  * written once and works for every group.
  */
 
+import { LAYER_ORDER } from '../data/layers.js';
 import { LAYER_Z, TUNING } from '../config.js';
 import { emit, EVENTS } from './bus.js';
 import { loadSetting, saveSetting } from './util.js';
@@ -25,6 +26,7 @@ export const LAYER_GROUPS = [
   'rotation',
   'lightning',
   'warning',
+  'roadWeather',
 ];
 
 /** Per-group human labels used by the UI and legend. */
@@ -40,6 +42,7 @@ export const LAYER_LABELS = {
   observation: 'Observations',
   nowcast: 'Nowcast & severe',
   warning: 'Warnings',
+  roadWeather: 'Road weather',
 };
 
 /**
@@ -63,6 +66,8 @@ function createSlot(group) {
     token: 0,
     lastTimestamp: null,
     lastUrl: null,
+    /** True while GL fetches this product itself and the Leaflet copy is skipped. */
+    glDirect: false,
     busy: false,
   };
 }
@@ -158,6 +163,8 @@ export const lightning = {
 export const runtime = {
   /** True between map movestart and a short settle after moveend. */
   interacting: false,
+  /** True while a pointer or finger is dragging the time scrubber. */
+  scrubbing: false,
   /** Bumped whenever a new render supersedes the previous one. */
   generation: 0,
   /** 'auto' | 'high' | 'low' */
@@ -226,13 +233,21 @@ export function serialiseSelection() {
   return out;
 }
 
+const offeredIn = (group) => (LAYER_ORDER[group] || []).filter((entry) => typeof entry === 'string');
+const isOffered = (group, type) => !!type && offeredIn(group).includes(type);
+const firstOffered = (group) => offeredIn(group)[0] ?? null;
+
 export function restoreSelection(data) {
   if (!data) return;
   for (const [group, entry] of Object.entries(data)) {
     const slot = slots.get(group);
     if (!slot || !entry) continue;
     slot.enabled = true;
-    slot.type = entry.type;
+    // A product retired since the session was saved is replaced by whatever the
+    // group offers first, rather than quietly rendering something no picker
+    // lists — which the panel could not correct until its card was built, and on
+    // a phone the cards start collapsed.
+    slot.type = isOffered(group, entry.type) ? entry.type : firstOffered(group) ?? entry.type;
     if (typeof entry.opacity === 'number') slot.opacity = entry.opacity;
   }
 }

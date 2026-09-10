@@ -14,6 +14,7 @@ import { emit, EVENTS } from '../core/bus.js';
 import { is3D } from '../core/map3d.js';
 import { start as start3D, stop as stop3D, isDrawing3D } from './draw3d.js';
 import { bringOverlayToFront } from '../layers/control.js';
+import { DEPS } from '../core/deps.js';
 
 let drawnItems = null;
 let drawControl = null;
@@ -50,7 +51,7 @@ export function ensureDrawnItems() {
   return drawnItems;
 }
 
-export function toggleDrawing(enabled = !drawing) {
+export async function toggleDrawing(enabled = !drawing) {
   const items = ensureDrawnItems();
 
   // In 3D the Leaflet map is behind the GL canvas, so leaflet-draw has nothing
@@ -75,6 +76,12 @@ export function toggleDrawing(enabled = !drawing) {
     return false;
   }
 
+  try {
+    await DEPS.draw();
+  } catch (error) {
+    console.warn('[draw] leaflet-draw failed to load:', error);
+    return false;
+  }
   if (typeof L.Control?.Draw !== 'function') {
     console.warn('[draw] leaflet-draw is unavailable');
     return false;
@@ -250,7 +257,9 @@ let importedKmlLayer = null;
  * Imports a KML overlay. Polygons whose name matches a risk category are
  * coloured accordingly; anything else falls back to a neutral outline.
  */
-export function importKML(file) {
+export async function importKML(file) {
+  // Only an import needs the KML parser.
+  await DEPS.togeojson().catch(() => {});
   return new Promise((resolve, reject) => {
     if (!file) return reject(new Error('No KML file selected'));
     if (typeof toGeoJSON?.kml !== 'function') return reject(new Error('togeojson is unavailable'));

@@ -55,6 +55,8 @@ export const EVENTS = {
   BASEMAP_CHANGED: 'basemap:changed',
   /** Drawing started or stopped, so the tools panel can follow along. */
   DRAW_MODE: 'draw:mode',
+  /** Surface observations were re-polled. */
+  OBSERVATIONS_UPDATED: 'observations:updated',
   LIGHTNING_DATA: 'lightning:data',
   LIGHTNING_FILTERED: 'lightning:filtered',
   /** A lightning option changed programmatically; controls should re-sync. */

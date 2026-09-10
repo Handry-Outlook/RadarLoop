@@ -81,7 +81,19 @@ export function cleanLabel(text) {
 export function scrubCatalog(catalog) {
   for (const defs of Object.values(catalog || {})) {
     for (const [key, def] of Object.entries(defs)) {
-      if (key === '__order' || !def || typeof def !== 'object') continue;
+      // The section headings inside `__order` are shown in the picker like any
+      // other label, and one of them named its provider outright.
+      if (key === '__order') {
+        if (Array.isArray(def)) {
+          for (const entry of def) {
+            if (entry && typeof entry === 'object' && typeof entry.header === 'string') {
+              entry.header = cleanLabel(entry.header) || entry.header;
+            }
+          }
+        }
+        continue;
+      }
+      if (!def || typeof def !== 'object') continue;
       if (typeof def.label === 'string') def.label = cleanLabel(def.label) || def.label;
       if ('attribution' in def) delete def.attribution;
     }

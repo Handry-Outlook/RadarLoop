@@ -24,6 +24,8 @@ import { buildToolsPanel } from './toolsPanel.js';
 import { buildLayerManagerPanel } from './layerManager.js';
 import { refreshTimelineAxis } from './timeline.js';
 import { icon } from './icons.js';
+import { DEPS } from '../core/deps.js';
+import * as synoptic from '../layers/synoptic.js';
 
 /* ------------------------------------------------------------------ *
  * Group declaration
@@ -36,7 +38,8 @@ export const PANEL_GROUPS = [
   { id: 'air', icon: 'pressure', label: 'Pressure & wind', hint: 'Isobars, fronts and wind', layers: ['isobar', 'surfaceFront', 'wind'] },
   { id: 'lightning', icon: 'lightning', label: 'Lightning', hint: 'UK strikes, density and nowcasts' },
   { id: 'severe', icon: 'severe', label: 'Severe & warnings', hint: 'Nowcasts, storms, rotation and alerts', layers: ['nowcast', 'warning', 'tropicalStorms', 'rotation', 'lightning'] },
-  { id: 'observations', icon: 'observations', label: 'Observations', hint: 'Surface, marine and accumulated fields', layers: ['observation'] },
+  { id: 'fields', icon: 'observations', label: 'Gridded fields', hint: 'Surface, marine, air quality and road conditions', layers: ['observation', 'roadWeather'] },
+  { id: 'observations', icon: 'station', label: 'Station observations', hint: 'Live station models: temperature, wind, sky and pressure' },
   { id: 'outlook', icon: 'outlook', label: 'Outlooks', hint: 'Manual and automated HOCO' },
   { id: 'tools', icon: 'tools', label: 'Tools', hint: 'Drawing, imports and export' },
   { id: 'settings', icon: 'settings', label: 'Settings', hint: 'Time, performance and appearance' },
@@ -78,8 +81,13 @@ function buildWeatherCard(group) {
   const options = optionsFor(group);
   if (!options.some((o) => o.value)) return null;
 
-  // Default to the first real product so enabling the toggle shows something.
-  if (!slot.type) slot.type = options.find((o) => o.value)?.value ?? null;
+  // Default to the first real product so enabling the toggle shows something —
+  // and do the same when the remembered one is no longer offered, which happens
+  // when a product is retired between sessions. A `select` cannot display a
+  // value that is not among its options: it would render blank and lose the
+  // selection at the first interaction.
+  const offered = options.filter((o) => o.value).map((o) => o.value);
+  if (!slot.type || !offered.includes(slot.type)) slot.type = offered[0] ?? null;
 
   const extras = [];
   if (group === 'radar') extras.push(buildRadarExtras());
@@ -258,7 +266,9 @@ function buildLightningPanel() {
     label: 'Heatmap',
     hint: 'Strike density surface',
     checked: lightning.heatmap,
-    onChange: (checked) => {
+    onChange: async (checked) => {
+      // The heat plugin is fetched the first time the surface is asked for.
+      if (checked) await DEPS.heat().catch(() => {});
       lightning.heatmap = checked;
       refreshLightning({ force: true });
     },
@@ -291,7 +301,9 @@ function buildLightningPanel() {
     label: 'Storm projections',
     hint: 'Projected cell motion and footprint',
     checked: lightning.nowcast,
-    onChange: (checked) => {
+    onChange: async (checked) => {
+      // Storm hulls are computed with turf, which is 590 KB.
+      if (checked) await DEPS.turf().catch(() => {});
       lightning.nowcast = checked;
       resetNowcastHistory();
       refreshLightning({ force: true });
@@ -319,6 +331,139 @@ function buildLightningPanel() {
     onChange: (checked) => setLightningOption('sound', checked),
   }).node);
 
+  return el('div', { class: 'stack' }, nodes);
+}
+
+/**
+ * Surface observations: station models from the Synoptic feed.
+ *
+ * The controls are deliberately few. A station plot is a fixed piece of
+ * notation — what it shows is not a preference — so the panel offers the
+ * choices that actually change what you can read: units, how densely the plots
+ * are packed, how stale an observation may be, and how often to re-poll.
+ */
+function buildObservationsPanel() {
+  const nodes = [sectionTitle('Surface observations')];
+
+  const status = el('div', { class: 'tiny dim' }, 'Not loaded.');
+
+  const paint = () => {
+    if (!synoptic.options.enabled) {
+      status.textContent = 'Switched off.';
+      return;
+    }
+    const at = synoptic.lastUpdated();
+    const when = at ? new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '—';
+    const plotted = synoptic.plottedCount();
+    const held = synoptic.stationCount();
+    status.textContent = `${plotted} of ${held} stations plotted · updated ${when}`
+      + (synoptic.isClamped() ? ' · zoom in for full coverage' : '');
+  };
+
+  on(EVENTS.OBSERVATIONS_UPDATED, paint);
+
+  nodes.push(switchRow({
+    label: 'Show station models',
+    hint: 'Temperature, dew point, wind, sky cover and pressure',
+    checked: synoptic.options.enabled,
+    onChange: (checked) => {
+      setLayerEnabled('observations', checked);
+      paint();
+    },
+  }).node);
+
+  nodes.push(status);
+
+  nodes.push(selectField({
+    label: 'Temperature',
+    options: [{ value: 'F', label: 'Fahrenheit' }, { value: 'C', label: 'Celsius' }],
+    value: synoptic.options.tempUnit,
+    // A unit change is a different request, not a different drawing.
+    onChange: (value) => {
+      synoptic.options.tempUnit = value;
+      synoptic.applyOptions({ refetch: true });
+    },
+  }).node);
+
+  nodes.push(selectField({
+    label: 'Wind speed',
+    options: [
+      { value: 'kts', label: 'Knots' },
+      { value: 'mph', label: 'Miles per hour' },
+      { value: 'ms', label: 'Metres per second' },
+    ],
+    value: synoptic.options.windUnit,
+    onChange: (value) => {
+      synoptic.options.windUnit = value;
+      synoptic.applyOptions({ refetch: true });
+    },
+  }).node);
+
+  nodes.push(numberField({
+    label: 'Plot spacing',
+    unit: 'px',
+    value: synoptic.options.spacing,
+    min: 28,
+    step: 4,
+    onChange: (value) => {
+      synoptic.options.spacing = Math.max(28, value);
+      synoptic.applyOptions();
+      paint();
+    },
+  }).node);
+
+  nodes.push(numberField({
+    label: 'Ignore reports older than',
+    unit: 'minutes',
+    value: synoptic.options.maxAgeMinutes,
+    min: 15,
+    step: 15,
+    onChange: (value) => {
+      synoptic.options.maxAgeMinutes = Math.max(15, value);
+      synoptic.applyOptions({ refetch: true });
+    },
+  }).node);
+
+  nodes.push(numberField({
+    label: 'Refresh every',
+    unit: 'minutes',
+    value: synoptic.options.refreshMinutes,
+    min: 1,
+    step: 1,
+    onChange: (value) => {
+      synoptic.options.refreshMinutes = Math.max(1, value);
+      synoptic.applyOptions();
+    },
+  }).node);
+
+  nodes.push(switchRow({
+    label: 'Pressure',
+    hint: 'Sea-level pressure, coded to three digits',
+    checked: synoptic.options.showPressure,
+    onChange: (checked) => {
+      synoptic.options.showPressure = checked;
+      synoptic.applyOptions();
+    },
+  }).node);
+
+  nodes.push(switchRow({
+    label: 'Station identifier',
+    checked: synoptic.options.showIdentifier,
+    onChange: (checked) => {
+      synoptic.options.showIdentifier = checked;
+      synoptic.applyOptions();
+    },
+  }).node);
+
+  nodes.push(el('button', {
+    class: 'btn btn--block',
+    onClick: () => {
+      synoptic.applyOptions({ refetch: true });
+      toast('Refreshing observations');
+    },
+  }, 'Refresh now'));
+
+  paint();
   return el('div', { class: 'stack' }, nodes);
 }
 
@@ -474,6 +619,7 @@ function buildGroupContent(id) {
     case 'basemap': return buildBasemapPanel();
     case 'lightning': return buildLightningPanel();
     case 'outlook': return buildOutlookPanel();
+    case 'observations': return buildObservationsPanel();
     case 'tools': return buildToolsPanel();
     case 'settings': return buildSettingsPanel();
     default: return buildLayerGroupPanel(group.layers || []);

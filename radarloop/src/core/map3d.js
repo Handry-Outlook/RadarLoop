@@ -20,6 +20,7 @@ import { BASEMAPS } from '../data/basemaps.js';
 import { bindGl, restoreReferenceMirror } from './mirror3d.js';
 import { isCanvasBacked, remirrorAll } from '../layers/mirrorBridge.js';
 import { getLayerDef } from '../data/layers.js';
+import { DEPS } from './deps.js';
 
 let gl = null;
 let container = null;
@@ -32,6 +33,26 @@ const STYLE_LIGHT = 'mapbox://styles/mapbox/light-v11';
 const STYLE_SATELLITE = 'mapbox://styles/mapbox/satellite-streets-v12';
 
 export const is3D = () => runtime.is3D;
+
+/**
+ * How much the mirrored composite is magnified on screen.
+ *
+ * The hidden 2D map is fitted to what the camera can see, and a pitched camera
+ * sees far more than a flat view holds at the same scale — so the composite is
+ * captured one to three zoom levels lower and GL stretches it back up. Anything
+ * drawn at a fixed pixel size is stretched with it: a station model came out
+ * twice its proper size at 45 degrees of pitch, four times at 60 and eight
+ * times at 70. A drawing that wants to keep its size divides by this.
+ */
+export function mirrorMagnification() {
+  if (!runtime.is3D || !gl) return 1;
+  try {
+    // Leaflet sits one zoom level ahead of GL for the same ground scale.
+    return 2 ** ((gl.getZoom() + 1) - map.getZoom());
+  } catch {
+    return 1;
+  }
+}
 export const getGl = () => gl;
 
 /* ------------------------------------------------------------------ *
@@ -398,10 +419,18 @@ function stopFollowing() {
  * Entering and leaving
  * ------------------------------------------------------------------ */
 
-export function enter3D(containerId = 'map-3d', { styleMode = 'default' } = {}) {
+export async function enter3D(containerId = 'map-3d', { styleMode = 'default' } = {}) {
   if (runtime.is3D) return gl;
   container = document.getElementById(containerId);
   if (!container) return null;
+
+  // Mapbox GL is 1.2 MB and reachable only through this button.
+  try {
+    await DEPS.mapbox();
+  } catch (error) {
+    console.warn('[3d] Mapbox GL failed to load:', error);
+    return null;
+  }
 
   document.getElementById('app')?.setAttribute('data-mode', '3d');
   runtime.is3D = true;
@@ -457,9 +486,9 @@ export function destroy3D() {
   bindGl(null, false);
 }
 
-export function toggle3D() {
+export async function toggle3D() {
   if (runtime.is3D) exit3D();
-  else enter3D();
+  else await enter3D();
   return runtime.is3D;
 }
 

@@ -20,6 +20,7 @@
 
 import { DEVICE } from '../config.js';
 import { getEncodedLut, dbzToMmh, getSignature, MIN_VISIBLE_MMH } from './radarScale.js';
+import { DEPS } from '../core/deps.js';
 
 export const OPERA_WIDTH = 3800;
 export const OPERA_HEIGHT = 4400;
@@ -256,6 +257,8 @@ export const OperaCanvasLayer = L.Layer.extend({
 
 /** Builds an OPERA layer for a resolved frame URL. */
 export async function createOperaLayer(url, def, { pane = 'operaRadarPane', opacity = 1 } = {}) {
+  // The reprojection library is only needed by this one product.
+  await DEPS.proj4();
   const buffer = await fetchOperaFrame(url, def);
   return new OperaCanvasLayer(buffer, {
     width: def.width || OPERA_WIDTH,

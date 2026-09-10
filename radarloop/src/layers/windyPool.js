@@ -1,5 +1,5 @@
 /**
- * Worker pool that turns Windy radar tiles into ready-to-draw bitmaps.
+ * Worker pool that turns provider data tiles into ready-to-draw bitmaps.
  *
  * Everything expensive about the product — fetching, decoding, cropping the
  * parent tile above native zoom, and recolouring every pixel through the
@@ -127,19 +127,28 @@ function syncLut() {
 }
 
 /**
- * Decodes and recolours one tile.
+ * Decodes one tile off the main thread.
+ *
+ * Two products share this pool. The default mode recolours the radar composite
+ * through the table above; `mode: 'visir'` decodes the satellite product, which
+ * needs no table but does need its channel and daylight blend.
  *
  * @param {object} job
  * @param {string[]} job.urls  candidate URLs, tried in order (live then archive)
  * @param {number} job.dw      destination width in device pixels
  * @param {number} job.dh      destination height in device pixels
- * @param {{fx:number,fy:number,scale:number}|null} job.crop
+ * @param {{ix:number,iy:number,scale:number}|null} job.crop
  *        which fraction of the parent tile to take, above native zoom
+ * @param {string} [job.mode]  'visir' for the satellite product
+ * @param {string} [job.channel]  'composite' | 'vis' | 'ir'
+ * @param {Float32Array|null} [job.weights]  coarse daylight grid for the blend
+ * @param {number} [job.grid]  that grid's resolution, in cells across
  * @returns {Promise<{bitmap: ImageBitmap, usedIndex: number}>}
  */
-export function decodeTile({ urls, dw, dh, crop = null }) {
+export function decodeTile(job) {
   if (!supported || !ensurePool()) return Promise.reject(new Error('no tile workers'));
-  syncLut();
+  // The satellite product carries no colour table, so it does not wait on one.
+  if (job.mode !== 'visir') syncLut();
 
   const id = nextId;
   nextId += 1;
@@ -153,7 +162,7 @@ export function decodeTile({ urls, dw, dh, crop = null }) {
     pending.set(id, { resolve, reject });
     poolStats.inFlight = pending.size;
     try {
-      worker.postMessage({ id, urls, dw, dh, crop, lutId });
+      worker.postMessage({ ...job, id, lutId });
     } catch (error) {
       pending.delete(id);
       poolStats.inFlight = pending.size;

@@ -12,6 +12,7 @@ import { emit, on, EVENTS } from './bus.js';
 import { runtime } from './state.js';
 import { BASEMAPS, REFERENCE_OVERLAY } from '../data/basemaps.js';
 import { setReferenceMirror } from './mirror3d.js';
+import { DEPS } from './deps.js';
 
 /**
  * The Leaflet map.
@@ -104,10 +105,12 @@ function createRenderers() {
  * Base maps
  * ------------------------------------------------------------------ */
 
-function buildBasemap(id) {
+async function buildBasemap(id) {
   const def = BASEMAPS[id];
   if (!def) return null;
   if (def.kind === 'maptiler') {
+    // 1.1 MB, and only four of the eighteen base maps use it.
+    await DEPS.maptiler().catch(() => {});
     if (!L.maptiler?.maptilerLayer) return null;
     const style = def.style.split('.').reduce((acc, part) => acc?.[part], L.maptiler.MapStyle);
     return L.maptiler.maptilerLayer({
@@ -119,11 +122,11 @@ function buildBasemap(id) {
   return L.tileLayer(def.url, { ...def.options, zIndex: 1 });
 }
 
-export function setBasemap(id) {
+export async function setBasemap(id) {
   if (!BASEMAPS[id] || id === activeBasemapId) return;
   let layer = basemapCache.get(id);
   if (!layer) {
-    layer = buildBasemap(id);
+    layer = await buildBasemap(id);
     if (!layer) {
       console.warn(`[map] base map "${id}" is unavailable`);
       return;
@@ -238,6 +241,12 @@ export function mapsglSurfaces() {
 export function ensureMapsGL() {
   clearTimeout(mapsglIdleTimer);
   if (mapsglController) return mapsglController;
+  // The SDK is 824 KB and only these products need it; callers reach the
+  // controller through whenMapsGLReady, which waits for both.
+  if (!globalThis.aerisweather?.mapsgl) {
+    DEPS.mapsgl().catch((error) => console.warn('[map] MapsGL SDK failed to load:', error));
+    return null;
+  }
 
   // The controller injects its own render surface; note what it adds so the
   // element can be detached later. `dispose()` releases the GL context but
@@ -272,10 +281,19 @@ export function ensureMapsGL() {
  * full-map canvas were never torn down either. That is what a MapsGL layer
  * "failing to turn off" actually was.
  */
-export function whenMapsGLReady({ timeoutMs = 10000 } = {}) {
+export async function whenMapsGLReady({ timeoutMs = 10000 } = {}) {
+  // The SDK is fetched on demand, so the first caller has to wait for the
+  // script itself before there is anything to construct a controller from.
+  try {
+    await DEPS.mapsgl();
+  } catch (error) {
+    console.warn('[map] MapsGL SDK unavailable:', error);
+    return null;
+  }
+
   const controller = ensureMapsGL();
-  if (!controller) return Promise.resolve(null);
-  if (controller.isReady) return Promise.resolve(controller);
+  if (!controller) return null;
+  if (controller.isReady) return controller;
 
   return new Promise((resolve) => {
     let settled = false;

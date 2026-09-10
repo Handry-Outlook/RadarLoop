@@ -8,6 +8,7 @@
  */
 
 import { FIREBASE_MAIN, FIREBASE_OUTLOOK, FIREBASE_OUTLOOK_APP_NAME } from '../config.js';
+import { DEPS } from '../core/deps.js';
 
 let mainApp = null;
 let outlookApp = null;
@@ -20,6 +21,16 @@ function existingApp(name) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Fetches the Firebase SDK.
+ *
+ * Three compat bundles come to 399 KB and are only needed by the outlook
+ * panels, so nothing is loaded until one of them is opened.
+ */
+export function loadFirebase() {
+  return DEPS.firebase();
 }
 
 export function getMainApp() {

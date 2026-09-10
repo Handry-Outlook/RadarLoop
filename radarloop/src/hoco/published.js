@@ -9,7 +9,7 @@
 import { emit, EVENTS } from '../core/bus.js';
 import { map, renderers, safeRemove } from '../core/map.js';
 import { dateKey, toDate } from '../core/util.js';
-import { outlookDb } from './firebase.js';
+import { outlookDb, loadFirebase } from './firebase.js';
 import { highestRank, outlookRank, parseOutlookGeojson, publishedRisk } from './risk.js';
 import { refreshOverlayMirror } from '../layers/mirrorBridge.js';
 
@@ -29,6 +29,8 @@ let outlineLayer = null;
  * ------------------------------------------------------------------ */
 
 export async function loadPublishedOutlooks() {
+  // The SDK is fetched on demand; this is the first thing that needs it.
+  await loadFirebase().catch(() => {});
   const db = outlookDb();
   if (!db) return { ok: false, reason: 'Firebase unavailable' };
 
