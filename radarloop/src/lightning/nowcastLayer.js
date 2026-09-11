@@ -34,7 +34,6 @@ import { refreshOverlayMirror } from '../layers/mirrorBridge.js';
  * colour that works on both.
  */
 const EDGE = '#22d3ee';
-const SEVERE_EDGE = '#f8fafc';
 
 /**
  * Hail. Amber, which nothing else on the map is using as a boundary — the strike
@@ -124,13 +123,16 @@ export function drawNowcast(filtered, reference) {
 
     const impact = cluster.impact;
     const strongAlert = impact.level >= 4;
-    // Hail gets its own colour, but only once it is being asserted rather than
-    // entertained. Colouring "possible" amber took the hue away from high impact
-    // altogether — on a day with several deep echoes, every outline was amber
-    // and the white one did not exist. "Possible" is in the popup, where a
-    // qualified statement belongs; the outline carries the claims.
+    // Two colours, and only two: a tracked storm, and one carrying hail. A third
+    // for high impact competed with the hail call for the same line — whichever
+    // won, the other went unsaid — and severity is already in the line weight,
+    // the popup and the impact label. Hail is the thing a colour is worth
+    // spending on, because it is the only one that changes what you do.
+    //
+    // Amber is for "likely" and above. "Possible" stays in the popup, where a
+    // qualified statement belongs.
     const hailing = (cluster.hail?.level ?? 0) >= 2;
-    const edge = hailing ? HAIL_EDGE : (strongAlert ? SEVERE_EDGE : EDGE);
+    const edge = hailing ? HAIL_EDGE : EDGE;
     const baseOpacity = Math.max(0.45, cluster.confidence * 0.8 + 0.2);
 
     /** A line with a dark halo under it, so it reads on any background. */

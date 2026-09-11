@@ -1405,8 +1405,8 @@ export function hailRisk({ flashesPerMinute = 0, peakDbz = null, largeHailArea =
   if (jump) risk = Math.min(1, risk + 0.1);
   risk = Math.min(1, risk);
 
-  if (risk >= 0.78) return { risk, level: 3, label: 'Large hail likely' };
-  if (risk >= 0.58) return { risk, level: 2, label: 'Hail likely' };
+  if (risk >= 0.80) return { risk, level: 3, label: 'Large hail likely' };
+  if (risk >= 0.63) return { risk, level: 2, label: 'Hail likely' };
   if (risk >= 0.38) return { risk, level: 1, label: 'Hail possible' };
   return { risk, level: 0, label: 'Hail unlikely' };
 }

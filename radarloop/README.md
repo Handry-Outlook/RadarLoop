@@ -1647,12 +1647,19 @@ over the Chilterns it reads a 67 dBZ core, and the cells that produced the hail
 come out "Large hail likely" at nineteen flashes a minute and "Hail likely" at
 six.
 
-**Amber is for a claim, not a maybe.** Any hail level at all used to colour the
-outline, which took the hue away from high impact entirely: on a day with several
-deep echoes every outline was amber and the white one did not exist. Amber is
-drawn at "likely" and above now. "Possible" stays in the popup, where a qualified
-statement belongs, and leaves the outline free to say what the impact scale says.
-The thresholds moved up with it, to 0.38, 0.58 and 0.78.
+**Two colours, and only two.** A tracked storm, and one carrying hail. There was
+a third for high impact, and it competed with the hail call for the same line —
+whichever won, the other went unsaid, and since any hail level at all claimed the
+colour, the high-impact one effectively never appeared. Severity is already
+carried by the line weight, the popup and the impact label; hail is the thing a
+colour is worth spending on, because it is the only one of the two that changes
+what somebody does.
+
+Amber is drawn at "likely" and above, so a qualified call does not take the
+colour of an asserted one — "possible" stays in the popup, where a qualified
+statement belongs. The thresholds are 0.38, 0.63 and 0.80, which on the
+27 August supercell day puts three of twelve cells in amber: the supercell and
+the two cells beside it that were producing hail.
 
 **Every cell has a direction, and somewhere to go.** Two ways a projection could
 come out blank, both of which look on the map like a storm going nowhere.
