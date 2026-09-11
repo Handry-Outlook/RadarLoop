@@ -110,7 +110,8 @@ function buildWeatherCard(group) {
   return card.node;
 }
 
-/** Radar-only extras: the shared colour scale editor. */
+/** Radar extras: the shared colour scale and its smoothing, for the two
+ * products that arrive as data rather than as a picture. */
 function buildRadarExtras() {
   const preview = el('div', { class: 'palette-preview' });
   const swatches = el('div', { class: 'palette-grid' });
@@ -143,11 +144,22 @@ function buildRadarExtras() {
     },
   });
 
+  const smooth = switchRow({
+    label: 'Smooth',
+    hint: '',
+    checked: scale.isSmoothing(),
+    onChange: (checked) => {
+      scale.setSmoothing(checked);
+      renderAll(time.current);
+    },
+  });
+
   paint();
 
-  return disclosure('Rainfall colour scale', [
+  const panel = disclosure('Rainfall colour scale', [
     el('p', { class: 'tiny dim' },
-      'Applies to the Global High Resolution composite and the European reflectivity grid. All presets share the same rainfall-rate intervals.'),
+      ''),
+    smooth.node,
     presets.node,
     preview,
     swatches,
@@ -161,6 +173,23 @@ function buildRadarExtras() {
       },
     }, 'Reset custom colours'),
   ]);
+
+  /**
+   * Shown only for the products it can act on.
+   *
+   * These controls colour the data themselves, which is only possible for the
+   * two products that arrive as data. For everything else in the radar list the
+   * provider has already drawn the picture, and offering a colour editor and a
+   * smoothing switch beside one of those is an offer the app cannot keep.
+   */
+  const sync = () => {
+    const slot = slots.get('radar');
+    panel.hidden = !scale.usesSharedScale(slot?.type);
+  };
+  sync();
+  on(EVENTS.LAYER_SELECTED, ({ group }) => { if (group === 'radar') sync(); });
+
+  return panel;
 }
 
 /* ------------------------------------------------------------------ *

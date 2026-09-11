@@ -23,6 +23,7 @@
 import { colourForMmh, encodedToMmh, getLevels, MIN_VISIBLE_MMH } from './radarScale.js';
 import { loadSetting, saveSetting } from '../core/util.js';
 import { available as workersAvailable, decodeTile } from './windyPool.js';
+import { isSmoothing } from './radarScale.js';
 
 export const MAX_NATIVE_ZOOM = 7;
 
@@ -188,7 +189,7 @@ const WindyRadarTileLayer = L.TileLayer.extend({
     if (isComposite && workersAvailable()) {
       // Live URLs are cache-busted; archive URLs are immutable and must not be.
       const urls = archiveFirst ? [archiveUrl] : [withCacheBuster(liveUrl, token), archiveUrl];
-      decodeTile({ urls, dw: tile.width, dh: tile.height, crop })
+      decodeTile({ urls, dw: tile.width, dh: tile.height, crop, smooth: isSmoothing() })
         .then(({ bitmap, usedIndex }) => {
           // Falling through to the archive means the live endpoint has aged out
           // for this frame; remember the boundary so later frames skip the miss.
@@ -213,12 +214,14 @@ const WindyRadarTileLayer = L.TileLayer.extend({
     function drawInline() {
       const ctx = tile.getContext('2d', { willReadFrequently: true, alpha: true });
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.imageSmoothingEnabled = false;
-      ctx.imageSmoothingQuality = 'low';
+      // Smoothing the data, not the picture — see windyTile.worker.js.
+      const smooth = isSmoothing();
+      ctx.imageSmoothingEnabled = smooth;
+      ctx.imageSmoothingQuality = smooth ? 'high' : 'low';
 
       const draw = (img) => {
         ctx.clearRect(0, 0, size.x, size.y);
-        ctx.imageSmoothingEnabled = false;
+        ctx.imageSmoothingEnabled = smooth;
 
         if (crop) {
           const sw = img.naturalWidth || img.width || size.x;

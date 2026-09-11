@@ -12,16 +12,16 @@ import { on, EVENTS } from '../core/bus.js';
 import { lightning, slots, LAYER_LABELS } from '../core/state.js';
 import { getLayerDef } from '../data/layers.js';
 import { MMH_INTERVALS } from '../data/palettes.js';
-import { legendStops } from '../layers/radarScale.js';
+import { legendStops, usesSharedScale } from '../layers/radarScale.js';
 import { colourForAge } from '../lightning/render.js';
 import { isPlotted as accumulationPlotted, legendStops as accumulationStops } from '../tools/accumulation.js';
 
 const AGE_BANDS = [
-  { label: 'Newest sixth', fraction: 0.08 },
-  { label: '2nd', fraction: 0.25 },
-  { label: '3rd', fraction: 0.42 },
-  { label: '4th', fraction: 0.58 },
-  { label: '5th', fraction: 0.75 },
+  { label: '', fraction: 0.08 },
+  { label: '', fraction: 0.25 },
+  { label: '', fraction: 0.42 },
+  { label: '', fraction: 0.58 },
+  { label: '', fraction: 0.75 },
   { label: 'Oldest', fraction: 0.92 },
 ];
 
@@ -59,17 +59,15 @@ function lightningGroup() {
   }
   return el('div', { class: 'legend-group' }, [
     el('div', { class: 'legend-group__title' }, 'Strike age'),
+    el('div', { class: 'legend-item' }, [
+      el('span', { class: 'legend-swatch', style: { background: '#38bdf8' } }),
+      el('span', { class: 'dim' }, 'Just arrived (Lightning Symbol)'),
+    ]),
     ...AGE_BANDS.map((band) => el('div', { class: 'legend-item' }, [
       el('span', { class: 'legend-swatch', style: { background: colourForAge(band.fraction) } }),
       el('span', { class: 'dim' }, band.label),
     ])),
-    // Shape says the same thing as colour for the band that matters most, so
-    // the newest strikes are findable without reading the colours off.
-    el('div', { class: 'legend-item' }, [
-      el('span', { class: 'legend-swatch', style: { background: '#38bdf8' } }),
-      el('span', { class: 'dim' }, 'Just arrived'),
-    ]),
-    el('p', { class: 'tiny dim' }, 'Arrivals are bolts, the rest squares.'),
+    
   ]);
 }
 
@@ -92,7 +90,7 @@ function nowcastGroup() {
     el('div', { class: 'legend-item' }, [swatch('#22d3ee'), el('span', { class: 'dim' }, 'Tracked storm')]),
     el('div', { class: 'legend-item' }, [swatch('#fbbf24'), el('span', { class: 'dim' }, 'Hail possible')]),
     el('div', { class: 'legend-item' }, [swatch('#ff33d6'), el('span', { class: 'dim' }, 'Large hail possible')]),
-    el('p', { class: 'tiny dim' }, 'Solid is where it is now, dashed where it is heading.'),
+    el('p', { class: 'tiny dim' }, ''),
   ]);
 }
 
@@ -129,9 +127,9 @@ function accumulationGroup() {
 }
 
 /** True when a recolourable radar product is active. */
-function usesSharedScale() {
+function showsSharedScale() {
   const radar = slots.get('radar');
-  return radar?.enabled && (radar.type === 'windy-radar' || radar.type === 'opera-dbzh');
+  return !!radar?.enabled && usesSharedScale(radar.type);
 }
 
 export function renderLegend() {
@@ -139,7 +137,7 @@ export function renderLegend() {
   if (!body) return;
 
   const groups = [
-    usesSharedScale() ? radarScaleGroup() : null,
+    showsSharedScale() ? radarScaleGroup() : null,
     accumulationGroup(),
     lightningGroup(),
     nowcastGroup(),

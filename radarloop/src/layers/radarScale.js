@@ -31,6 +31,41 @@ export const encodedToMmh = (encoded) => dbzToMmh(encodedToDbz(encoded));
  * Active scale
  * ------------------------------------------------------------------ */
 
+/**
+ * Which products are drawn through the shared rainfall scale.
+ *
+ * Only these two are data rather than pictures: their tiles carry reflectivity
+ * in the pixel channels and are coloured here, so the scale and the smoothing
+ * apply to them and to nothing else. Every other radar product arrives already
+ * coloured by its provider, and offering a colour editor for one of those is an
+ * offer the app cannot keep.
+ */
+export const SHARED_SCALE_TYPES = ['windy-radar', 'opera-dbzh'];
+export const usesSharedScale = (type) => SHARED_SCALE_TYPES.includes(type);
+
+/**
+ * Whether to interpolate the reflectivity field before colouring it.
+ *
+ * The tiles are data, so this smooths the *values* and lets the colour table
+ * re-quantise them — which is why it does not look blurred. Interpolating the
+ * finished picture would blend one class's colour into the next and turn a
+ * banded scale into a wash; interpolating what the bands are computed from moves
+ * the boundaries onto a smooth field and leaves them as sharp as they were.
+ */
+let smoothing = loadSetting('radarSmoothing', false) === true;
+
+export const isSmoothing = () => smoothing;
+
+export function setSmoothing(value) {
+  const next = value === true;
+  if (next === smoothing) return;
+  smoothing = next;
+  saveSetting('radarSmoothing', next);
+  // The signature keys every cached tile and the worker's colour table, so it
+  // has to change or nothing would redraw.
+  invalidate();
+}
+
 let activePreset = loadSetting('radarPalette', DEFAULT_PALETTE);
 if (!PALETTE_RAMPS[activePreset]) activePreset = DEFAULT_PALETTE;
 
@@ -41,7 +76,7 @@ let overrides = loadSetting('radarPaletteOverrides', {}) || {};
 let signature = '';
 
 function computeSignature(levels) {
-  return levels.map(([value, rgba]) => `${value}:${rgba.join(',')}`).join('|');
+  return `${smoothing ? 's' : 'n'}|${levels.map(([value, rgba]) => `${value}:${rgba.join(',')}`).join('|')}`;
 }
 
 let cachedLevels = null;

@@ -19,7 +19,9 @@
  */
 
 import { DEVICE } from '../config.js';
-import { getEncodedLut, dbzToMmh, getSignature, MIN_VISIBLE_MMH } from './radarScale.js';
+import {
+  getEncodedLut, dbzToMmh, getSignature, isSmoothing, MIN_VISIBLE_MMH,
+} from './radarScale.js';
 import { DEPS } from '../core/deps.js';
 
 export const OPERA_WIDTH = 3800;
@@ -205,7 +207,9 @@ export const OperaCanvasLayer = L.Layer.extend({
 
     const ctx = canvas.getContext('2d', { alpha: true });
     if (!ctx) return;
-    ctx.imageSmoothingEnabled = false;
+    // The same choice the radar composite makes: this canvas holds decoded
+    // values, so interpolating it interpolates reflectivity rather than colour.
+    ctx.imageSmoothingEnabled = isSmoothing();
 
     const lut = getEncodedLut({ opera: true });
     const view = viewKey(map, width, height);

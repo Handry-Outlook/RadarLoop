@@ -37,7 +37,7 @@ import { initLayerManager } from './ui/layerManager.js';
 import { registerOverlayLayers } from './layers/registerOverlays.js';
 import { trackDockedChrome } from './ui/layout.js';
 import { refreshOverlayMirror, remirrorAll, stats as mirrorStats } from './layers/mirrorBridge.js';
-import { poolStats } from './layers/windyPool.js';
+import { decodeTile, poolStats } from './layers/windyPool.js';
 import {
   bufferStrikes, decodeFeed, decodeStrike, feedStats, framesCovering, parseFrame,
 } from './layers/windyLightning.js';
@@ -51,7 +51,9 @@ import { buildStationCard } from './ui/stationPopup.js';
 import { ageStops, colourForAge, getStrikeLayer, mercatorX, mercatorY } from './lightning/render.js';
 import { prune as strikeStorePrune, summary as strikeStoreSummary } from './layers/strikeStore.js';
 import { MMH_INTERVALS } from './data/palettes.js';
-import { dbzToMmh, encodedToDbz, encodedToMmh } from './layers/radarScale.js';
+import {
+  dbzToMmh, encodedToDbz, encodedToMmh, getSignature, isSmoothing, setSmoothing, usesSharedScale,
+} from './layers/radarScale.js';
 import { bestShift, measureMotion } from './lightning/radarMotion.js';
 import {
   calculateNowcast, hailRisk, impactLevel, nowcastInternals, radarHints, remainingLifeMinutes,
@@ -595,6 +597,9 @@ window.__mirror3d = { tileScheme, usesFlippedY };
 window.__strikeRender = { mercatorX, mercatorY, colourForAge, ageStops };
 // Group-to-pane mapping, so the stacking checks can ask rather than guess.
 window.__paneFor = paneFor;
+// The tile worker pool, so the smoothing check can drive it directly.
+window.__windyPool = { decodeTile };
+// The rainfall scale's own settings, for the checks that drive them.
 // The projections as last drawn, so the hail checks can read what the map shows.
 window.__nowcastClusters = () => lastNowcastClusters();
 // The strike canvas, so the mark checks can ask what it last drew and how.
@@ -602,7 +607,10 @@ window.__strikeLayer = () => getStrikeLayer();
 // The rainfall ladder and its conversions, for checking what part of the scale
 // real reflectivity actually reaches.
 window.__palettes = { MMH_INTERVALS };
-window.__radarScale = { dbzToMmh, encodedToDbz, encodedToMmh };
+window.__radarScale = {
+  dbzToMmh, encodedToDbz, encodedToMmh, isSmoothing, setSmoothing, usesSharedScale,
+  signature: getSignature,
+};
 // The local frame store, so its checks can read what was kept.
 window.__strikeStore = { summary: strikeStoreSummary, prune: strikeStorePrune };
 // The nowcast's radar machinery, so its checks can drive the correlation

@@ -1809,6 +1809,32 @@ gives the expected remaining life.
 
 ## The rainfall scale
 
+**The scale belongs to the two products it can act on.** Only the global
+composite and the European reflectivity grid arrive as data: their tiles carry
+reflectivity in the pixel channels and are coloured here. Every other radar
+product in the list arrives already coloured by its provider, so a colour editor
+beside one of those is an offer the app cannot keep. The panel hides itself for
+them, and the legend's scale follows the same test — one definition, so the two
+cannot come to disagree.
+
+**Smooth interpolates the data, not the picture.** That is the whole reason it
+does not look blurred. Interpolating a finished radar image blends one class's
+colour into the next and turns a banded scale into a wash; interpolating the
+reflectivity it was computed from moves the class boundaries onto a smooth field
+and leaves them exactly as sharp as they were. Measured on one tile upscaled from
+its native zoom: the picture changes, and the number of distinct colours does not
+— six either way, all of them from the scale.
+
+It also needed the no-data test changing. The provider masks gaps with blue, and
+that was recognised by fixed thresholds — blue above 200 with almost no red or
+green. With interpolation on, the edge of a coverage gap is a blend of the mask
+and the data beside it, and a half-blended pixel passes a fixed threshold as real
+echo, fringing every coverage boundary with rain that is not there. Testing
+whether blue *dominates* handles the blend, and agrees with the old test on every
+pixel that occurs unsmoothed.
+
+
+
 The colours were not the problem, and that is why it was hard to name. The
 ladder they were mapped onto was.
 

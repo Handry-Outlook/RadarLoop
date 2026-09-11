@@ -38,8 +38,13 @@ function recolour(imageData, lut) {
     const r = data[i];
     const g = data[i + 1];
 
-    // A near-pure blue pixel is the provider's no-data mask, not weak echo.
-    if (data[i + 2] > 200 && r < 8 && g < 8) {
+    // A blue pixel is the provider's no-data mask, not weak echo. Tested by
+    // whether blue dominates rather than against fixed thresholds, because with
+    // smoothing on the edge of a coverage gap is a blend of the mask and the
+    // data beside it — and a half-blended mask pixel reads as a real echo under
+    // a fixed threshold, fringing every coverage boundary with rain that is not
+    // there. Unsmoothed the two tests agree on every pixel that occurs.
+    if (data[i + 2] > r + g && data[i + 2] > 24) {
       data[i + 3] = 0;
       continue;
     }
@@ -98,7 +103,6 @@ function surface(width, height) {
     canvas.width = width;
     canvas.height = height;
   }
-  ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, width, height);
   return ctx;
 }
@@ -239,6 +243,7 @@ function drawSatellite(bitmap, job) {
   context.putImageData(composed, 0, 0);
 
   const out = surface(job.dw, job.dh);
+  out.imageSmoothingEnabled = false;
   if (job.crop) {
     const sw = w / job.crop.scale;
     const sh = half / job.crop.scale;
@@ -287,6 +292,11 @@ self.onmessage = async (event) => {
 
     const { bitmap, usedIndex } = await fetchBitmap(urls);
     const context = surface(dw, dh);
+    // Smoothing the *data* is what makes this sharp rather than blurred: the
+    // channels carry reflectivity, so interpolating them interpolates the value,
+    // and the colour table then re-quantises it into the same hard bands.
+    context.imageSmoothingEnabled = job.smooth === true;
+    context.imageSmoothingQuality = 'high';
 
     if (crop) {
       const sw = bitmap.width / crop.scale;

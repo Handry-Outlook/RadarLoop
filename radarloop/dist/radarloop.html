@@ -2069,7 +2069,7 @@ input[type='number'] { color-scheme: inherit; }
   };
 
   // Worker sources, inlined for the single-file build.
-  const __workerSources = {"windyTile.worker.js":"/**\n * Windy radar tile worker.\n *\n * Windy's radar2 tiles are data, not pictures: R and G encode reflectivity and a\n * pure blue pixel is the no-data mask. Turning one into something drawable means\n * touching every pixel, and a viewport holds around forty tiles.\n *\n * Doing that on the main thread is what made scrubbing heavy — at a 2x device\n * pixel ratio a single frame is ten million pixels of JavaScript, competing with\n * Leaflet in 2D and with GL rendering in 3D. Fetch, decode, crop and recolour all\n * happen here instead, and the main thread receives a finished ImageBitmap it can\n * blit in one call.\n *\n * The colour scale arrives as a lookup table so no palette logic is duplicated:\n * the table is indexed by `r + g` directly, which is exact rather than a rounding\n * of the `(r + g) / 2` encoded value.\n *\n * In the bundled single-file build this source is inlined and started from a Blob\n * URL; in the modular build it is loaded as a normal module worker.\n */\n\n/* eslint-env worker */\n\n/** Colour tables held by id so a table is transferred once, not once per tile. */\nconst luts = new Map();\n\n/**\n * Recolours decoded tile pixels in place through the active scale.\n *\n * @param {ImageData} imageData\n * @param {Uint8ClampedArray} lut 511 RGBA entries indexed by `r + g`\n */\nfunction recolour(imageData, lut) {\n  const data = imageData.data;\n  for (let i = 0; i < data.length; i += 4) {\n    if (data[i + 3] < 2) continue;\n\n    const r = data[i];\n    const g = data[i + 1];\n\n    // A near-pure blue pixel is the provider's no-data mask, not weak echo.\n    if (data[i + 2] > 200 && r < 8 && g < 8) {\n      data[i + 3] = 0;\n      continue;\n    }\n\n    // `encoded` is (r + g) / 2, so `r + g` indexes the table without rounding.\n    const sum = r + g;\n    const o = sum << 2;\n    const alpha = sum > 1 ? lut[o + 3] : 0;\n    if (!alpha) {\n      data[i + 3] = 0;\n      continue;\n    }\n\n    data[i] = lut[o];\n    data[i + 1] = lut[o + 1];\n    data[i + 2] = lut[o + 2];\n    data[i + 3] = alpha;\n  }\n  return imageData;\n}\n\n/**\n * Tries each URL in order and returns the first that decodes.\n *\n * The order matters: frames older than about two hours are only served from the\n * archive endpoint, and the caller reports back which one worked so the cutoff\n * can be learned.\n */\nasync function fetchBitmap(urls, signal) {\n  let lastError = null;\n  for (let i = 0; i < urls.length; i += 1) {\n    try {\n      const response = await fetch(urls[i], { mode: 'cors', credentials: 'omit', signal });\n      if (!response.ok) {\n        lastError = new Error(`HTTP ${response.status}`);\n        continue;\n      }\n      const blob = await response.blob();\n      return { bitmap: await createImageBitmap(blob), usedIndex: i };\n    } catch (error) {\n      lastError = error;\n    }\n  }\n  throw lastError || new Error('no tile URL succeeded');\n}\n\n/** One reusable canvas per worker — tiles in a frame share a size. */\nlet canvas = null;\nlet ctx = null;\n\nfunction surface(width, height) {\n  if (!canvas) {\n    canvas = new OffscreenCanvas(width, height);\n    ctx = canvas.getContext('2d', { willReadFrequently: true, alpha: true });\n  } else if (canvas.width !== width || canvas.height !== height) {\n    canvas.width = width;\n    canvas.height = height;\n  }\n  ctx.imageSmoothingEnabled = false;\n  ctx.clearRect(0, 0, width, height);\n  return ctx;\n}\n\n/**\n * A second reusable canvas, holding a tile at its own source size.\n *\n * The satellite product needs one: its source is 256x512 and its output is\n * 256x256, and the decode has to happen at source resolution before anything is\n * scaled — the checkerboard inversion is defined on the source pixel grid, so\n * resampling first would smear block edges into each other.\n */\nlet scratch = null;\nlet sctx = null;\n\nfunction scratchSurface(width, height) {\n  if (!scratch) {\n    scratch = new OffscreenCanvas(width, height);\n    sctx = scratch.getContext('2d', { willReadFrequently: true, alpha: true });\n  } else if (scratch.width !== width || scratch.height !== height) {\n    scratch.width = width;\n    scratch.height = height;\n  }\n  sctx.imageSmoothingEnabled = false;\n  sctx.clearRect(0, 0, width, height);\n  return sctx;\n}\n\n/* ------------------------------------------------------------------ *\n * Satellite: visible + infrared\n * ------------------------------------------------------------------ */\n\n/**\n * Side of the satellite product's inverted-block checkerboard, in source pixels.\n * Kept in step with layers/windySat.js, which documents how it was found; a\n * worker cannot import, so the constants live in both places.\n */\nconst SAT_BLOCK = 16;\nconst SAT_ALPHA_LO = 40;\nconst SAT_ALPHA_HI = 120;\n\n/**\n * Undoes the checkerboard inversion the provider applies to alternate blocks.\n *\n * The two halves do not share a parity: the visible channel carries `255 - v` in\n * the blocks where the infrared channel carries `v`. Both candidate decodes are\n * exact negatives of one another, so nothing in the pixels distinguishes them —\n * the seams are equally smooth either way. What settles it is the ground: over\n * the Atlantic coast of the western Sahara the desert is the brightest thing a\n * visible channel sees and the open ocean nearly the darkest, while in the\n * infrared the baking sand is darkest and the cold cloud tops brightest. Only\n * one assignment puts both the right way up, and it is this one.\n */\nfunction deinvertBlocks(imageData) {\n  const { data, width, height } = imageData;\n  const half = height / 2;\n  for (let y = 0; y < height; y += 1) {\n    // The channel index enters the parity, which is what makes the halves differ.\n    const rowParity = (((y / SAT_BLOCK) | 0) + (y >= half ? 1 : 0)) % 2;\n    for (let x = 0; x < width; x += 1) {\n      if ((((x / SAT_BLOCK) | 0) + rowParity) % 2 !== 0) continue;\n      const i = (y * width + x) * 4;\n      data[i] = 255 - data[i];\n      data[i + 1] = 255 - data[i + 1];\n      data[i + 2] = 255 - data[i + 2];\n    }\n  }\n  return imageData;\n}\n\n/**\n * Collapses the source's two stacked channels into one drawable half-height tile.\n *\n * `weights` is the caller's coarse daylight grid, `grid` cells across, sampled\n * bilinearly: one where the visible channel is trustworthy, zero where the sun is\n * down. It is null when the tile needs no blend at all.\n */\nfunction composeChannels(source, out, channel, weights, grid) {\n  const w = source.width;\n  const half = source.height / 2;\n  const src = source.data;\n  const dst = out.data;\n  const span = SAT_ALPHA_HI - SAT_ALPHA_LO;\n\n  for (let y = 0; y < half; y += 1) {\n    const gy = weights ? (y / half) * grid : 0;\n    const y0 = weights ? Math.min(grid - 1, gy | 0) : 0;\n    const fy = gy - y0;\n\n    for (let x = 0; x < w; x += 1) {\n      const vis = src[(y * w + x) * 4];\n      const ir = src[((y + half) * w + x) * 4];\n\n      let v;\n      if (channel === 'ir') {\n        v = ir;\n      } else if (channel === 'vis') {\n        v = vis;\n      } else if (vis <= 1) {\n        // The visible channel's empty value, which covers the unlit hemisphere\n        // and everything else the sun is not reaching.\n        v = ir;\n      } else if (!weights) {\n        v = vis;\n      } else {\n        const gx = (x / w) * grid;\n        const x0 = Math.min(grid - 1, gx | 0);\n        const fx = gx - x0;\n        const r0 = y0 * (grid + 1) + x0;\n        const r1 = r0 + grid + 1;\n        const day = (weights[r0] * (1 - fx) + weights[r0 + 1] * fx) * (1 - fy)\n          + (weights[r1] * (1 - fx) + weights[r1 + 1] * fx) * fy;\n        v = ir + (vis - ir) * day;\n      }\n\n      const o = (y * w + x) * 4;\n      dst[o] = v;\n      dst[o + 1] = v;\n      dst[o + 2] = v;\n      dst[o + 3] = v <= SAT_ALPHA_LO ? 0 : (v >= SAT_ALPHA_HI ? 255 : ((v - SAT_ALPHA_LO) / span) * 255);\n    }\n  }\n  return out;\n}\n\n/** Decodes one satellite tile and draws it into the destination surface. */\nfunction drawSatellite(bitmap, job) {\n  const w = bitmap.width;\n  const h = bitmap.height;\n  const half = h / 2;\n\n  const context = scratchSurface(w, h);\n  context.drawImage(bitmap, 0, 0);\n  const source = deinvertBlocks(context.getImageData(0, 0, w, h));\n  const composed = composeChannels(source, new ImageData(w, half), job.channel, job.weights, job.grid);\n  // Written back into the same scratch canvas so the scale-and-crop below is a\n  // single drawImage rather than another allocation.\n  context.putImageData(composed, 0, 0);\n\n  const out = surface(job.dw, job.dh);\n  if (job.crop) {\n    const sw = w / job.crop.scale;\n    const sh = half / job.crop.scale;\n    out.drawImage(scratch,\n      Math.round(job.crop.ix * sw), Math.round(job.crop.iy * sh),\n      Math.max(1, Math.round(sw)), Math.max(1, Math.round(sh)),\n      0, 0, job.dw, job.dh);\n  } else {\n    out.drawImage(scratch, 0, 0, w, half, 0, 0, job.dw, job.dh);\n  }\n}\n\n/* ------------------------------------------------------------------ *\n * Dispatch\n * ------------------------------------------------------------------ */\n\nself.onmessage = async (event) => {\n  const job = event.data;\n\n  if (job.type === 'lut') {\n    luts.set(job.lutId, job.lut);\n    // Only the newest table is ever asked for; the rest are dead weight.\n    if (luts.size > 3) luts.delete(luts.keys().next().value);\n    return;\n  }\n\n  const { id, urls, dw, dh, crop, lutId } = job;\n\n  try {\n    if (job.mode === 'visir') {\n      const { bitmap, usedIndex } = await fetchBitmap(urls);\n      drawSatellite(bitmap, job);\n      bitmap.close();\n      const image = canvas.transferToImageBitmap();\n      // Which URL answered matters: falling through to the second one is how the\n      // caller learns where the live endpoint stops.\n      self.postMessage({ id, ok: true, bitmap: image, usedIndex }, [image]);\n      return;\n    }\n\n    const lut = luts.get(lutId);\n    if (!lut) {\n      self.postMessage({ id, ok: false, error: 'colour table not registered' });\n      return;\n    }\n\n    const { bitmap, usedIndex } = await fetchBitmap(urls);\n    const context = surface(dw, dh);\n\n    if (crop) {\n      const sw = bitmap.width / crop.scale;\n      const sh = bitmap.height / crop.scale;\n      context.drawImage(\n        bitmap,\n        Math.round(crop.ix * sw), Math.round(crop.iy * sh),\n        Math.max(1, Math.round(sw)), Math.max(1, Math.round(sh)),\n        0, 0, dw, dh,\n      );\n    } else {\n      context.drawImage(bitmap, 0, 0, dw, dh);\n    }\n    bitmap.close();\n\n    const pixels = context.getImageData(0, 0, dw, dh);\n    context.putImageData(recolour(pixels, lut), 0, 0);\n\n    const out = canvas.transferToImageBitmap();\n    self.postMessage({ id, ok: true, bitmap: out, usedIndex }, [out]);\n  } catch (error) {\n    self.postMessage({ id, ok: false, error: String(error && error.message ? error.message : error) });\n  }\n};\n","accumulation.worker.js":"/**\n * Rainfall accumulation worker.\n *\n * Decodes Windy radar tiles for a series of frames and integrates rainfall rate\n * over time into a per-output-pixel total, then colours the result.\n *\n * This runs off the main thread because a one-hour accumulation over a wide view\n * decodes dozens of tiles and touches millions of pixels — doing it inline froze\n * the map for seconds at a time.\n *\n * In the bundled single-file build this source is inlined and started from a Blob\n * URL; in the modular build it is loaded as a normal worker script.\n */\n\n/* eslint-env worker */\n\nlet currentJob = 0;\n\n/** Reverses the tile encoding: channel value -> rainfall rate in mm/h. */\nfunction buildRateLut(dbzPerUnit, nerf) {\n  const lut = new Float32Array(256);\n  for (let encoded = 0; encoded < 256; encoded += 1) {\n    const dbz = Math.max(0, encoded * dbzPerUnit);\n    lut[encoded] = dbz > 0 ? (10 ** (dbz / 10) * 0.005) ** 0.625 * nerf : 0;\n  }\n  return lut;\n}\n\nfunction colourForMm(mm, stops) {\n  for (const [limit, rgba] of stops) if (mm < limit) return rgba;\n  return stops[stops.length - 1][1];\n}\n\n/** Decodes one tile into a rate grid plus a validity mask. */\nasync function decodeTile(url, lut) {\n  const response = await fetch(url, { mode: 'cors', cache: 'force-cache' });\n  if (!response.ok) throw new Error(`tile HTTP ${response.status}`);\n  const bitmap = await createImageBitmap(await response.blob());\n\n  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);\n  const ctx = canvas.getContext('2d', { willReadFrequently: true });\n  ctx.drawImage(bitmap, 0, 0);\n  bitmap.close();\n\n  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);\n  const count = canvas.width * canvas.height;\n  const mmh = new Float32Array(count);\n  const valid = new Uint8Array(count);\n\n  for (let i = 0, p = 0; i < count; i += 1, p += 4) {\n    if (data[p + 3] < 2) continue;\n    const r = data[p];\n    const g = data[p + 1];\n    const b = data[p + 2];\n    // Near-pure blue is the provider's no-data mask, not weak echo.\n    if (b > 200 && r < 8 && g < 8) continue;\n    const encoded = (r + g) / 2;\n    if (encoded <= 0.5) continue;\n    mmh[i] = lut[Math.min(255, Math.round(encoded))];\n    valid[i] = 1;\n  }\n  return { width: canvas.width, height: canvas.height, mmh, valid };\n}\n\n/** Runs `jobs` with bounded concurrency. */\nasync function pool(items, limit, worker) {\n  let cursor = 0;\n  let any = false;\n  const runners = Array.from({ length: Math.max(1, limit) }, async () => {\n    while (cursor < items.length) {\n      const item = items[cursor++];\n      if (await worker(item)) any = true;\n    }\n  });\n  await Promise.all(runners);\n  return any;\n}\n\nself.onmessage = async (event) => {\n  const message = event.data || {};\n  if (message.type !== 'calculate') return;\n\n  const { jobId, width, height, frames, groups, colourStops, constants, concurrency = 4 } = message;\n  currentJob = jobId;\n\n  try {\n    const lut = buildRateLut(constants.dbzPerEncodedUnit, constants.mmhNerf);\n    const totals = new Float32Array(width * height);\n    const tileCache = new Map();\n    let validFrames = 0;\n    let missingFrames = 0;\n\n    for (let fi = 0; fi < frames.length; fi += 1) {\n      if (jobId !== currentJob) return;\n      const frame = frames[fi];\n\n      const hadData = await pool(groups, concurrency, async (group) => {\n        if (jobId !== currentJob) return false;\n        const url = frame.urls[group.key];\n        if (!url) return false;\n        try {\n          let source = tileCache.get(url);\n          if (!source) {\n            source = await decodeTile(url, lut);\n            // Bounded so a long accumulation cannot exhaust worker memory.\n            if (tileCache.size > 64) tileCache.delete(tileCache.keys().next().value);\n            tileCache.set(url, source);\n          }\n          const { idx, px, py } = group;\n          for (let i = 0; i < idx.length; i += 1) {\n            const sx = Math.max(0, Math.min(source.width - 1, Math.floor((px[i] * source.width) / 256)));\n            const sy = Math.max(0, Math.min(source.height - 1, Math.floor((py[i] * source.height) / 256)));\n            const off = sy * source.width + sx;\n            if (source.valid[off]) totals[idx[i]] += source.mmh[off] * frame.durationHours;\n          }\n          return true;\n        } catch {\n          return false;\n        }\n      });\n\n      if (hadData) validFrames += 1;\n      else missingFrames += 1;\n\n      if (fi === 0 || fi === frames.length - 1 || fi % 2 === 0) {\n        self.postMessage({\n          type: 'progress',\n          jobId,\n          percent: Math.floor(((fi + 1) / frames.length) * 96),\n          text: `Accumulating frame ${fi + 1} of ${frames.length}`,\n        });\n      }\n    }\n\n    if (jobId !== currentJob) return;\n    self.postMessage({ type: 'progress', jobId, percent: 97, text: 'Colouring accumulated rainfall' });\n\n    const rgba = new Uint8ClampedArray(width * height * 4);\n    for (let i = 0; i < totals.length; i += 1) {\n      const colour = colourForMm(totals[i], colourStops);\n      const o = i * 4;\n      rgba[o] = colour[0];\n      rgba[o + 1] = colour[1];\n      rgba[o + 2] = colour[2];\n      rgba[o + 3] = colour[3];\n    }\n\n    self.postMessage(\n      { type: 'done', jobId, width, height, totalsBuffer: totals.buffer, rgbaBuffer: rgba.buffer, validFrames, missingFrames },\n      [totals.buffer, rgba.buffer],\n    );\n  } catch (error) {\n    self.postMessage({ type: 'error', jobId, message: error?.message || 'Accumulation failed' });\n  }\n};\n"};
+  const __workerSources = {"windyTile.worker.js":"/**\n * Windy radar tile worker.\n *\n * Windy's radar2 tiles are data, not pictures: R and G encode reflectivity and a\n * pure blue pixel is the no-data mask. Turning one into something drawable means\n * touching every pixel, and a viewport holds around forty tiles.\n *\n * Doing that on the main thread is what made scrubbing heavy — at a 2x device\n * pixel ratio a single frame is ten million pixels of JavaScript, competing with\n * Leaflet in 2D and with GL rendering in 3D. Fetch, decode, crop and recolour all\n * happen here instead, and the main thread receives a finished ImageBitmap it can\n * blit in one call.\n *\n * The colour scale arrives as a lookup table so no palette logic is duplicated:\n * the table is indexed by `r + g` directly, which is exact rather than a rounding\n * of the `(r + g) / 2` encoded value.\n *\n * In the bundled single-file build this source is inlined and started from a Blob\n * URL; in the modular build it is loaded as a normal module worker.\n */\n\n/* eslint-env worker */\n\n/** Colour tables held by id so a table is transferred once, not once per tile. */\nconst luts = new Map();\n\n/**\n * Recolours decoded tile pixels in place through the active scale.\n *\n * @param {ImageData} imageData\n * @param {Uint8ClampedArray} lut 511 RGBA entries indexed by `r + g`\n */\nfunction recolour(imageData, lut) {\n  const data = imageData.data;\n  for (let i = 0; i < data.length; i += 4) {\n    if (data[i + 3] < 2) continue;\n\n    const r = data[i];\n    const g = data[i + 1];\n\n    // A blue pixel is the provider's no-data mask, not weak echo. Tested by\n    // whether blue dominates rather than against fixed thresholds, because with\n    // smoothing on the edge of a coverage gap is a blend of the mask and the\n    // data beside it — and a half-blended mask pixel reads as a real echo under\n    // a fixed threshold, fringing every coverage boundary with rain that is not\n    // there. Unsmoothed the two tests agree on every pixel that occurs.\n    if (data[i + 2] > r + g && data[i + 2] > 24) {\n      data[i + 3] = 0;\n      continue;\n    }\n\n    // `encoded` is (r + g) / 2, so `r + g` indexes the table without rounding.\n    const sum = r + g;\n    const o = sum << 2;\n    const alpha = sum > 1 ? lut[o + 3] : 0;\n    if (!alpha) {\n      data[i + 3] = 0;\n      continue;\n    }\n\n    data[i] = lut[o];\n    data[i + 1] = lut[o + 1];\n    data[i + 2] = lut[o + 2];\n    data[i + 3] = alpha;\n  }\n  return imageData;\n}\n\n/**\n * Tries each URL in order and returns the first that decodes.\n *\n * The order matters: frames older than about two hours are only served from the\n * archive endpoint, and the caller reports back which one worked so the cutoff\n * can be learned.\n */\nasync function fetchBitmap(urls, signal) {\n  let lastError = null;\n  for (let i = 0; i < urls.length; i += 1) {\n    try {\n      const response = await fetch(urls[i], { mode: 'cors', credentials: 'omit', signal });\n      if (!response.ok) {\n        lastError = new Error(`HTTP ${response.status}`);\n        continue;\n      }\n      const blob = await response.blob();\n      return { bitmap: await createImageBitmap(blob), usedIndex: i };\n    } catch (error) {\n      lastError = error;\n    }\n  }\n  throw lastError || new Error('no tile URL succeeded');\n}\n\n/** One reusable canvas per worker — tiles in a frame share a size. */\nlet canvas = null;\nlet ctx = null;\n\nfunction surface(width, height) {\n  if (!canvas) {\n    canvas = new OffscreenCanvas(width, height);\n    ctx = canvas.getContext('2d', { willReadFrequently: true, alpha: true });\n  } else if (canvas.width !== width || canvas.height !== height) {\n    canvas.width = width;\n    canvas.height = height;\n  }\n  ctx.clearRect(0, 0, width, height);\n  return ctx;\n}\n\n/**\n * A second reusable canvas, holding a tile at its own source size.\n *\n * The satellite product needs one: its source is 256x512 and its output is\n * 256x256, and the decode has to happen at source resolution before anything is\n * scaled — the checkerboard inversion is defined on the source pixel grid, so\n * resampling first would smear block edges into each other.\n */\nlet scratch = null;\nlet sctx = null;\n\nfunction scratchSurface(width, height) {\n  if (!scratch) {\n    scratch = new OffscreenCanvas(width, height);\n    sctx = scratch.getContext('2d', { willReadFrequently: true, alpha: true });\n  } else if (scratch.width !== width || scratch.height !== height) {\n    scratch.width = width;\n    scratch.height = height;\n  }\n  sctx.imageSmoothingEnabled = false;\n  sctx.clearRect(0, 0, width, height);\n  return sctx;\n}\n\n/* ------------------------------------------------------------------ *\n * Satellite: visible + infrared\n * ------------------------------------------------------------------ */\n\n/**\n * Side of the satellite product's inverted-block checkerboard, in source pixels.\n * Kept in step with layers/windySat.js, which documents how it was found; a\n * worker cannot import, so the constants live in both places.\n */\nconst SAT_BLOCK = 16;\nconst SAT_ALPHA_LO = 40;\nconst SAT_ALPHA_HI = 120;\n\n/**\n * Undoes the checkerboard inversion the provider applies to alternate blocks.\n *\n * The two halves do not share a parity: the visible channel carries `255 - v` in\n * the blocks where the infrared channel carries `v`. Both candidate decodes are\n * exact negatives of one another, so nothing in the pixels distinguishes them —\n * the seams are equally smooth either way. What settles it is the ground: over\n * the Atlantic coast of the western Sahara the desert is the brightest thing a\n * visible channel sees and the open ocean nearly the darkest, while in the\n * infrared the baking sand is darkest and the cold cloud tops brightest. Only\n * one assignment puts both the right way up, and it is this one.\n */\nfunction deinvertBlocks(imageData) {\n  const { data, width, height } = imageData;\n  const half = height / 2;\n  for (let y = 0; y < height; y += 1) {\n    // The channel index enters the parity, which is what makes the halves differ.\n    const rowParity = (((y / SAT_BLOCK) | 0) + (y >= half ? 1 : 0)) % 2;\n    for (let x = 0; x < width; x += 1) {\n      if ((((x / SAT_BLOCK) | 0) + rowParity) % 2 !== 0) continue;\n      const i = (y * width + x) * 4;\n      data[i] = 255 - data[i];\n      data[i + 1] = 255 - data[i + 1];\n      data[i + 2] = 255 - data[i + 2];\n    }\n  }\n  return imageData;\n}\n\n/**\n * Collapses the source's two stacked channels into one drawable half-height tile.\n *\n * `weights` is the caller's coarse daylight grid, `grid` cells across, sampled\n * bilinearly: one where the visible channel is trustworthy, zero where the sun is\n * down. It is null when the tile needs no blend at all.\n */\nfunction composeChannels(source, out, channel, weights, grid) {\n  const w = source.width;\n  const half = source.height / 2;\n  const src = source.data;\n  const dst = out.data;\n  const span = SAT_ALPHA_HI - SAT_ALPHA_LO;\n\n  for (let y = 0; y < half; y += 1) {\n    const gy = weights ? (y / half) * grid : 0;\n    const y0 = weights ? Math.min(grid - 1, gy | 0) : 0;\n    const fy = gy - y0;\n\n    for (let x = 0; x < w; x += 1) {\n      const vis = src[(y * w + x) * 4];\n      const ir = src[((y + half) * w + x) * 4];\n\n      let v;\n      if (channel === 'ir') {\n        v = ir;\n      } else if (channel === 'vis') {\n        v = vis;\n      } else if (vis <= 1) {\n        // The visible channel's empty value, which covers the unlit hemisphere\n        // and everything else the sun is not reaching.\n        v = ir;\n      } else if (!weights) {\n        v = vis;\n      } else {\n        const gx = (x / w) * grid;\n        const x0 = Math.min(grid - 1, gx | 0);\n        const fx = gx - x0;\n        const r0 = y0 * (grid + 1) + x0;\n        const r1 = r0 + grid + 1;\n        const day = (weights[r0] * (1 - fx) + weights[r0 + 1] * fx) * (1 - fy)\n          + (weights[r1] * (1 - fx) + weights[r1 + 1] * fx) * fy;\n        v = ir + (vis - ir) * day;\n      }\n\n      const o = (y * w + x) * 4;\n      dst[o] = v;\n      dst[o + 1] = v;\n      dst[o + 2] = v;\n      dst[o + 3] = v <= SAT_ALPHA_LO ? 0 : (v >= SAT_ALPHA_HI ? 255 : ((v - SAT_ALPHA_LO) / span) * 255);\n    }\n  }\n  return out;\n}\n\n/** Decodes one satellite tile and draws it into the destination surface. */\nfunction drawSatellite(bitmap, job) {\n  const w = bitmap.width;\n  const h = bitmap.height;\n  const half = h / 2;\n\n  const context = scratchSurface(w, h);\n  context.drawImage(bitmap, 0, 0);\n  const source = deinvertBlocks(context.getImageData(0, 0, w, h));\n  const composed = composeChannels(source, new ImageData(w, half), job.channel, job.weights, job.grid);\n  // Written back into the same scratch canvas so the scale-and-crop below is a\n  // single drawImage rather than another allocation.\n  context.putImageData(composed, 0, 0);\n\n  const out = surface(job.dw, job.dh);\n  out.imageSmoothingEnabled = false;\n  if (job.crop) {\n    const sw = w / job.crop.scale;\n    const sh = half / job.crop.scale;\n    out.drawImage(scratch,\n      Math.round(job.crop.ix * sw), Math.round(job.crop.iy * sh),\n      Math.max(1, Math.round(sw)), Math.max(1, Math.round(sh)),\n      0, 0, job.dw, job.dh);\n  } else {\n    out.drawImage(scratch, 0, 0, w, half, 0, 0, job.dw, job.dh);\n  }\n}\n\n/* ------------------------------------------------------------------ *\n * Dispatch\n * ------------------------------------------------------------------ */\n\nself.onmessage = async (event) => {\n  const job = event.data;\n\n  if (job.type === 'lut') {\n    luts.set(job.lutId, job.lut);\n    // Only the newest table is ever asked for; the rest are dead weight.\n    if (luts.size > 3) luts.delete(luts.keys().next().value);\n    return;\n  }\n\n  const { id, urls, dw, dh, crop, lutId } = job;\n\n  try {\n    if (job.mode === 'visir') {\n      const { bitmap, usedIndex } = await fetchBitmap(urls);\n      drawSatellite(bitmap, job);\n      bitmap.close();\n      const image = canvas.transferToImageBitmap();\n      // Which URL answered matters: falling through to the second one is how the\n      // caller learns where the live endpoint stops.\n      self.postMessage({ id, ok: true, bitmap: image, usedIndex }, [image]);\n      return;\n    }\n\n    const lut = luts.get(lutId);\n    if (!lut) {\n      self.postMessage({ id, ok: false, error: 'colour table not registered' });\n      return;\n    }\n\n    const { bitmap, usedIndex } = await fetchBitmap(urls);\n    const context = surface(dw, dh);\n    // Smoothing the *data* is what makes this sharp rather than blurred: the\n    // channels carry reflectivity, so interpolating them interpolates the value,\n    // and the colour table then re-quantises it into the same hard bands.\n    context.imageSmoothingEnabled = job.smooth === true;\n    context.imageSmoothingQuality = 'high';\n\n    if (crop) {\n      const sw = bitmap.width / crop.scale;\n      const sh = bitmap.height / crop.scale;\n      context.drawImage(\n        bitmap,\n        Math.round(crop.ix * sw), Math.round(crop.iy * sh),\n        Math.max(1, Math.round(sw)), Math.max(1, Math.round(sh)),\n        0, 0, dw, dh,\n      );\n    } else {\n      context.drawImage(bitmap, 0, 0, dw, dh);\n    }\n    bitmap.close();\n\n    const pixels = context.getImageData(0, 0, dw, dh);\n    context.putImageData(recolour(pixels, lut), 0, 0);\n\n    const out = canvas.transferToImageBitmap();\n    self.postMessage({ id, ok: true, bitmap: out, usedIndex }, [out]);\n  } catch (error) {\n    self.postMessage({ id, ok: false, error: String(error && error.message ? error.message : error) });\n  }\n};\n","accumulation.worker.js":"/**\n * Rainfall accumulation worker.\n *\n * Decodes Windy radar tiles for a series of frames and integrates rainfall rate\n * over time into a per-output-pixel total, then colours the result.\n *\n * This runs off the main thread because a one-hour accumulation over a wide view\n * decodes dozens of tiles and touches millions of pixels — doing it inline froze\n * the map for seconds at a time.\n *\n * In the bundled single-file build this source is inlined and started from a Blob\n * URL; in the modular build it is loaded as a normal worker script.\n */\n\n/* eslint-env worker */\n\nlet currentJob = 0;\n\n/** Reverses the tile encoding: channel value -> rainfall rate in mm/h. */\nfunction buildRateLut(dbzPerUnit, nerf) {\n  const lut = new Float32Array(256);\n  for (let encoded = 0; encoded < 256; encoded += 1) {\n    const dbz = Math.max(0, encoded * dbzPerUnit);\n    lut[encoded] = dbz > 0 ? (10 ** (dbz / 10) * 0.005) ** 0.625 * nerf : 0;\n  }\n  return lut;\n}\n\nfunction colourForMm(mm, stops) {\n  for (const [limit, rgba] of stops) if (mm < limit) return rgba;\n  return stops[stops.length - 1][1];\n}\n\n/** Decodes one tile into a rate grid plus a validity mask. */\nasync function decodeTile(url, lut) {\n  const response = await fetch(url, { mode: 'cors', cache: 'force-cache' });\n  if (!response.ok) throw new Error(`tile HTTP ${response.status}`);\n  const bitmap = await createImageBitmap(await response.blob());\n\n  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);\n  const ctx = canvas.getContext('2d', { willReadFrequently: true });\n  ctx.drawImage(bitmap, 0, 0);\n  bitmap.close();\n\n  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);\n  const count = canvas.width * canvas.height;\n  const mmh = new Float32Array(count);\n  const valid = new Uint8Array(count);\n\n  for (let i = 0, p = 0; i < count; i += 1, p += 4) {\n    if (data[p + 3] < 2) continue;\n    const r = data[p];\n    const g = data[p + 1];\n    const b = data[p + 2];\n    // Near-pure blue is the provider's no-data mask, not weak echo.\n    if (b > 200 && r < 8 && g < 8) continue;\n    const encoded = (r + g) / 2;\n    if (encoded <= 0.5) continue;\n    mmh[i] = lut[Math.min(255, Math.round(encoded))];\n    valid[i] = 1;\n  }\n  return { width: canvas.width, height: canvas.height, mmh, valid };\n}\n\n/** Runs `jobs` with bounded concurrency. */\nasync function pool(items, limit, worker) {\n  let cursor = 0;\n  let any = false;\n  const runners = Array.from({ length: Math.max(1, limit) }, async () => {\n    while (cursor < items.length) {\n      const item = items[cursor++];\n      if (await worker(item)) any = true;\n    }\n  });\n  await Promise.all(runners);\n  return any;\n}\n\nself.onmessage = async (event) => {\n  const message = event.data || {};\n  if (message.type !== 'calculate') return;\n\n  const { jobId, width, height, frames, groups, colourStops, constants, concurrency = 4 } = message;\n  currentJob = jobId;\n\n  try {\n    const lut = buildRateLut(constants.dbzPerEncodedUnit, constants.mmhNerf);\n    const totals = new Float32Array(width * height);\n    const tileCache = new Map();\n    let validFrames = 0;\n    let missingFrames = 0;\n\n    for (let fi = 0; fi < frames.length; fi += 1) {\n      if (jobId !== currentJob) return;\n      const frame = frames[fi];\n\n      const hadData = await pool(groups, concurrency, async (group) => {\n        if (jobId !== currentJob) return false;\n        const url = frame.urls[group.key];\n        if (!url) return false;\n        try {\n          let source = tileCache.get(url);\n          if (!source) {\n            source = await decodeTile(url, lut);\n            // Bounded so a long accumulation cannot exhaust worker memory.\n            if (tileCache.size > 64) tileCache.delete(tileCache.keys().next().value);\n            tileCache.set(url, source);\n          }\n          const { idx, px, py } = group;\n          for (let i = 0; i < idx.length; i += 1) {\n            const sx = Math.max(0, Math.min(source.width - 1, Math.floor((px[i] * source.width) / 256)));\n            const sy = Math.max(0, Math.min(source.height - 1, Math.floor((py[i] * source.height) / 256)));\n            const off = sy * source.width + sx;\n            if (source.valid[off]) totals[idx[i]] += source.mmh[off] * frame.durationHours;\n          }\n          return true;\n        } catch {\n          return false;\n        }\n      });\n\n      if (hadData) validFrames += 1;\n      else missingFrames += 1;\n\n      if (fi === 0 || fi === frames.length - 1 || fi % 2 === 0) {\n        self.postMessage({\n          type: 'progress',\n          jobId,\n          percent: Math.floor(((fi + 1) / frames.length) * 96),\n          text: `Accumulating frame ${fi + 1} of ${frames.length}`,\n        });\n      }\n    }\n\n    if (jobId !== currentJob) return;\n    self.postMessage({ type: 'progress', jobId, percent: 97, text: 'Colouring accumulated rainfall' });\n\n    const rgba = new Uint8ClampedArray(width * height * 4);\n    for (let i = 0; i < totals.length; i += 1) {\n      const colour = colourForMm(totals[i], colourStops);\n      const o = i * 4;\n      rgba[o] = colour[0];\n      rgba[o + 1] = colour[1];\n      rgba[o + 2] = colour[2];\n      rgba[o + 3] = colour[3];\n    }\n\n    self.postMessage(\n      { type: 'done', jobId, width, height, totalsBuffer: totals.buffer, rgbaBuffer: rgba.buffer, validFrames, missingFrames },\n      [totals.buffer, rgba.buffer],\n    );\n  } catch (error) {\n    self.postMessage({ type: 'error', jobId, message: error?.message || 'Accumulation failed' });\n  }\n};\n"};
   window.__RADARLOOP_WORKERS__ = Object.fromEntries(
     Object.entries(__workerSources).map(([name, source]) => [
       name,
@@ -7302,6 +7302,41 @@ const encodedToMmh = (encoded) => dbzToMmh(encodedToDbz(encoded));
  * Active scale
  * ------------------------------------------------------------------ */
 
+/**
+ * Which products are drawn through the shared rainfall scale.
+ *
+ * Only these two are data rather than pictures: their tiles carry reflectivity
+ * in the pixel channels and are coloured here, so the scale and the smoothing
+ * apply to them and to nothing else. Every other radar product arrives already
+ * coloured by its provider, and offering a colour editor for one of those is an
+ * offer the app cannot keep.
+ */
+const SHARED_SCALE_TYPES = ['windy-radar', 'opera-dbzh'];
+const usesSharedScale = (type) => SHARED_SCALE_TYPES.includes(type);
+
+/**
+ * Whether to interpolate the reflectivity field before colouring it.
+ *
+ * The tiles are data, so this smooths the *values* and lets the colour table
+ * re-quantise them — which is why it does not look blurred. Interpolating the
+ * finished picture would blend one class's colour into the next and turn a
+ * banded scale into a wash; interpolating what the bands are computed from moves
+ * the boundaries onto a smooth field and leaves them as sharp as they were.
+ */
+let smoothing = loadSetting('radarSmoothing', false) === true;
+
+const isSmoothing = () => smoothing;
+
+function setSmoothing(value) {
+  const next = value === true;
+  if (next === smoothing) return;
+  smoothing = next;
+  saveSetting('radarSmoothing', next);
+  // The signature keys every cached tile and the worker's colour table, so it
+  // has to change or nothing would redraw.
+  invalidate();
+}
+
 let activePreset = loadSetting('radarPalette', DEFAULT_PALETTE);
 if (!PALETTE_RAMPS[activePreset]) activePreset = DEFAULT_PALETTE;
 
@@ -7312,7 +7347,7 @@ let overrides = loadSetting('radarPaletteOverrides', {}) || {};
 let signature = '';
 
 function computeSignature(levels) {
-  return levels.map(([value, rgba]) => `${value}:${rgba.join(',')}`).join('|');
+  return `${smoothing ? 's' : 'n'}|${levels.map(([value, rgba]) => `${value}:${rgba.join(',')}`).join('|')}`;
 }
 
 let cachedLevels = null;
@@ -7452,6 +7487,10 @@ __exports.MIN_VISIBLE_MMH = MIN_VISIBLE_MMH;
 __exports.dbzToMmh = dbzToMmh;
 __exports.encodedToDbz = encodedToDbz;
 __exports.encodedToMmh = encodedToMmh;
+__exports.SHARED_SCALE_TYPES = SHARED_SCALE_TYPES;
+__exports.usesSharedScale = usesSharedScale;
+__exports.isSmoothing = isSmoothing;
+__exports.setSmoothing = setSmoothing;
 __exports.getLevels = getLevels;
 __exports.getSignature = getSignature;
 __exports.setPreset = setPreset;
@@ -7487,7 +7526,7 @@ __define('layers/opera.js', (__exports, __mod) => {
  * The binary payloads are also cached, capped tightly because each is ~16 MB.
  */
 const { DEVICE } = __mod('config.js');
-const { getEncodedLut, dbzToMmh, getSignature, MIN_VISIBLE_MMH } = __mod('layers/radarScale.js');
+const { getEncodedLut, dbzToMmh, getSignature, isSmoothing, MIN_VISIBLE_MMH } = __mod('layers/radarScale.js');
 const { DEPS } = __mod('core/deps.js');
 const OPERA_WIDTH = 3800;
 const OPERA_HEIGHT = 4400;
@@ -7672,7 +7711,9 @@ const OperaCanvasLayer = L.Layer.extend({
 
     const ctx = canvas.getContext('2d', { alpha: true });
     if (!ctx) return;
-    ctx.imageSmoothingEnabled = false;
+    // The same choice the radar composite makes: this canvas holds decoded
+    // values, so interpolating it interpolates reflectivity rather than colour.
+    ctx.imageSmoothingEnabled = isSmoothing();
 
     const lut = getEncodedLut({ opera: true });
     const view = viewKey(map, width, height);
@@ -7974,6 +8015,7 @@ __define('layers/windy.js', (__exports, __mod) => {
 const { colourForMmh, encodedToMmh, getLevels, MIN_VISIBLE_MMH } = __mod('layers/radarScale.js');
 const { loadSetting, saveSetting } = __mod('core/util.js');
 const { available: workersAvailable, decodeTile } = __mod('layers/windyPool.js');
+const { isSmoothing } = __mod('layers/radarScale.js');
 const MAX_NATIVE_ZOOM = 7;
 
 const LIVE_WINDOW_MS = 2 * 60 * 60 * 1000;
@@ -8138,7 +8180,7 @@ const WindyRadarTileLayer = L.TileLayer.extend({
     if (isComposite && workersAvailable()) {
       // Live URLs are cache-busted; archive URLs are immutable and must not be.
       const urls = archiveFirst ? [archiveUrl] : [withCacheBuster(liveUrl, token), archiveUrl];
-      decodeTile({ urls, dw: tile.width, dh: tile.height, crop })
+      decodeTile({ urls, dw: tile.width, dh: tile.height, crop, smooth: isSmoothing() })
         .then(({ bitmap, usedIndex }) => {
           // Falling through to the archive means the live endpoint has aged out
           // for this frame; remember the boundary so later frames skip the miss.
@@ -8163,12 +8205,14 @@ const WindyRadarTileLayer = L.TileLayer.extend({
     function drawInline() {
       const ctx = tile.getContext('2d', { willReadFrequently: true, alpha: true });
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.imageSmoothingEnabled = false;
-      ctx.imageSmoothingQuality = 'low';
+      // Smoothing the data, not the picture — see windyTile.worker.js.
+      const smooth = isSmoothing();
+      ctx.imageSmoothingEnabled = smooth;
+      ctx.imageSmoothingQuality = smooth ? 'high' : 'low';
 
       const draw = (img) => {
         ctx.clearRect(0, 0, size.x, size.y);
-        ctx.imageSmoothingEnabled = false;
+        ctx.imageSmoothingEnabled = smooth;
 
         if (crop) {
           const sw = img.naturalWidth || img.width || size.x;
@@ -20922,7 +20966,8 @@ function buildWeatherCard(group) {
   return card.node;
 }
 
-/** Radar-only extras: the shared colour scale editor. */
+/** Radar extras: the shared colour scale and its smoothing, for the two
+ * products that arrive as data rather than as a picture. */
 function buildRadarExtras() {
   const preview = el('div', { class: 'palette-preview' });
   const swatches = el('div', { class: 'palette-grid' });
@@ -20955,11 +21000,22 @@ function buildRadarExtras() {
     },
   });
 
+  const smooth = switchRow({
+    label: 'Smooth',
+    hint: '',
+    checked: scale.isSmoothing(),
+    onChange: (checked) => {
+      scale.setSmoothing(checked);
+      renderAll(time.current);
+    },
+  });
+
   paint();
 
-  return disclosure('Rainfall colour scale', [
+  const panel = disclosure('Rainfall colour scale', [
     el('p', { class: 'tiny dim' },
-      'Applies to the Global High Resolution composite and the European reflectivity grid. All presets share the same rainfall-rate intervals.'),
+      ''),
+    smooth.node,
     presets.node,
     preview,
     swatches,
@@ -20973,6 +21029,23 @@ function buildRadarExtras() {
       },
     }, 'Reset custom colours'),
   ]);
+
+  /**
+   * Shown only for the products it can act on.
+   *
+   * These controls colour the data themselves, which is only possible for the
+   * two products that arrive as data. For everything else in the radar list the
+   * provider has already drawn the picture, and offering a colour editor and a
+   * smoothing switch beside one of those is an offer the app cannot keep.
+   */
+  const sync = () => {
+    const slot = slots.get('radar');
+    panel.hidden = !scale.usesSharedScale(slot?.type);
+  };
+  sync();
+  on(EVENTS.LAYER_SELECTED, ({ group }) => { if (group === 'radar') sync(); });
+
+  return panel;
 }
 
 /* ------------------------------------------------------------------ *
@@ -21555,15 +21628,15 @@ const { on, EVENTS } = __mod('core/bus.js');
 const { lightning, slots, LAYER_LABELS } = __mod('core/state.js');
 const { getLayerDef } = __mod('data/layers.js');
 const { MMH_INTERVALS } = __mod('data/palettes.js');
-const { legendStops } = __mod('layers/radarScale.js');
+const { legendStops, usesSharedScale } = __mod('layers/radarScale.js');
 const { colourForAge } = __mod('lightning/render.js');
 const { isPlotted: accumulationPlotted, legendStops: accumulationStops } = __mod('tools/accumulation.js');
 const AGE_BANDS = [
-  { label: 'Newest sixth', fraction: 0.08 },
-  { label: '2nd', fraction: 0.25 },
-  { label: '3rd', fraction: 0.42 },
-  { label: '4th', fraction: 0.58 },
-  { label: '5th', fraction: 0.75 },
+  { label: '', fraction: 0.08 },
+  { label: '', fraction: 0.25 },
+  { label: '', fraction: 0.42 },
+  { label: '', fraction: 0.58 },
+  { label: '', fraction: 0.75 },
   { label: 'Oldest', fraction: 0.92 },
 ];
 
@@ -21601,17 +21674,15 @@ function lightningGroup() {
   }
   return el('div', { class: 'legend-group' }, [
     el('div', { class: 'legend-group__title' }, 'Strike age'),
+    el('div', { class: 'legend-item' }, [
+      el('span', { class: 'legend-swatch', style: { background: '#38bdf8' } }),
+      el('span', { class: 'dim' }, 'Just arrived (Lightning Symbol)'),
+    ]),
     ...AGE_BANDS.map((band) => el('div', { class: 'legend-item' }, [
       el('span', { class: 'legend-swatch', style: { background: colourForAge(band.fraction) } }),
       el('span', { class: 'dim' }, band.label),
     ])),
-    // Shape says the same thing as colour for the band that matters most, so
-    // the newest strikes are findable without reading the colours off.
-    el('div', { class: 'legend-item' }, [
-      el('span', { class: 'legend-swatch', style: { background: '#38bdf8' } }),
-      el('span', { class: 'dim' }, 'Just arrived'),
-    ]),
-    el('p', { class: 'tiny dim' }, 'Arrivals are bolts, the rest squares.'),
+    
   ]);
 }
 
@@ -21634,7 +21705,7 @@ function nowcastGroup() {
     el('div', { class: 'legend-item' }, [swatch('#22d3ee'), el('span', { class: 'dim' }, 'Tracked storm')]),
     el('div', { class: 'legend-item' }, [swatch('#fbbf24'), el('span', { class: 'dim' }, 'Hail possible')]),
     el('div', { class: 'legend-item' }, [swatch('#ff33d6'), el('span', { class: 'dim' }, 'Large hail possible')]),
-    el('p', { class: 'tiny dim' }, 'Solid is where it is now, dashed where it is heading.'),
+    el('p', { class: 'tiny dim' }, ''),
   ]);
 }
 
@@ -21671,9 +21742,9 @@ function accumulationGroup() {
 }
 
 /** True when a recolourable radar product is active. */
-function usesSharedScale() {
+function showsSharedScale() {
   const radar = slots.get('radar');
-  return radar?.enabled && (radar.type === 'windy-radar' || radar.type === 'opera-dbzh');
+  return !!radar?.enabled && usesSharedScale(radar.type);
 }
 
 function renderLegend() {
@@ -21681,7 +21752,7 @@ function renderLegend() {
   if (!body) return;
 
   const groups = [
-    usesSharedScale() ? radarScaleGroup() : null,
+    showsSharedScale() ? radarScaleGroup() : null,
     accumulationGroup(),
     lightningGroup(),
     nowcastGroup(),
@@ -22674,7 +22745,7 @@ const { initLayerManager } = __mod('ui/layerManager.js');
 const { registerOverlayLayers } = __mod('layers/registerOverlays.js');
 const { trackDockedChrome } = __mod('ui/layout.js');
 const { refreshOverlayMirror, remirrorAll, stats: mirrorStats } = __mod('layers/mirrorBridge.js');
-const { poolStats } = __mod('layers/windyPool.js');
+const { decodeTile, poolStats } = __mod('layers/windyPool.js');
 const { bufferStrikes, decodeFeed, decodeStrike, feedStats, framesCovering, parseFrame } = __mod('layers/windyLightning.js');
 const { archiveFrameTime, composeChannels, daylightGrid, deinvertBlocks, frameTimeFromUrl, isArchiveOnly, toArchiveUrl, toLiveUrl } = __mod('layers/windySat.js');
 const { prefetchIdle } = __mod('core/deps.js');
@@ -22683,7 +22754,7 @@ const { buildStationCard } = __mod('ui/stationPopup.js');
 const { ageStops, colourForAge, getStrikeLayer, mercatorX, mercatorY } = __mod('lightning/render.js');
 const { prune: strikeStorePrune, summary: strikeStoreSummary } = __mod('layers/strikeStore.js');
 const { MMH_INTERVALS } = __mod('data/palettes.js');
-const { dbzToMmh, encodedToDbz, encodedToMmh } = __mod('layers/radarScale.js');
+const { dbzToMmh, encodedToDbz, encodedToMmh, getSignature, isSmoothing, setSmoothing, usesSharedScale } = __mod('layers/radarScale.js');
 const { bestShift, measureMotion } = __mod('lightning/radarMotion.js');
 const { calculateNowcast, hailRisk, impactLevel, nowcastInternals, radarHints, remainingLifeMinutes, resetNowcastHistory, resetRadarHints, seedRadarHint } = __mod('lightning/nowcast.js');
 const { lastNowcastClusters } = __mod('lightning/nowcastLayer.js');
@@ -23223,6 +23294,9 @@ window.__mirror3d = { tileScheme, usesFlippedY };
 window.__strikeRender = { mercatorX, mercatorY, colourForAge, ageStops };
 // Group-to-pane mapping, so the stacking checks can ask rather than guess.
 window.__paneFor = paneFor;
+// The tile worker pool, so the smoothing check can drive it directly.
+window.__windyPool = { decodeTile };
+// The rainfall scale's own settings, for the checks that drive them.
 // The projections as last drawn, so the hail checks can read what the map shows.
 window.__nowcastClusters = () => lastNowcastClusters();
 // The strike canvas, so the mark checks can ask what it last drew and how.
@@ -23230,7 +23304,10 @@ window.__strikeLayer = () => getStrikeLayer();
 // The rainfall ladder and its conversions, for checking what part of the scale
 // real reflectivity actually reaches.
 window.__palettes = { MMH_INTERVALS };
-window.__radarScale = { dbzToMmh, encodedToDbz, encodedToMmh };
+window.__radarScale = {
+  dbzToMmh, encodedToDbz, encodedToMmh, isSmoothing, setSmoothing, usesSharedScale,
+  signature: getSignature,
+};
 // The local frame store, so its checks can read what was kept.
 window.__strikeStore = { summary: strikeStoreSummary, prune: strikeStorePrune };
 // The nowcast's radar machinery, so its checks can drive the correlation
