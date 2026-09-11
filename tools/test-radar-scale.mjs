@@ -128,7 +128,8 @@ const smoothing = await page.evaluate(async () => {
   // native does. Comparing rendered map canvases instead meant waiting on a
   // re-render, and a survey that quietly measured the same tiles twice looked
   // like proof that nothing had changed.
-  const url = window.__rainTile.url;
+  const cold = `&_cold=${Date.now()}`;
+  const url = window.__rainTile.url + cold;
   const run = async (smooth) => {
     const { bitmap } = await decodeTile({
       urls: [url, url.replace('/radar2/composite/', '/radar2/archive/composite/')],
@@ -272,6 +273,79 @@ ok('smoothing removes most of them', deep.on.straightShare < deep.off.straightSh
 ok('without inventing shades between the classes', deep.on.colours <= deep.off.colours,
    `${deep.off.colours} -> ${deep.on.colours}`);
 ok('and a tile still decodes quickly', deep.on.ms < 250, `${deep.on.ms}ms`);
+
+
+/* ================================================================== *
+ * Several tiles at once
+ * ================================================================== */
+console.log('\n=== tiles decoded side by side ===');
+
+// A viewport is thirty tiles and they all go out together. The worker holds one
+// canvas of each kind, so any await between taking one and finishing with it
+// hands the canvas to another tile mid-draw — which drew whole blocks of the map
+// wrong until enough zooming settled it.
+const concurrent = await page.evaluate(async () => {
+  const { decodeTile } = window.__windyPool;
+  const url = window.__rainTile.url;
+  const urls = [url, url.replace('/radar2/composite/', '/radar2/archive/composite/')];
+  const neighbours = {};
+  const shift = (dx, dy) => url.replace(/\/(\d+)\/(\d+)\/(\d+)\/reflectivity/,
+    (m, z, x, y) => `/${z}/${Number(x) + dx}/${Number(y) + dy}/reflectivity`);
+  for (let gy = -1; gy <= 1; gy += 1) {
+    for (let gx = -1; gx <= 1; gx += 1) {
+      if (gx || gy) {
+        const live = shift(gx, gy);
+        neighbours[`${gx},${gy}`] = [live, live.replace('/radar2/composite/', '/radar2/archive/composite/')];
+      }
+    }
+  }
+
+  // Every crop of the parent, edges included. The edges are the point: a crop
+  // in the middle reads nothing but its own parent and never waits, and one on
+  // the left or top waits before it draws anything. Only a crop on the right or
+  // bottom draws part of itself, waits, and then draws the rest — which is the
+  // one that loses the first part to whichever tile took the canvas meanwhile.
+  const crops = [];
+  for (let iy = 0; iy < 8; iy += 1) for (let ix = 0; ix < 8; ix += 1) crops.push({ ix, iy, scale: 8 });
+
+  const decode = async (crop) => {
+    const { bitmap } = await decodeTile({ urls, neighbours, dw: 512, dh: 512, crop, smooth: true });
+    const c = new OffscreenCanvas(512, 512);
+    const x = c.getContext('2d');
+    x.drawImage(bitmap, 0, 0);
+    bitmap.close();
+    const d = x.getImageData(0, 0, 512, 512).data;
+    let hash = 0;
+    let lit = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] < 8) continue;
+      lit += 1;
+      hash = (hash * 31 + d[i] + d[i + 1] * 7 + d[i + 2] * 13 + i) % 2147483647;
+    }
+    return { hash, lit };
+  };
+
+  // All at once on a cold cache, the way the map asks for them when the view
+  // first moves.
+  const together = await Promise.all(crops.map(decode));
+  // Then one at a time, which nothing can disturb.
+  const alone = [];
+  for (const crop of crops) {
+    // eslint-disable-next-line no-await-in-loop
+    alone.push(await decode(crop));
+  }
+
+  const wrong = [];
+  for (let i = 0; i < crops.length; i += 1) {
+    if (alone[i].hash !== together[i].hash) {
+      wrong.push({ ...crops[i], alone: alone[i].lit, together: together[i].lit });
+    }
+  }
+  return { tiles: crops.length, wrong: wrong.length, examples: wrong.slice(0, 4) };
+});
+console.log(`  ${JSON.stringify(concurrent)}`);
+ok('a tile comes out the same whether it decodes alone or beside thirty others',
+   concurrent.wrong === 0, `${concurrent.wrong} of ${concurrent.tiles} differ: ${JSON.stringify(concurrent.examples)}`);
 
 
 /* ================================================================== *

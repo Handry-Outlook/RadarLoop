@@ -49,6 +49,8 @@ export const MAX_NATIVE_ZOOM = 7;
 export const MAX_TILE_ZOOM = 10;
 
 const LIVE_WINDOW_MS = 2 * 60 * 60 * 1000;
+/** How long a tile waits on the workers before drawing itself the slow way. */
+const DECODE_TIMEOUT_MS = 15000;
 const ARCHIVE_CUTOFF_KEY = 'windyArchiveCutoffMs';
 
 export const isWindyRadar = (type) => type === 'windy-radar';
@@ -174,18 +176,19 @@ const WindyRadarTileLayer = L.TileLayer.extend({
   /**
    * Leaflet's own version takes x and y from the coordinates but the zoom from
    * the layer, which would ask for tiles past zoom 7 now that the grid is built
-   * that deep. Here the coordinates decide all three, so `createTile` can ask
-   * for the parent it means to crop.
+   * that deep. Lending it the zoom from the coordinates for the length of the
+   * call is enough — and leaves it to do everything else it does, rather than
+   * reimplementing the subdomain, the retina suffix and the inverted y here and
+   * getting one of them wrong later.
    */
   getTileUrl(coords) {
-    return L.Util.template(this._url, {
-      ...this.options,
-      r: L.Browser.retina ? '@2x' : '',
-      s: this._getSubdomain(coords),
-      x: coords.x,
-      y: coords.y,
-      z: coords.z,
-    });
+    const actual = this._tileZoom;
+    this._tileZoom = coords.z;
+    try {
+      return L.TileLayer.prototype.getTileUrl.call(this, coords);
+    } finally {
+      this._tileZoom = actual;
+    }
   },
 
   createTile(coords, done) {
@@ -261,8 +264,26 @@ const WindyRadarTileLayer = L.TileLayer.extend({
         }
       }
 
+      let settled = false;
+      const finish = (fn) => {
+        if (settled) return;
+        settled = true;
+        fn();
+      };
+      // Leaflet keeps the zoom level it came from on screen until every tile of
+      // the new one has reported, so a single request that never answers leaves
+      // the map a patchwork of two levels until something forces a reload. The
+      // worker is not allowed to be the reason that happens.
+      const stall = setTimeout(() => finish(drawInline), DECODE_TIMEOUT_MS);
+
       decodeTile({ urls, dw: tile.width, dh: tile.height, crop, neighbours, smooth: isSmoothing() })
         .then(({ bitmap, usedIndex }) => {
+          clearTimeout(stall);
+          if (settled) {
+            bitmap.close();
+            return;
+          }
+          settled = true;
           // Falling through to the archive means the live endpoint has aged out
           // for this frame; remember the boundary so later frames skip the miss.
           if (!archiveFirst && usedIndex > 0) rememberCutoff(frameMs);
@@ -275,7 +296,10 @@ const WindyRadarTileLayer = L.TileLayer.extend({
         })
         // A dead worker or a transient fetch failure should not blank the tile:
         // retry it on the main thread.
-        .catch(() => drawInline());
+        .catch(() => {
+          clearTimeout(stall);
+          finish(drawInline);
+        });
       return tile;
     }
 

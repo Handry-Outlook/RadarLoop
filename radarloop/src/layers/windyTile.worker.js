@@ -35,7 +35,11 @@ const luts = new Map();
  * wait on one decode between them.
  */
 const bitmapCache = new Map();
-const BITMAP_CACHE_LIMIT = 24;
+// A tile reads up to nine of these, and a worker has several tiles in flight,
+// so the limit has to be a good deal larger than one tile's worth.
+const BITMAP_CACHE_LIMIT = 64;
+/** Long enough that no tile can still be holding an evicted bitmap. */
+const BITMAP_RELEASE_MS = 15000;
 
 function cachedBitmap(urls) {
   const key = urls[0];
@@ -58,7 +62,10 @@ function cachedBitmap(urls) {
     const oldest = bitmapCache.keys().next().value;
     const dropped = bitmapCache.get(oldest);
     bitmapCache.delete(oldest);
-    dropped.then((e) => e.bitmap.close()).catch(() => {});
+    // Released late rather than at once: a tile that took this bitmap out of
+    // the cache a moment ago may still be waiting on its other pieces, and
+    // drawing a closed bitmap throws.
+    dropped.then((e) => setTimeout(() => e.bitmap.close(), BITMAP_RELEASE_MS)).catch(() => {});
   }
   return entry;
 }
@@ -532,20 +539,16 @@ self.onmessage = async (event) => {
       // no eye could separate.
       const scale = fieldScale(Math.max(sw, sh));
       const radius = Math.max(1, Math.round(scale * FIELD_KERNEL));
-      // Three box passes reach three radii, and one sample wider again,
-      // rounded to whole samples so
-      // the patch below can be copied without resampling. Canvas scaling
-      // flattens the outermost half-sample of whatever rectangle it is given,
-      // and without the extra the blur would carry that flattened edge back into
-      // the tile's own pixels — differently on each side of a join.
+      // Three box passes reach three radii, and one sample wider again —
+      // rounded to whole samples so the patch below can be copied without
+      // resampling. Canvas scaling flattens the outermost half-sample of
+      // whatever rectangle it is given, and without the extra sample the blur
+      // would carry that flattened edge back into the tile's own pixels,
+      // differently on each side of a join.
       const padSamples = Math.ceil((radius * 3 + scale) / scale);
       const margin = padSamples * scale;
       const mw = Math.max(1, Math.round(sw * scale));
       const mh = Math.max(1, Math.round(sh * scale));
-      const work = paddedSurface(mw + margin * 2, mh + margin * 2);
-      work.imageSmoothingEnabled = true;
-      work.imageSmoothingQuality = 'high';
-
       /*
        * The margin, taken from wherever the data actually is.
        *
@@ -553,11 +556,11 @@ self.onmessage = async (event) => {
        * itself averages half a neighbourhood along each of its edges and leans
        * inward — and the tile beside it leans the other way, which is a seam.
        * Inside a provider tile there is always more data to read, but a crop on
-       * its edge runs out, and that is where the joins showed: measured at two
-       * hundred rows of five hundred and twelve changing rainfall class across
-       * one, against four for an ordinary step. So the patch is assembled from
-       * the provider tile and whichever of its eight neighbours the widened
-       * rectangle reaches into.
+       * its edge runs out, and that is where the joins showed: measured at four
+       * hundred and twenty-five rows of five hundred and twelve changing
+       * rainfall class across one, against sixty-nine once the tile could read
+       * past it. So the patch is assembled from the provider tile and whichever
+       * of its eight neighbours the widened rectangle reaches into.
        */
       const bw = bitmap.width;
       const bh = bitmap.height;
@@ -565,8 +568,17 @@ self.onmessage = async (event) => {
       const py0 = sy - padSamples;
       const pw = sw + padSamples * 2;
       const ph = sh + padSamples * 2;
-      const assembled = patchSurface(pw, ph);
 
+      /*
+       * Every piece is gathered before any canvas is touched.
+       *
+       * There is one of each canvas per worker and a worker has more than one
+       * tile in flight: each `await` hands the worker to another job, which
+       * clears and resizes the very canvas this one was part way through. That
+       * showed as whole blocks of the map drawing the wrong thing until enough
+       * zooming settled it. Nothing below this point yields.
+       */
+      const pieces = [];
       for (let gy = -1; gy <= 1; gy += 1) {
         for (let gx = -1; gx <= 1; gx += 1) {
           const ox = gx * bw;
@@ -577,25 +589,32 @@ self.onmessage = async (event) => {
           const cy1 = Math.min(py0 + ph, oy + bh);
           if (cx1 <= cx0 || cy1 <= cy0) continue;
 
-          let source = bitmap;
-          if (gx || gy) {
-            const at = job.neighbours && job.neighbours[`${gx},${gy}`];
-            if (!at) continue;
-            // A missing neighbour — the edge of the world, or a tile the
-            // provider does not have — is left out, and the weighted blur falls
-            // back to whatever it can see.
-            // eslint-disable-next-line no-await-in-loop
-            const got = await cachedBitmap(at).catch(() => null);
-            if (!got) continue;
-            source = got.bitmap;
+          const rect = { ox, oy, cx0, cy0, w: cx1 - cx0, h: cy1 - cy0 };
+          if (!gx && !gy) {
+            pieces.push({ ...rect, source: Promise.resolve({ bitmap }) });
+            continue;
           }
-
-          assembled.drawImage(
-            source,
-            cx0 - ox, cy0 - oy, cx1 - cx0, cy1 - cy0,
-            cx0 - px0, cy0 - py0, cx1 - cx0, cy1 - cy0,
-          );
+          const at = job.neighbours && job.neighbours[`${gx},${gy}`];
+          // A missing neighbour — the edge of the world, or a tile the provider
+          // does not have — is left out, and the weighted blur falls back to
+          // whatever it can see.
+          if (!at) continue;
+          pieces.push({ ...rect, source: cachedBitmap(at).catch(() => null) });
         }
+      }
+      const sources = await Promise.all(pieces.map((p) => p.source));
+
+      /* ---- nothing from here on may await ---- */
+      const work = paddedSurface(mw + margin * 2, mh + margin * 2);
+      work.imageSmoothingEnabled = true;
+      work.imageSmoothingQuality = 'high';
+      const assembled = patchSurface(pw, ph);
+
+      for (let i = 0; i < pieces.length; i += 1) {
+        const got = sources[i];
+        if (!got) continue;
+        const { ox, oy, cx0, cy0, w, h } = pieces[i];
+        assembled.drawImage(got.bitmap, cx0 - ox, cy0 - oy, w, h, cx0 - px0, cy0 - py0, w, h);
       }
 
       work.drawImage(patch, 0, 0, pw, ph, 0, 0, pw * scale, ph * scale);
