@@ -1708,6 +1708,21 @@ the lightest rain there is.
 The legend's tick labels now come from the ladder rather than being written out,
 so a rescale cannot leave them describing a scale that no longer exists.
 
+**A filtered period does not widen the strike window.** Applying a filter sets
+the timeline's whole span, and it used to set the strike window with it — so
+choosing a week showed a week of strikes at once, whatever the age window said.
+That is occasionally what someone wants and never what they expect: the ramp
+turns into a solid block and a busy period becomes unreadable. The age window
+governs inside a filtered period now, and "show every strike loaded" is the
+switch for the other behaviour, which is what it already meant everywhere else.
+
+The clamp is `max(periodStart, end - lifespan)`, which is what keeps a focused
+outlook working: focusing one sets the timeline to the outlook's validity period
+*and* the age window to the same length, so the clamp is a no-op and the whole
+period still shows. That is worth a check rather than an argument — the first
+reading of the code said outlooks took a different path through the timeline
+entirely, and they do not.
+
 **The age ramp.** Six even bands: white, red, deep red, maroon, then blue and
 navy. The two ends are opposite in both hue and temperature, so a white mark
 never reads as an old one — which the previous ramp could not manage, running

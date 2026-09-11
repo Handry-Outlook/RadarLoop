@@ -239,7 +239,7 @@ function buildLightningPanel() {
 
   nodes.push(switchRow({
     label: 'Show every strike loaded',
-    hint: 'Ignores the time window',
+    hint: 'Ignores the age window, including inside a filtered period',
     checked: lightning.showAll,
     onChange: (checked) => {
       lightning.showAll = checked;

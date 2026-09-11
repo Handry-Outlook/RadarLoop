@@ -54,9 +54,23 @@ export function retentionCutoff() {
  * at a steady rate instead of going blank until the drag stops.
  */
 export const refresh = throttle((options = {}) => {
-  const { start, end } = activeWindow(lightning.lifespanHours);
-  const startMs = lightning.showAll ? -Infinity : start.getTime();
+  const { start, end, progressive } = activeWindow(lightning.lifespanHours);
   const endMs = end.getTime();
+
+  // A filtered period sets the timeline's whole span, and it used to set the
+  // strike window with it — so choosing a week showed a week of strikes at once,
+  // whatever the age window said. That is occasionally what someone wants and
+  // never what they expect: the age ramp turns into a solid block and a busy
+  // period becomes unreadable.
+  //
+  // The age window still governs inside a filtered period. "Show every strike
+  // loaded" is the switch for the other behaviour, which is what it already
+  // meant everywhere else.
+  const lifespanMs = Math.max(0.01, lightning.lifespanHours) * 3600 * 1000;
+  let startMs;
+  if (lightning.showAll) startMs = -Infinity;
+  else if (progressive) startMs = Math.max(start.getTime(), endMs - lifespanMs);
+  else startMs = start.getTime();
 
   // Looking further back than the store currently holds: restore the archives
   // and redraw once they are merged. Cheap and idempotent when already covered.
