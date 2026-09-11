@@ -1720,14 +1720,23 @@ that scale is read on a dark grey map. This one might have any base map under it
 so every mark is drawn twice — a dark outline first, then the mark — without
 which a white square on light terrain is simply not there.
 
-**Arrivals are their own thing.** Strikes that came in on the last refresh are a
-light blue bolt, larger than the squares and drawn last so nothing covers them.
-That is a different question from age — "this just came in" rather than "this is
-the youngest of what is shown" — so it gets a band of its own rather than a place
-on the scale. Arrivals are found by timestamp rather than by a set of keys: the
-renderer works in buffers where a run is a pair of indices, so a set would mean a
-lookup per strike where a binary search does. Scrubbing an archive produces none,
-which is correct — nothing arrived.
+**The last minute is its own thing.** Strikes inside the final minute of the
+window are a light blue bolt, larger than the squares and drawn last so nothing
+covers them. It is a different question from age — "this has just struck" rather
+than "this is the youngest sixth of what is shown" — so it gets a band of its own
+rather than a place on the scale.
+
+A minute of the window rather than whatever arrived on the last refresh, which is
+what it was first. Tying it to the polling made it a property of the polling: a
+quiet refresh marked nothing, a slow one marked several minutes, and scrubbing an
+archive marked nothing at all because nothing had arrived. A fixed minute before
+the window's end is the same question asked of live data and of last June. It is
+cut out by timestamp: a run is a pair of indices in a time-ordered buffer, so a
+binary search does what a key set would have needed a lookup per strike for.
+
+The window itself is an hour by default. Six bands across it is ten minutes
+apiece, which is what the operational displays use and what makes the colours
+mean something without going back to the legend.
 
 **Shape carries age, not only colour.** The in-house strikes are drawn as a bolt
 in the newest age band and a small open square in every band above it. Five

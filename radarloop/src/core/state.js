@@ -126,10 +126,23 @@ export const time = {
  * this discards the ones already written. The panel steps in tenths of an hour,
  * so anything off that grid came from the override.
  */
+/**
+ * How far back strikes are shown, in hours.
+ *
+ * An hour by default. The age ramp divides the window into six, so an hour puts
+ * a band at ten minutes apiece — which is what operational displays use, and
+ * what makes the colours mean something you can hold in your head.
+ *
+ * The odd-looking rounding check guards against a stored value that is not a
+ * clean tenth of an hour. An outlook's window length used to be written here,
+ * and something like 23.98 hours would come back as the next session's default.
+ */
+const DEFAULT_LIFESPAN_HOURS = 1;
+
 function storedLifespan() {
-  const value = Number(loadSetting('lightningLifespan', 3));
-  if (!Number.isFinite(value) || value < 0.1) return 3;
-  return Math.abs(value * 10 - Math.round(value * 10)) < 1e-6 ? value : 3;
+  const value = Number(loadSetting('lightningLifespan', DEFAULT_LIFESPAN_HOURS));
+  if (!Number.isFinite(value) || value < 0.1) return DEFAULT_LIFESPAN_HOURS;
+  return Math.abs(value * 10 - Math.round(value * 10)) < 1e-6 ? value : DEFAULT_LIFESPAN_HOURS;
 }
 
 export const lightning = {

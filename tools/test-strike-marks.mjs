@@ -30,6 +30,7 @@ const state = await page.evaluate(async () => {
   window.RadarLoop.setLayerEnabled('radar', false);
   window.RadarLoop.setLayerEnabled('satellite', false);
   window.RadarLoop.lightning.nowcast = false;
+  const defaultLifespan = window.RadarLoop.lightning.lifespanHours;
   window.RadarLoop.lightning.lifespanHours = 0.5;
   window.RadarLoop.playback.setHistorySpan(24 * 90);
   window.RadarLoop.playback.setTime(hour * 3600000 + 3600000, { immediate: true });
@@ -38,6 +39,7 @@ const state = await page.evaluate(async () => {
   await new Promise((r) => setTimeout(r, 5000));
   const layer = window.__strikeLayer();
   return {
+    defaultLifespan,
     mark: layer?.options?.mark,
     mode: layer?._lastMode,
     visible: layer?._lastVisible,
@@ -79,6 +81,18 @@ ok('marks were painted', shapes.painted > 500, String(shapes.painted));
 ok('and in more than one age colour', shapes.colours > 1, String(shapes.colours));
 
 
+console.log('\n=== defaults ===');
+const defaults = {
+  lifespanHours: state.defaultLifespan,
+  bands: await page.evaluate(() => window.__strikeRender.ageStops().length),
+};
+console.log(`  ${JSON.stringify(defaults)}`);
+// Six bands over an hour is ten minutes each, which is what the operational
+// scale uses and what makes the colours mean something without the legend.
+ok('the window is an hour by default', defaults.lifespanHours === 1, String(defaults.lifespanHours));
+ok('which the six bands divide into ten-minute steps', defaults.bands === 6, String(defaults.bands));
+
+
 /* ---- arrivals ---- */
 console.log('\n=== just-arrived strikes ===');
 const arrivals = await page.evaluate(async () => {
@@ -103,26 +117,31 @@ const arrivals = await page.evaluate(async () => {
     return { arrivalPixels, whitePixels };
   };
 
-  // Nothing has arrived while scrubbing an archive.
-  const before = sample();
-  // The last four minutes of the window, as though they had just come in.
+  const hours = layer._lifespanMs / 3600000;
+  // A window ending well after the last strike: nothing lies inside its final
+  // minute, so nothing should be blue.
   layer.setStrikeBuffers(layer._buffers, {
-    end: layer._windowEnd,
-    lifespanHours: layer._lifespanMs / 3600000,
-    freshSince: newest - 4 * 60000,
+    end: newest + 10 * 60000, lifespanHours: hours, freshSince: newest + 9 * 60000,
   });
-  await new Promise((r) => setTimeout(r, 1200));
+  await new Promise((r) => setTimeout(r, 1000));
+  const before = sample();
+
+  // And one ending on the last strike, so the final minute is full of them.
+  layer.setStrikeBuffers(layer._buffers, {
+    end: newest, lifespanHours: hours, freshSince: newest - 60000,
+  });
+  await new Promise((r) => setTimeout(r, 1000));
   return { before, after: sample(), mode: layer._lastMode };
 });
 console.log(`  ${JSON.stringify(arrivals)}`);
 
-ok('nothing is marked as an arrival while scrubbing the archive',
+ok('nothing is blue when the last minute holds no strikes',
    arrivals.before.arrivalPixels === 0, String(arrivals.before.arrivalPixels));
-ok('arrivals are drawn in their own colour', arrivals.after.arrivalPixels > 100,
+ok('the last minute of strikes is drawn blue', arrivals.after.arrivalPixels > 100,
    String(arrivals.after.arrivalPixels));
 // A filled bolt covers more of its own area than an outlined square does, so
 // the arrivals should not simply be squares wearing a different colour.
-ok('and are filled marks, not outlines', arrivals.after.arrivalPixels > 30,
+ok('and they are filled marks, not outlines', arrivals.after.arrivalPixels > 30,
    String(arrivals.after.arrivalPixels));
 ok('the ramp still has its white newest band', arrivals.after.whitePixels > 50,
    String(arrivals.after.whitePixels));

@@ -48,6 +48,9 @@ const AGE_STOPS = [
  * it gets a band of its own rather than a place on the scale.
  */
 const FRESH_BAND = -2;
+
+/** How recent a strike must be to count as just-struck. */
+const FRESH_WINDOW_MS = 60 * 1000;
 const FRESH_COLOUR = '#38bdf8';
 
 /**
@@ -58,6 +61,9 @@ const FRESH_COLOUR = '#38bdf8';
  * anything, and an unhaloed white square on light terrain is not there at all.
  */
 const MARK_HALO = 'rgba(2,6,23,0.55)';
+
+/** The age ramp, for the legend and the checks. */
+export const ageStops = () => AGE_STOPS.map(([limit, colour]) => [limit, colour]);
 
 export function colourForAge(fraction) {
   for (const [limit, colour] of AGE_STOPS) if (fraction < limit) return colour;
@@ -680,8 +686,6 @@ export const StrikeCanvasLayer = L.Layer.extend({
 
 let layer = null;
 let previousKeys = new Set();
-/** Newest strike time at the last draw, so arrivals can be told apart. */
-let previousNewest = 0;
 
 export function ensureStrikeLayer() {
   if (!layer) layer = new StrikeCanvasLayer({ pane: 'lightningPane', mark: 'age' });
@@ -716,11 +720,13 @@ export function drawStrikes(filtered, { end, lifespanHours }) {
   }
   previousKeys = keys;
 
-  // Everything after the newest strike we had last time is an arrival. A
-  // timestamp rather than the key set, because the renderer works in buffers
-  // where a run is a pair of indices and a set would be a lookup per strike.
-  const freshSince = previousNewest && fresh.size ? previousNewest + 1 : 0;
-  previousNewest = filtered.length ? filtered[filtered.length - 1].ms : previousNewest;
+  // The most recent minute of whatever is being shown. Tying this to what
+  // arrived on the last refresh instead made it a property of the polling rather
+  // than of the weather: a quiet refresh marked nothing, a slow one marked
+  // several minutes, and scrubbing an archive marked nothing at all because
+  // nothing had arrived. A minute before the window's end is the same question
+  // asked of live data and of last June.
+  const freshSince = end - FRESH_WINDOW_MS;
 
   const layerRef = ensureStrikeLayer();
   layerRef.setStrikeBuffers(filtered.length ? [packStrikes(filtered)] : [], {

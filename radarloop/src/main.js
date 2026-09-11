@@ -48,7 +48,7 @@ import {
 import { prefetchIdle } from './core/deps.js';
 import * as synoptic from './layers/synoptic.js';
 import { buildStationCard } from './ui/stationPopup.js';
-import { colourForAge, getStrikeLayer, mercatorX, mercatorY } from './lightning/render.js';
+import { ageStops, colourForAge, getStrikeLayer, mercatorX, mercatorY } from './lightning/render.js';
 import { prune as strikeStorePrune, summary as strikeStoreSummary } from './layers/strikeStore.js';
 import { MMH_INTERVALS } from './data/palettes.js';
 import { dbzToMmh, encodedToDbz, encodedToMmh } from './layers/radarScale.js';
@@ -591,7 +591,7 @@ window.__mirror3d = { tileScheme, usesFlippedY };
 // at decoded positions rather than at pixels alone.
 // The projection the bulk renderer inlines, so a check can hold it against
 // Leaflet's own — every strike lands in the wrong place if these disagree.
-window.__strikeRender = { mercatorX, mercatorY, colourForAge };
+window.__strikeRender = { mercatorX, mercatorY, colourForAge, ageStops };
 // Group-to-pane mapping, so the stacking checks can ask rather than guess.
 window.__paneFor = paneFor;
 // The strike canvas, so the mark checks can ask what it last drew and how.
