@@ -1662,6 +1662,52 @@ cores, not more lightning.
 The popup says which sources are behind a projection, names the trend, and
 gives the expected remaining life.
 
+## The rainfall scale
+
+The colours were not the problem, and that is why it was hard to name. The
+ladder they were mapped onto was.
+
+**Seven of the twenty classes were unreachable.** The boundaries ran in powers of
+two from 0.03 mm/h to 8192 — a rate nothing on Earth produces. This composite
+reports up to about 65 dBZ, which on the old ladder is 126 mm/h and lands in
+class 12 of 20. Every class above it was dead, and every preset kept its dramatic
+colours up there, so none of them was ever drawn.
+
+What that did to the default, measured at the reflectivities storms actually
+reach:
+
+| dBZ | old class | old colour | new class | new colour |
+|---|---|---|---|---|
+| 40 | 7 | `#46d282` green | 11 | `#ffd000` yellow |
+| 50 | 9 | `#c3e12d` yellow-green | 14 | `#ff4d00` red-orange |
+| 55 | 10 | `#f0cd23` yellow | 15 | `#ef1c00` red |
+| 60 | 11 | `#ffa519` amber | 17 | `#a30014` deep red |
+| 65 | 12 | `#ff7314` orange | 19 | `#9600c8` violet |
+
+The most violent thing the radar could show came out orange. Nothing on the map
+was ever red, let alone violet — not because anyone chose that, but because the
+part of the scale holding those colours described rainfall rates that do not
+occur. `windy-clean` was worse: it drew a 65 dBZ core in `#ff5f5f`, *lighter*
+than the 60 dBZ ring around it, so a storm faded out exactly where it was most
+intense.
+
+The ladder is now twenty classes at three-decibel steps from 10 to 67 dBZ, which
+is the range the product reports. Every preset gained its top seven classes back
+at a stroke.
+
+**A ramp built for that range.** `operational` is the new default, and the three
+things that make a radar scale look authoritative are all about where the
+intensity goes rather than which colours are used. Lightness falls as intensity
+rises, so the core is the darkest, most saturated thing on the map. There is a
+hard jump from green to yellow, because stratiform rain is green and convection
+is yellow upwards and a discontinuity there is what makes showers look like
+showers instead of a smooth wash. And there is no blue: blue is water, calm,
+cool, and spending a quarter of the scale on it gives the map's visual weight to
+the lightest rain there is.
+
+The legend's tick labels now come from the ladder rather than being written out,
+so a rescale cannot leave them describing a scale that no longer exists.
+
 ## Live global strikes
 
 `layers/windyLightning.js`. The catalog has carried this product since the

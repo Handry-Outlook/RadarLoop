@@ -8,11 +8,21 @@
  * GENERATED from the legacy inline presets; see scripts_palettes.cjs.
  */
 
-/** Rainfall-rate class boundaries in mm/h, ascending. */
-export const MMH_INTERVALS = [0,0.03125,0.0625,0.125,0.25,0.5,1,2,4,8,16,32,64,128,256,512,1024,2048,4096,8192,99999];
+/**
+ * Rainfall-rate class boundaries in mm/h, ascending.
+ *
+ * Twenty classes at three-decibel steps from 10 to 67 dBZ, which is the range
+ * this composite actually reports. The old ladder ran in powers of two to 8192
+ * mm/h — a rate nothing on Earth produces — so a 65 dBZ core, about as intense
+ * as the product goes, reached class 12 of 20 and the seven classes above it
+ * were unreachable. Every dramatic colour in every preset lived up there, which
+ * is why the most violent thing the radar could show came out orange.
+ */
+export const MMH_INTERVALS = [0,0.046,0.071,0.109,0.168,0.259,0.399,0.615,0.947,1.459,2.246,3.459,5.327,8.203,12.632,19.453,29.956,46.129,71.036,109.39,168.453];
 
 /** Display names for the preset picker. */
 export const PALETTE_NAMES = {
+  operational: "Operational",
   "windy-clean": "Global High Resolution Clean",
   classic: "Classic Weather Radar",
   "high-contrast": "High Contrast Severe",
@@ -29,6 +39,33 @@ export const PALETTE_NAMES = {
 
 /** Raw [r,g,b,a] ramps, one colour per interval above the transparent floor. */
 export const PALETTE_RAMPS = {
+  /**
+   * Operational — modelled on the scales forecasters actually read.
+   *
+   * Three things make a radar scale look authoritative, and they are all about
+   * where the intensity goes rather than which colours are used.
+   *
+   * *Lightness falls as intensity rises.* The core of a storm is the darkest,
+   * most saturated thing on the map. Several of the older ramps do the opposite
+   * at the top — `windy-clean` draws a 65 dBZ core in pale pink, lighter than
+   * the 60 dBZ ring around it — which reads as the storm fading out exactly
+   * where it is most violent.
+   *
+   * *There is a hard jump from green to yellow.* Stratiform rain is green and
+   * convection is yellow upwards, and putting a discontinuity on that boundary
+   * is what makes showers look like showers instead of a smooth wash.
+   *
+   * *No blue.* Blue is water, calm, cool. Spending a quarter of the scale on it
+   * gives the map's visual weight to the lightest rain there is.
+   */
+  operational: [
+    [200, 232, 180, 90], [176, 222, 152, 130], [150, 212, 128, 170], [122, 200, 100, 205],
+    [92, 190, 74, 235], [54, 176, 56, 255], [30, 156, 44, 255], [13, 136, 36, 255],
+    [0, 116, 28, 255],
+    [232, 232, 0, 255], [255, 208, 0, 255], [255, 168, 0, 255], [255, 124, 0, 255],
+    [255, 77, 0, 255], [239, 28, 0, 255], [204, 0, 0, 255], [163, 0, 20, 255],
+    [180, 0, 120, 255], [150, 0, 200, 255], [106, 0, 184, 255],
+  ],
   'windy-clean': [
     [225,245,255,120], [185,225,245,170], [135,195,235,210], [80,155,220,235], [45,110,220,255],
     [0,170,120,255], [70,205,80,255], [235,235,0,255], [255,185,0,255], [255,105,0,255],
@@ -111,4 +148,4 @@ export function buildPalette(ramp) {
   ]);
 }
 
-export const DEFAULT_PALETTE = 'turbo';
+export const DEFAULT_PALETTE = 'operational';

@@ -11,6 +11,7 @@ import { byId, el } from '../core/util.js';
 import { on, EVENTS } from '../core/bus.js';
 import { lightning, slots, LAYER_LABELS } from '../core/state.js';
 import { getLayerDef } from '../data/layers.js';
+import { MMH_INTERVALS } from '../data/palettes.js';
 import { legendStops } from '../layers/radarScale.js';
 import { colourForAge } from '../lightning/render.js';
 import { isPlotted as accumulationPlotted, legendStops as accumulationStops } from '../tools/accumulation.js';
@@ -23,6 +24,9 @@ const AGE_BANDS = [
   { label: '80–100%', fraction: 0.9 },
 ];
 
+/** A rate as few characters as it can be read in. */
+const format = (mmh) => (mmh >= 10 ? String(Math.round(mmh)) : mmh.toFixed(mmh >= 1 ? 1 : 2));
+
 function radarScaleGroup() {
   const stops = legendStops();
   return el('div', { class: 'legend-group' }, [
@@ -34,7 +38,9 @@ function radarScaleGroup() {
         title: stop.label,
       }))),
     el('div', { class: 'legend-scale__labels' }, [
-      el('span', {}, '0.03'), el('span', {}, '4'), el('span', {}, '256+ mm/h'),
+      el('span', {}, format(MMH_INTERVALS[1])),
+      el('span', {}, format(MMH_INTERVALS[Math.floor(MMH_INTERVALS.length / 2)])),
+      el('span', {}, `${format(MMH_INTERVALS[MMH_INTERVALS.length - 1])}+ mm/h`),
     ]),
   ]);
 }

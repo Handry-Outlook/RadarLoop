@@ -50,6 +50,8 @@ import * as synoptic from './layers/synoptic.js';
 import { buildStationCard } from './ui/stationPopup.js';
 import { mercatorX, mercatorY } from './lightning/render.js';
 import { prune as strikeStorePrune, summary as strikeStoreSummary } from './layers/strikeStore.js';
+import { MMH_INTERVALS } from './data/palettes.js';
+import { dbzToMmh, encodedToDbz, encodedToMmh } from './layers/radarScale.js';
 import { bestShift, measureMotion } from './lightning/radarMotion.js';
 import {
   calculateNowcast, hailRisk, impactLevel, nowcastInternals, radarHints, remainingLifeMinutes,
@@ -592,6 +594,10 @@ window.__mirror3d = { tileScheme, usesFlippedY };
 window.__strikeRender = { mercatorX, mercatorY };
 // Group-to-pane mapping, so the stacking checks can ask rather than guess.
 window.__paneFor = paneFor;
+// The rainfall ladder and its conversions, for checking what part of the scale
+// real reflectivity actually reaches.
+window.__palettes = { MMH_INTERVALS };
+window.__radarScale = { dbzToMmh, encodedToDbz, encodedToMmh };
 // The local frame store, so its checks can read what was kept.
 window.__strikeStore = { summary: strikeStoreSummary, prune: strikeStorePrune };
 // The nowcast's radar machinery, so its checks can drive the correlation
