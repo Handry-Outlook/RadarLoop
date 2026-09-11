@@ -158,11 +158,22 @@ export const OperaCanvasLayer = L.Layer.extend({
     requestAnimationFrame(() => this._render(generation));
   },
 
-  /** Builds the screen-pixel → grid-index map for the current view. */
+  /**
+   * Builds the screen-pixel → grid map for the current view.
+   *
+   * Two things come out of it: the cell each pixel falls in, and how far across
+   * that cell it fell. The second is what smoothing needs — zoomed in, one grid
+   * cell covers many screen pixels, and without a position inside the cell every
+   * one of them can only be given the same value, which is the blockiness.
+   */
   _buildProjectionIndex(width, height, generation) {
     const map = this._map;
     const size = map.getSize();
     const indices = new Int32Array(width * height).fill(-1);
+    // Grid coordinates measured from cell centres, so the interpolation is
+    // symmetric about each sample rather than offset half a cell.
+    const gridX = new Float32Array(width * height);
+    const gridY = new Float32Array(width * height);
     const [minX, minY, maxX, maxY] = this._extent;
     const dx = size.x / width;
     const dy = size.y / height;
@@ -177,16 +188,76 @@ export const OperaCanvasLayer = L.Layer.extend({
           const ll = map.containerPointToLatLng([(x + 0.5) * dx, containerY]);
           const [px, py] = proj4('EPSG:4326', this._projection, [ll.lng, ll.lat]);
           if (px < minX || px >= maxX || py < minY || py >= maxY) continue;
-          const sx = Math.floor(((px - minX) / (maxX - minX)) * this._sw);
-          const sy = Math.floor(((maxY - py) / (maxY - minY)) * this._sh);
+          const fx = ((px - minX) / (maxX - minX)) * this._sw;
+          const fy = ((maxY - py) / (maxY - minY)) * this._sh;
+          const sx = Math.floor(fx);
+          const sy = Math.floor(fy);
           if (sx >= 0 && sx < this._sw && sy >= 0 && sy < this._sh) {
-            indices[y * width + x] = sy * this._sw + sx;
+            const pixel = y * width + x;
+            indices[pixel] = sy * this._sw + sx;
+            gridX[pixel] = fx - 0.5;
+            gridY[pixel] = fy - 0.5;
           }
         }
       }
       if (generation !== this._generation) return null;
     }
-    return indices;
+    return { indices, gridX, gridY };
+  },
+
+  /**
+   * Reads the grid under one screen pixel, interpolated between the four cells
+   * around it.
+   *
+   * Interpolating the encoded value rather than the colour is the whole point:
+   * the rainfall classes are applied afterwards, so their edges stay as hard as
+   * they ever were and only move to where the rate actually crosses them.
+   *
+   * Cells with no data are left out of the average instead of counted as dry,
+   * which would fringe every coverage gap and every coastline with rain that is
+   * not there.
+   *
+   * The weights are eased rather than straight. A plain linear blend is
+   * continuous but its slope is not: it changes direction at every cell edge,
+   * and once the rainfall classes cut through that the boundaries come out as
+   * straight facets meeting at corners — the grid still legible, just at
+   * forty-five degrees. Easing the fraction flattens the slope at each sample
+   * and the class edges come out as curves. It cannot overshoot the way a cubic
+   * would, which matters here: the result stays between the four cells it came
+   * from, so smoothing can never invent a heavier band than the data holds.
+   */
+  _sampleSmooth(gx, gy) {
+    const sw = this._sw;
+    const sh = this._sh;
+    const values = this._values;
+
+    const x0 = Math.floor(gx);
+    const y0 = Math.floor(gy);
+    const fx = gx - x0;
+    const fy = gy - y0;
+    const tx = fx * fx * (3 - 2 * fx);
+    const ty = fy * fy * (3 - 2 * fy);
+
+    let sum = 0;
+    let weight = 0;
+    for (let j = 0; j < 2; j += 1) {
+      const yy = y0 + j;
+      if (yy < 0 || yy >= sh) continue;
+      const wy = j ? ty : 1 - ty;
+      for (let i = 0; i < 2; i += 1) {
+        const xx = x0 + i;
+        if (xx < 0 || xx >= sw) continue;
+        const value = values[yy * sw + xx];
+        if (value === 255) continue;
+        const w = wy * (i ? tx : 1 - tx);
+        sum += value * w;
+        weight += w;
+      }
+    }
+    // Mostly gap: leave it a gap rather than let a sliver of a neighbour spread
+    // across the whole pixel.
+    if (weight < 0.25) return 255;
+    return Math.round(sum / weight);
   },
 
   _render(generation) {
@@ -207,9 +278,7 @@ export const OperaCanvasLayer = L.Layer.extend({
 
     const ctx = canvas.getContext('2d', { alpha: true });
     if (!ctx) return;
-    // The same choice the radar composite makes: this canvas holds decoded
-    // values, so interpolating it interpolates reflectivity rather than colour.
-    ctx.imageSmoothingEnabled = isSmoothing();
+    const smooth = isSmoothing();
 
     const lut = getEncodedLut({ opera: true });
     const view = viewKey(map, width, height);
@@ -227,24 +296,26 @@ export const OperaCanvasLayer = L.Layer.extend({
       return;
     }
 
-    let indices = projectionCache.get(view);
-    if (indices) {
-      touch(projectionCache, view, indices, PROJECTION_LIMIT);
+    let projection = projectionCache.get(view);
+    if (projection) {
+      touch(projectionCache, view, projection, PROJECTION_LIMIT);
     } else {
-      indices = this._buildProjectionIndex(width, height, generation);
-      if (!indices) return;
-      touch(projectionCache, view, indices, PROJECTION_LIMIT);
+      projection = this._buildProjectionIndex(width, height, generation);
+      if (!projection) return;
+      touch(projectionCache, view, projection, PROJECTION_LIMIT);
     }
 
     if (generation !== this._generation || !canvas.isConnected) return;
 
+    const { indices, gridX, gridY } = projection;
     const image = ctx.createImageData(width, height);
     const out = image.data;
     const values = this._values;
     for (let pixel = 0; pixel < indices.length; pixel += 1) {
       const source = indices[pixel];
       if (source < 0) continue;
-      const l = values[source] * 4;
+      const encoded = smooth ? this._sampleSmooth(gridX[pixel], gridY[pixel]) : values[source];
+      const l = encoded * 4;
       const o = pixel * 4;
       out[o] = lut[l];
       out[o + 1] = lut[l + 1];

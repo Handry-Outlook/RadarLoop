@@ -16,8 +16,9 @@
  *     main thread only blits the finished bitmap. The inline path below is kept
  *     as a fallback for browsers without OffscreenCanvas.
  *
- * Native tiles stop at zoom 7, so deeper zooms crop and nearest-neighbour scale
- * the z7 tile rather than letting the browser blur it.
+ * Native tiles stop at zoom 7, so deeper zooms crop the z7 tile and scale it
+ * here, where the reflectivity can be interpolated before it is coloured,
+ * rather than letting the browser scale the finished picture.
  */
 
 import { colourForMmh, encodedToMmh, getLevels, MIN_VISIBLE_MMH } from './radarScale.js';
@@ -26,6 +27,26 @@ import { available as workersAvailable, decodeTile } from './windyPool.js';
 import { isSmoothing } from './radarScale.js';
 
 export const MAX_NATIVE_ZOOM = 7;
+
+/**
+ * How deep the tile grid is built, as opposed to how deep the provider's data
+ * goes.
+ *
+ * These are two different limits and conflating them is what made the composite
+ * look like a mosaic when zoomed in. Leaflet reads `maxNativeZoom` as "stop
+ * making tiles here", so with it set to 7 the map at zoom 10 laid down zoom-7
+ * tiles and stretched each one across eight times its width in CSS — a nearest
+ * neighbour blow-up of a finished picture, which no amount of care inside the
+ * tile can undo. Building the grid deeper hands each tile to `createTile`,
+ * which cuts its own piece out of the zoom-7 parent and resamples the
+ * reflectivity it carries before the colours go on.
+ *
+ * Ten rather than deeper because the cost is a tile grid: a viewport holds
+ * roughly the same number of tiles at any zoom it is built for, so this is the
+ * work the app already does at zoom 7 and no more. Past ten the picture is
+ * smooth enough that stretching it costs nothing visible.
+ */
+export const MAX_TILE_ZOOM = 10;
 
 const LIVE_WINDOW_MS = 2 * 60 * 60 * 1000;
 const ARCHIVE_CUTOFF_KEY = 'windyArchiveCutoffMs';
@@ -150,6 +171,23 @@ export function devicePixelRatioStep() {
 const COMPOSITE_RE = /\/radar2\/(?:archive\/)?composite\//;
 
 const WindyRadarTileLayer = L.TileLayer.extend({
+  /**
+   * Leaflet's own version takes x and y from the coordinates but the zoom from
+   * the layer, which would ask for tiles past zoom 7 now that the grid is built
+   * that deep. Here the coordinates decide all three, so `createTile` can ask
+   * for the parent it means to crop.
+   */
+  getTileUrl(coords) {
+    return L.Util.template(this._url, {
+      ...this.options,
+      r: L.Browser.retina ? '@2x' : '',
+      s: this._getSubdomain(coords),
+      x: coords.x,
+      y: coords.y,
+      z: coords.z,
+    });
+  },
+
   createTile(coords, done) {
     const tile = document.createElement('canvas');
     const size = this.getTileSize();
@@ -164,6 +202,11 @@ const WindyRadarTileLayer = L.TileLayer.extend({
     tile.style.width = `${size.x}px`;
     tile.style.height = `${size.y}px`;
     tile.className = 'windy-radar-tile';
+    // The stylesheet asks for nearest-neighbour scaling, which keeps the classes
+    // crisp when the picture is stretched but is exactly what smoothing is meant
+    // to get rid of. Past the depth of the grid there is still some stretching
+    // left, so let it interpolate then.
+    tile.style.imageRendering = isSmoothing() ? 'auto' : 'pixelated';
 
     // Above native zoom, crop the parent z7 tile instead of requesting a tile
     // that does not exist.
@@ -268,20 +311,21 @@ export function createWindyRadarLayer(url, options = {}) {
     crossOrigin: true,
     refreshToken: options.refreshToken || Date.now(),
     /**
-     * Cap the tile zoom at Windy's native maximum, but do **not** raise it.
+     * Where the tile grid stops — not where the data does.
      *
-     * The original build set `minNativeZoom` to the maximum as well, forcing z7
-     * tiles at every zoom "for detail". Leaflet honours that by rendering the
-     * whole viewport at z7, so at map zoom 5 it requests sixteen times as many
-     * tiles — measured at ~392 per frame instead of ~35. Each of those is also
-     * decoded and recoloured per pixel, which is what made scrubbing heavy in
-     * both 2D and 3D. Windy serves every zoom from 3 upwards with real data, so
-     * the extra requests bought nothing that is visible at that scale.
+     * `minNativeZoom` must stay unset. The original build pinned it to the
+     * maximum, forcing z7 tiles at every zoom "for detail", and Leaflet honours
+     * that by rendering the whole viewport at z7: at map zoom 5 it asked for
+     * sixteen times as many tiles, measured at ~392 per frame instead of ~35,
+     * each decoded and recoloured per pixel. That is what made scrubbing heavy
+     * in both 2D and 3D, and it bought nothing — Windy serves every zoom from 3
+     * upwards with real data.
      *
-     * Above z7 there are no native tiles, so `createTile` crops and
-     * nearest-neighbour scales the z7 parent instead.
+     * Raising the maximum is the opposite case and costs nothing below zoom 7,
+     * where it does not apply. Above it there are no native tiles, so
+     * `createTile` crops the z7 parent — see MAX_TILE_ZOOM.
      */
-    maxNativeZoom: MAX_NATIVE_ZOOM,
+    maxNativeZoom: MAX_TILE_ZOOM,
     className: 'wx-tile windy-radar-tile',
   });
 }

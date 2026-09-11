@@ -2069,7 +2069,7 @@ input[type='number'] { color-scheme: inherit; }
   };
 
   // Worker sources, inlined for the single-file build.
-  const __workerSources = {"windyTile.worker.js":"/**\n * Windy radar tile worker.\n *\n * Windy's radar2 tiles are data, not pictures: R and G encode reflectivity and a\n * pure blue pixel is the no-data mask. Turning one into something drawable means\n * touching every pixel, and a viewport holds around forty tiles.\n *\n * Doing that on the main thread is what made scrubbing heavy — at a 2x device\n * pixel ratio a single frame is ten million pixels of JavaScript, competing with\n * Leaflet in 2D and with GL rendering in 3D. Fetch, decode, crop and recolour all\n * happen here instead, and the main thread receives a finished ImageBitmap it can\n * blit in one call.\n *\n * The colour scale arrives as a lookup table so no palette logic is duplicated:\n * the table is indexed by `r + g` directly, which is exact rather than a rounding\n * of the `(r + g) / 2` encoded value.\n *\n * In the bundled single-file build this source is inlined and started from a Blob\n * URL; in the modular build it is loaded as a normal module worker.\n */\n\n/* eslint-env worker */\n\n/** Colour tables held by id so a table is transferred once, not once per tile. */\nconst luts = new Map();\n\n/**\n * Recolours decoded tile pixels in place through the active scale.\n *\n * @param {ImageData} imageData\n * @param {Uint8ClampedArray} lut 511 RGBA entries indexed by `r + g`\n */\nfunction recolour(imageData, lut) {\n  const data = imageData.data;\n  for (let i = 0; i < data.length; i += 4) {\n    if (data[i + 3] < 2) continue;\n\n    const r = data[i];\n    const g = data[i + 1];\n\n    // A blue pixel is the provider's no-data mask, not weak echo. Tested by\n    // whether blue dominates rather than against fixed thresholds, because with\n    // smoothing on the edge of a coverage gap is a blend of the mask and the\n    // data beside it — and a half-blended mask pixel reads as a real echo under\n    // a fixed threshold, fringing every coverage boundary with rain that is not\n    // there. Unsmoothed the two tests agree on every pixel that occurs.\n    if (data[i + 2] > r + g && data[i + 2] > 24) {\n      data[i + 3] = 0;\n      continue;\n    }\n\n    // `encoded` is (r + g) / 2, so `r + g` indexes the table without rounding.\n    const sum = r + g;\n    const o = sum << 2;\n    const alpha = sum > 1 ? lut[o + 3] : 0;\n    if (!alpha) {\n      data[i + 3] = 0;\n      continue;\n    }\n\n    data[i] = lut[o];\n    data[i + 1] = lut[o + 1];\n    data[i + 2] = lut[o + 2];\n    data[i + 3] = alpha;\n  }\n  return imageData;\n}\n\n/**\n * Tries each URL in order and returns the first that decodes.\n *\n * The order matters: frames older than about two hours are only served from the\n * archive endpoint, and the caller reports back which one worked so the cutoff\n * can be learned.\n */\nasync function fetchBitmap(urls, signal) {\n  let lastError = null;\n  for (let i = 0; i < urls.length; i += 1) {\n    try {\n      const response = await fetch(urls[i], { mode: 'cors', credentials: 'omit', signal });\n      if (!response.ok) {\n        lastError = new Error(`HTTP ${response.status}`);\n        continue;\n      }\n      const blob = await response.blob();\n      return { bitmap: await createImageBitmap(blob), usedIndex: i };\n    } catch (error) {\n      lastError = error;\n    }\n  }\n  throw lastError || new Error('no tile URL succeeded');\n}\n\n/** One reusable canvas per worker — tiles in a frame share a size. */\nlet canvas = null;\nlet ctx = null;\n\nfunction surface(width, height) {\n  if (!canvas) {\n    canvas = new OffscreenCanvas(width, height);\n    ctx = canvas.getContext('2d', { willReadFrequently: true, alpha: true });\n  } else if (canvas.width !== width || canvas.height !== height) {\n    canvas.width = width;\n    canvas.height = height;\n  }\n  ctx.clearRect(0, 0, width, height);\n  return ctx;\n}\n\n/**\n * A second reusable canvas, holding a tile at its own source size.\n *\n * The satellite product needs one: its source is 256x512 and its output is\n * 256x256, and the decode has to happen at source resolution before anything is\n * scaled — the checkerboard inversion is defined on the source pixel grid, so\n * resampling first would smear block edges into each other.\n */\nlet scratch = null;\nlet sctx = null;\n\nfunction scratchSurface(width, height) {\n  if (!scratch) {\n    scratch = new OffscreenCanvas(width, height);\n    sctx = scratch.getContext('2d', { willReadFrequently: true, alpha: true });\n  } else if (scratch.width !== width || scratch.height !== height) {\n    scratch.width = width;\n    scratch.height = height;\n  }\n  sctx.imageSmoothingEnabled = false;\n  sctx.clearRect(0, 0, width, height);\n  return sctx;\n}\n\n/* ------------------------------------------------------------------ *\n * Satellite: visible + infrared\n * ------------------------------------------------------------------ */\n\n/**\n * Side of the satellite product's inverted-block checkerboard, in source pixels.\n * Kept in step with layers/windySat.js, which documents how it was found; a\n * worker cannot import, so the constants live in both places.\n */\nconst SAT_BLOCK = 16;\nconst SAT_ALPHA_LO = 40;\nconst SAT_ALPHA_HI = 120;\n\n/**\n * Undoes the checkerboard inversion the provider applies to alternate blocks.\n *\n * The two halves do not share a parity: the visible channel carries `255 - v` in\n * the blocks where the infrared channel carries `v`. Both candidate decodes are\n * exact negatives of one another, so nothing in the pixels distinguishes them —\n * the seams are equally smooth either way. What settles it is the ground: over\n * the Atlantic coast of the western Sahara the desert is the brightest thing a\n * visible channel sees and the open ocean nearly the darkest, while in the\n * infrared the baking sand is darkest and the cold cloud tops brightest. Only\n * one assignment puts both the right way up, and it is this one.\n */\nfunction deinvertBlocks(imageData) {\n  const { data, width, height } = imageData;\n  const half = height / 2;\n  for (let y = 0; y < height; y += 1) {\n    // The channel index enters the parity, which is what makes the halves differ.\n    const rowParity = (((y / SAT_BLOCK) | 0) + (y >= half ? 1 : 0)) % 2;\n    for (let x = 0; x < width; x += 1) {\n      if ((((x / SAT_BLOCK) | 0) + rowParity) % 2 !== 0) continue;\n      const i = (y * width + x) * 4;\n      data[i] = 255 - data[i];\n      data[i + 1] = 255 - data[i + 1];\n      data[i + 2] = 255 - data[i + 2];\n    }\n  }\n  return imageData;\n}\n\n/**\n * Collapses the source's two stacked channels into one drawable half-height tile.\n *\n * `weights` is the caller's coarse daylight grid, `grid` cells across, sampled\n * bilinearly: one where the visible channel is trustworthy, zero where the sun is\n * down. It is null when the tile needs no blend at all.\n */\nfunction composeChannels(source, out, channel, weights, grid) {\n  const w = source.width;\n  const half = source.height / 2;\n  const src = source.data;\n  const dst = out.data;\n  const span = SAT_ALPHA_HI - SAT_ALPHA_LO;\n\n  for (let y = 0; y < half; y += 1) {\n    const gy = weights ? (y / half) * grid : 0;\n    const y0 = weights ? Math.min(grid - 1, gy | 0) : 0;\n    const fy = gy - y0;\n\n    for (let x = 0; x < w; x += 1) {\n      const vis = src[(y * w + x) * 4];\n      const ir = src[((y + half) * w + x) * 4];\n\n      let v;\n      if (channel === 'ir') {\n        v = ir;\n      } else if (channel === 'vis') {\n        v = vis;\n      } else if (vis <= 1) {\n        // The visible channel's empty value, which covers the unlit hemisphere\n        // and everything else the sun is not reaching.\n        v = ir;\n      } else if (!weights) {\n        v = vis;\n      } else {\n        const gx = (x / w) * grid;\n        const x0 = Math.min(grid - 1, gx | 0);\n        const fx = gx - x0;\n        const r0 = y0 * (grid + 1) + x0;\n        const r1 = r0 + grid + 1;\n        const day = (weights[r0] * (1 - fx) + weights[r0 + 1] * fx) * (1 - fy)\n          + (weights[r1] * (1 - fx) + weights[r1 + 1] * fx) * fy;\n        v = ir + (vis - ir) * day;\n      }\n\n      const o = (y * w + x) * 4;\n      dst[o] = v;\n      dst[o + 1] = v;\n      dst[o + 2] = v;\n      dst[o + 3] = v <= SAT_ALPHA_LO ? 0 : (v >= SAT_ALPHA_HI ? 255 : ((v - SAT_ALPHA_LO) / span) * 255);\n    }\n  }\n  return out;\n}\n\n/** Decodes one satellite tile and draws it into the destination surface. */\nfunction drawSatellite(bitmap, job) {\n  const w = bitmap.width;\n  const h = bitmap.height;\n  const half = h / 2;\n\n  const context = scratchSurface(w, h);\n  context.drawImage(bitmap, 0, 0);\n  const source = deinvertBlocks(context.getImageData(0, 0, w, h));\n  const composed = composeChannels(source, new ImageData(w, half), job.channel, job.weights, job.grid);\n  // Written back into the same scratch canvas so the scale-and-crop below is a\n  // single drawImage rather than another allocation.\n  context.putImageData(composed, 0, 0);\n\n  const out = surface(job.dw, job.dh);\n  out.imageSmoothingEnabled = false;\n  if (job.crop) {\n    const sw = w / job.crop.scale;\n    const sh = half / job.crop.scale;\n    out.drawImage(scratch,\n      Math.round(job.crop.ix * sw), Math.round(job.crop.iy * sh),\n      Math.max(1, Math.round(sw)), Math.max(1, Math.round(sh)),\n      0, 0, job.dw, job.dh);\n  } else {\n    out.drawImage(scratch, 0, 0, w, half, 0, 0, job.dw, job.dh);\n  }\n}\n\n/* ------------------------------------------------------------------ *\n * Dispatch\n * ------------------------------------------------------------------ */\n\nself.onmessage = async (event) => {\n  const job = event.data;\n\n  if (job.type === 'lut') {\n    luts.set(job.lutId, job.lut);\n    // Only the newest table is ever asked for; the rest are dead weight.\n    if (luts.size > 3) luts.delete(luts.keys().next().value);\n    return;\n  }\n\n  const { id, urls, dw, dh, crop, lutId } = job;\n\n  try {\n    if (job.mode === 'visir') {\n      const { bitmap, usedIndex } = await fetchBitmap(urls);\n      drawSatellite(bitmap, job);\n      bitmap.close();\n      const image = canvas.transferToImageBitmap();\n      // Which URL answered matters: falling through to the second one is how the\n      // caller learns where the live endpoint stops.\n      self.postMessage({ id, ok: true, bitmap: image, usedIndex }, [image]);\n      return;\n    }\n\n    const lut = luts.get(lutId);\n    if (!lut) {\n      self.postMessage({ id, ok: false, error: 'colour table not registered' });\n      return;\n    }\n\n    const { bitmap, usedIndex } = await fetchBitmap(urls);\n    const context = surface(dw, dh);\n    // Smoothing the *data* is what makes this sharp rather than blurred: the\n    // channels carry reflectivity, so interpolating them interpolates the value,\n    // and the colour table then re-quantises it into the same hard bands.\n    context.imageSmoothingEnabled = job.smooth === true;\n    context.imageSmoothingQuality = 'high';\n\n    if (crop) {\n      const sw = bitmap.width / crop.scale;\n      const sh = bitmap.height / crop.scale;\n      context.drawImage(\n        bitmap,\n        Math.round(crop.ix * sw), Math.round(crop.iy * sh),\n        Math.max(1, Math.round(sw)), Math.max(1, Math.round(sh)),\n        0, 0, dw, dh,\n      );\n    } else {\n      context.drawImage(bitmap, 0, 0, dw, dh);\n    }\n    bitmap.close();\n\n    const pixels = context.getImageData(0, 0, dw, dh);\n    context.putImageData(recolour(pixels, lut), 0, 0);\n\n    const out = canvas.transferToImageBitmap();\n    self.postMessage({ id, ok: true, bitmap: out, usedIndex }, [out]);\n  } catch (error) {\n    self.postMessage({ id, ok: false, error: String(error && error.message ? error.message : error) });\n  }\n};\n","accumulation.worker.js":"/**\n * Rainfall accumulation worker.\n *\n * Decodes Windy radar tiles for a series of frames and integrates rainfall rate\n * over time into a per-output-pixel total, then colours the result.\n *\n * This runs off the main thread because a one-hour accumulation over a wide view\n * decodes dozens of tiles and touches millions of pixels — doing it inline froze\n * the map for seconds at a time.\n *\n * In the bundled single-file build this source is inlined and started from a Blob\n * URL; in the modular build it is loaded as a normal worker script.\n */\n\n/* eslint-env worker */\n\nlet currentJob = 0;\n\n/** Reverses the tile encoding: channel value -> rainfall rate in mm/h. */\nfunction buildRateLut(dbzPerUnit, nerf) {\n  const lut = new Float32Array(256);\n  for (let encoded = 0; encoded < 256; encoded += 1) {\n    const dbz = Math.max(0, encoded * dbzPerUnit);\n    lut[encoded] = dbz > 0 ? (10 ** (dbz / 10) * 0.005) ** 0.625 * nerf : 0;\n  }\n  return lut;\n}\n\nfunction colourForMm(mm, stops) {\n  for (const [limit, rgba] of stops) if (mm < limit) return rgba;\n  return stops[stops.length - 1][1];\n}\n\n/** Decodes one tile into a rate grid plus a validity mask. */\nasync function decodeTile(url, lut) {\n  const response = await fetch(url, { mode: 'cors', cache: 'force-cache' });\n  if (!response.ok) throw new Error(`tile HTTP ${response.status}`);\n  const bitmap = await createImageBitmap(await response.blob());\n\n  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);\n  const ctx = canvas.getContext('2d', { willReadFrequently: true });\n  ctx.drawImage(bitmap, 0, 0);\n  bitmap.close();\n\n  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);\n  const count = canvas.width * canvas.height;\n  const mmh = new Float32Array(count);\n  const valid = new Uint8Array(count);\n\n  for (let i = 0, p = 0; i < count; i += 1, p += 4) {\n    if (data[p + 3] < 2) continue;\n    const r = data[p];\n    const g = data[p + 1];\n    const b = data[p + 2];\n    // Near-pure blue is the provider's no-data mask, not weak echo.\n    if (b > 200 && r < 8 && g < 8) continue;\n    const encoded = (r + g) / 2;\n    if (encoded <= 0.5) continue;\n    mmh[i] = lut[Math.min(255, Math.round(encoded))];\n    valid[i] = 1;\n  }\n  return { width: canvas.width, height: canvas.height, mmh, valid };\n}\n\n/** Runs `jobs` with bounded concurrency. */\nasync function pool(items, limit, worker) {\n  let cursor = 0;\n  let any = false;\n  const runners = Array.from({ length: Math.max(1, limit) }, async () => {\n    while (cursor < items.length) {\n      const item = items[cursor++];\n      if (await worker(item)) any = true;\n    }\n  });\n  await Promise.all(runners);\n  return any;\n}\n\nself.onmessage = async (event) => {\n  const message = event.data || {};\n  if (message.type !== 'calculate') return;\n\n  const { jobId, width, height, frames, groups, colourStops, constants, concurrency = 4 } = message;\n  currentJob = jobId;\n\n  try {\n    const lut = buildRateLut(constants.dbzPerEncodedUnit, constants.mmhNerf);\n    const totals = new Float32Array(width * height);\n    const tileCache = new Map();\n    let validFrames = 0;\n    let missingFrames = 0;\n\n    for (let fi = 0; fi < frames.length; fi += 1) {\n      if (jobId !== currentJob) return;\n      const frame = frames[fi];\n\n      const hadData = await pool(groups, concurrency, async (group) => {\n        if (jobId !== currentJob) return false;\n        const url = frame.urls[group.key];\n        if (!url) return false;\n        try {\n          let source = tileCache.get(url);\n          if (!source) {\n            source = await decodeTile(url, lut);\n            // Bounded so a long accumulation cannot exhaust worker memory.\n            if (tileCache.size > 64) tileCache.delete(tileCache.keys().next().value);\n            tileCache.set(url, source);\n          }\n          const { idx, px, py } = group;\n          for (let i = 0; i < idx.length; i += 1) {\n            const sx = Math.max(0, Math.min(source.width - 1, Math.floor((px[i] * source.width) / 256)));\n            const sy = Math.max(0, Math.min(source.height - 1, Math.floor((py[i] * source.height) / 256)));\n            const off = sy * source.width + sx;\n            if (source.valid[off]) totals[idx[i]] += source.mmh[off] * frame.durationHours;\n          }\n          return true;\n        } catch {\n          return false;\n        }\n      });\n\n      if (hadData) validFrames += 1;\n      else missingFrames += 1;\n\n      if (fi === 0 || fi === frames.length - 1 || fi % 2 === 0) {\n        self.postMessage({\n          type: 'progress',\n          jobId,\n          percent: Math.floor(((fi + 1) / frames.length) * 96),\n          text: `Accumulating frame ${fi + 1} of ${frames.length}`,\n        });\n      }\n    }\n\n    if (jobId !== currentJob) return;\n    self.postMessage({ type: 'progress', jobId, percent: 97, text: 'Colouring accumulated rainfall' });\n\n    const rgba = new Uint8ClampedArray(width * height * 4);\n    for (let i = 0; i < totals.length; i += 1) {\n      const colour = colourForMm(totals[i], colourStops);\n      const o = i * 4;\n      rgba[o] = colour[0];\n      rgba[o + 1] = colour[1];\n      rgba[o + 2] = colour[2];\n      rgba[o + 3] = colour[3];\n    }\n\n    self.postMessage(\n      { type: 'done', jobId, width, height, totalsBuffer: totals.buffer, rgbaBuffer: rgba.buffer, validFrames, missingFrames },\n      [totals.buffer, rgba.buffer],\n    );\n  } catch (error) {\n    self.postMessage({ type: 'error', jobId, message: error?.message || 'Accumulation failed' });\n  }\n};\n"};
+  const __workerSources = {"windyTile.worker.js":"/**\n * Windy radar tile worker.\n *\n * Windy's radar2 tiles are data, not pictures: R and G encode reflectivity and a\n * pure blue pixel is the no-data mask. Turning one into something drawable means\n * touching every pixel, and a viewport holds around forty tiles.\n *\n * Doing that on the main thread is what made scrubbing heavy — at a 2x device\n * pixel ratio a single frame is ten million pixels of JavaScript, competing with\n * Leaflet in 2D and with GL rendering in 3D. Fetch, decode, crop and recolour all\n * happen here instead, and the main thread receives a finished ImageBitmap it can\n * blit in one call.\n *\n * The colour scale arrives as a lookup table so no palette logic is duplicated:\n * the table is indexed by `r + g` directly, which is exact rather than a rounding\n * of the `(r + g) / 2` encoded value.\n *\n * In the bundled single-file build this source is inlined and started from a Blob\n * URL; in the modular build it is loaded as a normal module worker.\n */\n\n/* eslint-env worker */\n\n/** Colour tables held by id so a table is transferred once, not once per tile. */\nconst luts = new Map();\n\n/**\n * How wide a grid the smoothing works on, and how wide its kernel is.\n *\n * The blur is measured against the radar's own sample spacing rather than\n * against the output, which is what makes it behave the same at every zoom: the\n * radius comes out at about two thirds of a sample whether that sample ends up\n * three output pixels wide or fifty.\n *\n * What varies is how finely that is resolved. Three pixels per sample is the\n * coarsest grid a radius of two fits on at all, and it is enough when the tile\n * is only stretched a few times over. Stretched further the eye can follow the\n * kernel itself, so the grid is refined — but only until it reaches a couple of\n * hundred pixels, because the cost is the square of it and a tile has to decode\n * in the time a scrubbed frame allows.\n */\nconst FIELD_WIDTH = 256;\nconst FIELD_MIN_SCALE = 3;\nconst FIELD_MAX_SCALE = 6;\n/** A little under a sample: enough to take the corners off the grid, not enough\n *  to move a boundary somewhere the data does not put it. */\nconst FIELD_KERNEL = 0.67;\n\nconst fieldScale = (samples) =>\n  Math.max(FIELD_MIN_SCALE, Math.min(FIELD_MAX_SCALE, FIELD_WIDTH / samples));\n\n/**\n * Recolours decoded tile pixels in place through the active scale.\n *\n * @param {ImageData} imageData\n * @param {Uint8ClampedArray} lut 511 RGBA entries indexed by `r + g`\n */\nfunction recolour(imageData, lut) {\n  const data = imageData.data;\n  for (let i = 0; i < data.length; i += 4) {\n    if (data[i + 3] < 2) continue;\n\n    const r = data[i];\n    const g = data[i + 1];\n\n    // A blue pixel is the provider's no-data mask, not weak echo. Tested by\n    // whether blue dominates rather than against fixed thresholds, because with\n    // smoothing on the edge of a coverage gap is a blend of the mask and the\n    // data beside it — and a half-blended mask pixel reads as a real echo under\n    // a fixed threshold, fringing every coverage boundary with rain that is not\n    // there. Unsmoothed the two tests agree on every pixel that occurs.\n    if (data[i + 2] > r + g && data[i + 2] > 24) {\n      data[i + 3] = 0;\n      continue;\n    }\n\n    // `encoded` is (r + g) / 2, so `r + g` indexes the table without rounding.\n    const sum = r + g;\n    const o = sum << 2;\n    const alpha = sum > 1 ? lut[o + 3] : 0;\n    if (!alpha) {\n      data[i + 3] = 0;\n      continue;\n    }\n\n    data[i] = lut[o];\n    data[i + 1] = lut[o + 1];\n    data[i + 2] = lut[o + 2];\n    data[i + 3] = alpha;\n  }\n  return imageData;\n}\n\n/**\n * Tries each URL in order and returns the first that decodes.\n *\n * The order matters: frames older than about two hours are only served from the\n * archive endpoint, and the caller reports back which one worked so the cutoff\n * can be learned.\n */\nasync function fetchBitmap(urls, signal) {\n  let lastError = null;\n  for (let i = 0; i < urls.length; i += 1) {\n    try {\n      const response = await fetch(urls[i], { mode: 'cors', credentials: 'omit', signal });\n      if (!response.ok) {\n        lastError = new Error(`HTTP ${response.status}`);\n        continue;\n      }\n      const blob = await response.blob();\n      return { bitmap: await createImageBitmap(blob), usedIndex: i };\n    } catch (error) {\n      lastError = error;\n    }\n  }\n  throw lastError || new Error('no tile URL succeeded');\n}\n\n/**\n * Smooths the reflectivity field in place, before it is coloured.\n *\n * Interpolating during the draw is not enough on its own. Above the provider's\n * native zoom a tile is a small crop of its parent blown up — at four zoom\n * levels past it, thirty-two source pixels stretched across two hundred and\n * fifty-six — and bilinear interpolation of that still carries the source grid\n * plainly enough to read as blocks. Quantising into colour classes afterwards\n * puts a hard edge on every one of those blocks, which is what makes it look\n * pixelated rather than merely soft.\n *\n * So the values get a proper blur first, a little under a sample wide. The\n * classes are applied to the result, so they stay exactly as sharp as they\n * were: what moves is where the boundaries fall, not how crisp they are.\n *\n * Three box passes, which is close enough to a Gaussian for this and costs four\n * additions per pixel per pass rather than a kernel multiply.\n *\n * Coverage gaps are held out of it. The provider masks them in blue, and a blur\n * that averaged them in would pull every boundary inward and invent a soft fringe\n * of drizzle around each one; each pass therefore averages only the samples that\n * carry data and divides by how many it found.\n */\nfunction smoothField(imageData, radius) {\n  const { data, width, height } = imageData;\n  const n = width * height;\n  const value = new Float32Array(n);\n  const weight = new Float32Array(n);\n\n  for (let i = 0, p = 0; i < data.length; i += 4, p += 1) {\n    // Nothing was drawn here, or it is the provider's no-data mask (blue\n    // dominant) rather than weak echo. Either way it is not a sample.\n    if (data[i + 3] < 2) continue;\n    if (data[i + 2] > data[i] + data[i + 1] && data[i + 2] > 24) continue;\n    value[p] = data[i] + data[i + 1];\n    weight[p] = 1;\n  }\n\n  const valueTmp = new Float32Array(n);\n  const weightTmp = new Float32Array(n);\n\n  for (let pass = 0; pass < 3; pass += 1) {\n    blurAxis(value, weight, valueTmp, weightTmp, width, height, radius, true);\n    blurAxis(valueTmp, weightTmp, value, weight, width, height, radius, false);\n  }\n\n  // Back into the pixels, in the form `recolour` reads: the sum in red and\n  // green, and blue carrying the mask.\n  for (let i = 0, p = 0; i < data.length; i += 4, p += 1) {\n    if (weight[p] <= 0.02) {\n      data[i] = 0;\n      data[i + 1] = 0;\n      data[i + 2] = 255;\n      continue;\n    }\n    const sum = Math.max(0, Math.min(510, value[p] / weight[p]));\n    data[i] = Math.round(sum / 2);\n    data[i + 1] = sum - data[i];\n    data[i + 2] = 0;\n    data[i + 3] = 255;\n  }\n}\n\n/** One box pass along a single axis, carrying the weights with the values. */\nfunction blurAxis(value, weight, outValue, outWeight, width, height, radius, horizontal) {\n  const outer = horizontal ? height : width;\n  const inner = horizontal ? width : height;\n  const step = horizontal ? 1 : width;\n\n  for (let o = 0; o < outer; o += 1) {\n    const base = horizontal ? o * width : o;\n    let sumValue = 0;\n    let sumWeight = 0;\n\n    // Prime the window on the first cell of the row.\n    for (let k = 0; k <= radius && k < inner; k += 1) {\n      sumValue += value[base + k * step];\n      sumWeight += weight[base + k * step];\n    }\n    outValue[base] = sumValue;\n    outWeight[base] = sumWeight;\n\n    for (let i = 1; i < inner; i += 1) {\n      const add = i + radius;\n      const drop = i - radius - 1;\n      if (add < inner) {\n        sumValue += value[base + add * step];\n        sumWeight += weight[base + add * step];\n      }\n      if (drop >= 0) {\n        sumValue -= value[base + drop * step];\n        sumWeight -= weight[base + drop * step];\n      }\n      outValue[base + i * step] = sumValue;\n      outWeight[base + i * step] = sumWeight;\n    }\n  }\n}\n\n/**\n * A third canvas, holding the tile plus a margin of the data around it.\n *\n * The smoothing is a local average, so a pixel on the tile's edge would\n * otherwise average only the half of its neighbourhood that fell inside the\n * tile — and the tile next to it would do the same from the other side, leaving\n * a visible join down every boundary. Drawing a margin of the surrounding data\n * and discarding it afterwards gives the edge pixels the neighbours they need.\n */\nlet padded = null;\nlet pctx = null;\n\nfunction paddedSurface(width, height) {\n  if (!padded) {\n    padded = new OffscreenCanvas(width, height);\n    pctx = padded.getContext('2d', { willReadFrequently: true, alpha: true });\n  } else if (padded.width !== width || padded.height !== height) {\n    padded.width = width;\n    padded.height = height;\n  }\n  pctx.clearRect(0, 0, width, height);\n  return pctx;\n}\n\n/** One reusable canvas per worker — tiles in a frame share a size. */\nlet canvas = null;\nlet ctx = null;\n\nfunction surface(width, height) {\n  if (!canvas) {\n    canvas = new OffscreenCanvas(width, height);\n    ctx = canvas.getContext('2d', { willReadFrequently: true, alpha: true });\n  } else if (canvas.width !== width || canvas.height !== height) {\n    canvas.width = width;\n    canvas.height = height;\n  }\n  ctx.clearRect(0, 0, width, height);\n  return ctx;\n}\n\n/**\n * A second reusable canvas, holding a tile at its own source size.\n *\n * The satellite product needs one: its source is 256x512 and its output is\n * 256x256, and the decode has to happen at source resolution before anything is\n * scaled — the checkerboard inversion is defined on the source pixel grid, so\n * resampling first would smear block edges into each other.\n */\nlet scratch = null;\nlet sctx = null;\n\nfunction scratchSurface(width, height) {\n  if (!scratch) {\n    scratch = new OffscreenCanvas(width, height);\n    sctx = scratch.getContext('2d', { willReadFrequently: true, alpha: true });\n  } else if (scratch.width !== width || scratch.height !== height) {\n    scratch.width = width;\n    scratch.height = height;\n  }\n  sctx.imageSmoothingEnabled = false;\n  sctx.clearRect(0, 0, width, height);\n  return sctx;\n}\n\n/* ------------------------------------------------------------------ *\n * Satellite: visible + infrared\n * ------------------------------------------------------------------ */\n\n/**\n * Side of the satellite product's inverted-block checkerboard, in source pixels.\n * Kept in step with layers/windySat.js, which documents how it was found; a\n * worker cannot import, so the constants live in both places.\n */\nconst SAT_BLOCK = 16;\nconst SAT_ALPHA_LO = 40;\nconst SAT_ALPHA_HI = 120;\n\n/**\n * Undoes the checkerboard inversion the provider applies to alternate blocks.\n *\n * The two halves do not share a parity: the visible channel carries `255 - v` in\n * the blocks where the infrared channel carries `v`. Both candidate decodes are\n * exact negatives of one another, so nothing in the pixels distinguishes them —\n * the seams are equally smooth either way. What settles it is the ground: over\n * the Atlantic coast of the western Sahara the desert is the brightest thing a\n * visible channel sees and the open ocean nearly the darkest, while in the\n * infrared the baking sand is darkest and the cold cloud tops brightest. Only\n * one assignment puts both the right way up, and it is this one.\n */\nfunction deinvertBlocks(imageData) {\n  const { data, width, height } = imageData;\n  const half = height / 2;\n  for (let y = 0; y < height; y += 1) {\n    // The channel index enters the parity, which is what makes the halves differ.\n    const rowParity = (((y / SAT_BLOCK) | 0) + (y >= half ? 1 : 0)) % 2;\n    for (let x = 0; x < width; x += 1) {\n      if ((((x / SAT_BLOCK) | 0) + rowParity) % 2 !== 0) continue;\n      const i = (y * width + x) * 4;\n      data[i] = 255 - data[i];\n      data[i + 1] = 255 - data[i + 1];\n      data[i + 2] = 255 - data[i + 2];\n    }\n  }\n  return imageData;\n}\n\n/**\n * Collapses the source's two stacked channels into one drawable half-height tile.\n *\n * `weights` is the caller's coarse daylight grid, `grid` cells across, sampled\n * bilinearly: one where the visible channel is trustworthy, zero where the sun is\n * down. It is null when the tile needs no blend at all.\n */\nfunction composeChannels(source, out, channel, weights, grid) {\n  const w = source.width;\n  const half = source.height / 2;\n  const src = source.data;\n  const dst = out.data;\n  const span = SAT_ALPHA_HI - SAT_ALPHA_LO;\n\n  for (let y = 0; y < half; y += 1) {\n    const gy = weights ? (y / half) * grid : 0;\n    const y0 = weights ? Math.min(grid - 1, gy | 0) : 0;\n    const fy = gy - y0;\n\n    for (let x = 0; x < w; x += 1) {\n      const vis = src[(y * w + x) * 4];\n      const ir = src[((y + half) * w + x) * 4];\n\n      let v;\n      if (channel === 'ir') {\n        v = ir;\n      } else if (channel === 'vis') {\n        v = vis;\n      } else if (vis <= 1) {\n        // The visible channel's empty value, which covers the unlit hemisphere\n        // and everything else the sun is not reaching.\n        v = ir;\n      } else if (!weights) {\n        v = vis;\n      } else {\n        const gx = (x / w) * grid;\n        const x0 = Math.min(grid - 1, gx | 0);\n        const fx = gx - x0;\n        const r0 = y0 * (grid + 1) + x0;\n        const r1 = r0 + grid + 1;\n        const day = (weights[r0] * (1 - fx) + weights[r0 + 1] * fx) * (1 - fy)\n          + (weights[r1] * (1 - fx) + weights[r1 + 1] * fx) * fy;\n        v = ir + (vis - ir) * day;\n      }\n\n      const o = (y * w + x) * 4;\n      dst[o] = v;\n      dst[o + 1] = v;\n      dst[o + 2] = v;\n      dst[o + 3] = v <= SAT_ALPHA_LO ? 0 : (v >= SAT_ALPHA_HI ? 255 : ((v - SAT_ALPHA_LO) / span) * 255);\n    }\n  }\n  return out;\n}\n\n/** Decodes one satellite tile and draws it into the destination surface. */\nfunction drawSatellite(bitmap, job) {\n  const w = bitmap.width;\n  const h = bitmap.height;\n  const half = h / 2;\n\n  const context = scratchSurface(w, h);\n  context.drawImage(bitmap, 0, 0);\n  const source = deinvertBlocks(context.getImageData(0, 0, w, h));\n  const composed = composeChannels(source, new ImageData(w, half), job.channel, job.weights, job.grid);\n  // Written back into the same scratch canvas so the scale-and-crop below is a\n  // single drawImage rather than another allocation.\n  context.putImageData(composed, 0, 0);\n\n  const out = surface(job.dw, job.dh);\n  out.imageSmoothingEnabled = false;\n  if (job.crop) {\n    const sw = w / job.crop.scale;\n    const sh = half / job.crop.scale;\n    out.drawImage(scratch,\n      Math.round(job.crop.ix * sw), Math.round(job.crop.iy * sh),\n      Math.max(1, Math.round(sw)), Math.max(1, Math.round(sh)),\n      0, 0, job.dw, job.dh);\n  } else {\n    out.drawImage(scratch, 0, 0, w, half, 0, 0, job.dw, job.dh);\n  }\n}\n\n/* ------------------------------------------------------------------ *\n * Dispatch\n * ------------------------------------------------------------------ */\n\nself.onmessage = async (event) => {\n  const job = event.data;\n\n  if (job.type === 'lut') {\n    luts.set(job.lutId, job.lut);\n    // Only the newest table is ever asked for; the rest are dead weight.\n    if (luts.size > 3) luts.delete(luts.keys().next().value);\n    return;\n  }\n\n  const { id, urls, dw, dh, crop, lutId } = job;\n\n  try {\n    if (job.mode === 'visir') {\n      const { bitmap, usedIndex } = await fetchBitmap(urls);\n      drawSatellite(bitmap, job);\n      bitmap.close();\n      const image = canvas.transferToImageBitmap();\n      // Which URL answered matters: falling through to the second one is how the\n      // caller learns where the live endpoint stops.\n      self.postMessage({ id, ok: true, bitmap: image, usedIndex }, [image]);\n      return;\n    }\n\n    const lut = luts.get(lutId);\n    if (!lut) {\n      self.postMessage({ id, ok: false, error: 'colour table not registered' });\n      return;\n    }\n\n    const { bitmap, usedIndex } = await fetchBitmap(urls);\n    const smooth = job.smooth === true;\n\n    // The source rectangle this tile is cut from. Past the provider's native\n    // zoom that is a fraction of the parent tile, which is where the stretch —\n    // and the blockiness — comes from.\n    const sx = crop ? (crop.ix * bitmap.width) / crop.scale : 0;\n    const sy = crop ? (crop.iy * bitmap.height) / crop.scale : 0;\n    const sw = crop ? bitmap.width / crop.scale : bitmap.width;\n    const sh = crop ? bitmap.height / crop.scale : bitmap.height;\n\n    // How many output pixels one sample covers. At two or less the tile is near\n    // enough its own resolution that there is no grid to see, and the blur would\n    // only cost detail.\n    const up = Math.min(dw / sw, dh / sh);\n    const soften = smooth && up >= 3;\n\n    if (soften) {\n      // Smooth on a grid a few pixels per sample, not at output resolution.\n      // A sample is all the detail the data has, so that is enough to carry the\n      // kernel, and the rest of the stretch is then one hardware-interpolated\n      // draw of a field that is already smooth. Doing it at output resolution\n      // instead cost fifty-nine milliseconds a tile against six, for a result\n      // no eye could separate.\n      const scale = fieldScale(Math.max(sw, sh));\n      const radius = Math.max(1, Math.round(scale * FIELD_KERNEL));\n      // Three box passes reach three radii, so that is how much of the\n      // surrounding data each tile has to bring in with it.\n      const margin = radius * 3;\n      const mw = Math.max(1, Math.round(sw * scale));\n      const mh = Math.max(1, Math.round(sh * scale));\n      const work = paddedSurface(mw + margin * 2, mh + margin * 2);\n      work.imageSmoothingEnabled = true;\n      work.imageSmoothingQuality = 'high';\n\n      // Widen the source rectangle by the margin, then pull it back inside the\n      // bitmap — the destination moves with it, so the tile stays registered.\n      // Without the margin each tile would average only the half of every edge\n      // pixel's surroundings that fell inside it, and its neighbour would do the\n      // same from the other side, leaving a join down every boundary.\n      const pad = margin / scale;\n      const x0 = Math.max(0, sx - pad);\n      const y0 = Math.max(0, sy - pad);\n      const x1 = Math.min(bitmap.width, sx + sw + pad);\n      const y1 = Math.min(bitmap.height, sy + sh + pad);\n      work.drawImage(\n        bitmap,\n        x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0),\n        margin + (x0 - sx) * scale, margin + (y0 - sy) * scale,\n        (x1 - x0) * scale, (y1 - y0) * scale,\n      );\n      bitmap.close();\n\n      const field = work.getImageData(0, 0, mw + margin * 2, mh + margin * 2);\n      smoothField(field, radius);\n      work.putImageData(field, 0, 0);\n\n      const context = surface(dw, dh);\n      context.imageSmoothingEnabled = true;\n      context.imageSmoothingQuality = 'high';\n      context.drawImage(padded, margin, margin, mw, mh, 0, 0, dw, dh);\n      const pixels = context.getImageData(0, 0, dw, dh);\n      context.putImageData(recolour(pixels, lut), 0, 0);\n    } else {\n      const context = surface(dw, dh);\n      // Interpolating the *channels* interpolates the value they encode, so the\n      // colour table still re-quantises the result into the same hard bands.\n      // That is what keeps this sharp rather than blurred.\n      context.imageSmoothingEnabled = smooth;\n      context.imageSmoothingQuality = 'high';\n      context.drawImage(\n        bitmap,\n        sx, sy, Math.max(1, sw), Math.max(1, sh),\n        0, 0, dw, dh,\n      );\n      bitmap.close();\n      const pixels = context.getImageData(0, 0, dw, dh);\n      context.putImageData(recolour(pixels, lut), 0, 0);\n    }\n\n    const out = canvas.transferToImageBitmap();\n    self.postMessage({ id, ok: true, bitmap: out, usedIndex }, [out]);\n  } catch (error) {\n    self.postMessage({ id, ok: false, error: String(error && error.message ? error.message : error) });\n  }\n};\n","accumulation.worker.js":"/**\n * Rainfall accumulation worker.\n *\n * Decodes Windy radar tiles for a series of frames and integrates rainfall rate\n * over time into a per-output-pixel total, then colours the result.\n *\n * This runs off the main thread because a one-hour accumulation over a wide view\n * decodes dozens of tiles and touches millions of pixels — doing it inline froze\n * the map for seconds at a time.\n *\n * In the bundled single-file build this source is inlined and started from a Blob\n * URL; in the modular build it is loaded as a normal worker script.\n */\n\n/* eslint-env worker */\n\nlet currentJob = 0;\n\n/** Reverses the tile encoding: channel value -> rainfall rate in mm/h. */\nfunction buildRateLut(dbzPerUnit, nerf) {\n  const lut = new Float32Array(256);\n  for (let encoded = 0; encoded < 256; encoded += 1) {\n    const dbz = Math.max(0, encoded * dbzPerUnit);\n    lut[encoded] = dbz > 0 ? (10 ** (dbz / 10) * 0.005) ** 0.625 * nerf : 0;\n  }\n  return lut;\n}\n\nfunction colourForMm(mm, stops) {\n  for (const [limit, rgba] of stops) if (mm < limit) return rgba;\n  return stops[stops.length - 1][1];\n}\n\n/** Decodes one tile into a rate grid plus a validity mask. */\nasync function decodeTile(url, lut) {\n  const response = await fetch(url, { mode: 'cors', cache: 'force-cache' });\n  if (!response.ok) throw new Error(`tile HTTP ${response.status}`);\n  const bitmap = await createImageBitmap(await response.blob());\n\n  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);\n  const ctx = canvas.getContext('2d', { willReadFrequently: true });\n  ctx.drawImage(bitmap, 0, 0);\n  bitmap.close();\n\n  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);\n  const count = canvas.width * canvas.height;\n  const mmh = new Float32Array(count);\n  const valid = new Uint8Array(count);\n\n  for (let i = 0, p = 0; i < count; i += 1, p += 4) {\n    if (data[p + 3] < 2) continue;\n    const r = data[p];\n    const g = data[p + 1];\n    const b = data[p + 2];\n    // Near-pure blue is the provider's no-data mask, not weak echo.\n    if (b > 200 && r < 8 && g < 8) continue;\n    const encoded = (r + g) / 2;\n    if (encoded <= 0.5) continue;\n    mmh[i] = lut[Math.min(255, Math.round(encoded))];\n    valid[i] = 1;\n  }\n  return { width: canvas.width, height: canvas.height, mmh, valid };\n}\n\n/** Runs `jobs` with bounded concurrency. */\nasync function pool(items, limit, worker) {\n  let cursor = 0;\n  let any = false;\n  const runners = Array.from({ length: Math.max(1, limit) }, async () => {\n    while (cursor < items.length) {\n      const item = items[cursor++];\n      if (await worker(item)) any = true;\n    }\n  });\n  await Promise.all(runners);\n  return any;\n}\n\nself.onmessage = async (event) => {\n  const message = event.data || {};\n  if (message.type !== 'calculate') return;\n\n  const { jobId, width, height, frames, groups, colourStops, constants, concurrency = 4 } = message;\n  currentJob = jobId;\n\n  try {\n    const lut = buildRateLut(constants.dbzPerEncodedUnit, constants.mmhNerf);\n    const totals = new Float32Array(width * height);\n    const tileCache = new Map();\n    let validFrames = 0;\n    let missingFrames = 0;\n\n    for (let fi = 0; fi < frames.length; fi += 1) {\n      if (jobId !== currentJob) return;\n      const frame = frames[fi];\n\n      const hadData = await pool(groups, concurrency, async (group) => {\n        if (jobId !== currentJob) return false;\n        const url = frame.urls[group.key];\n        if (!url) return false;\n        try {\n          let source = tileCache.get(url);\n          if (!source) {\n            source = await decodeTile(url, lut);\n            // Bounded so a long accumulation cannot exhaust worker memory.\n            if (tileCache.size > 64) tileCache.delete(tileCache.keys().next().value);\n            tileCache.set(url, source);\n          }\n          const { idx, px, py } = group;\n          for (let i = 0; i < idx.length; i += 1) {\n            const sx = Math.max(0, Math.min(source.width - 1, Math.floor((px[i] * source.width) / 256)));\n            const sy = Math.max(0, Math.min(source.height - 1, Math.floor((py[i] * source.height) / 256)));\n            const off = sy * source.width + sx;\n            if (source.valid[off]) totals[idx[i]] += source.mmh[off] * frame.durationHours;\n          }\n          return true;\n        } catch {\n          return false;\n        }\n      });\n\n      if (hadData) validFrames += 1;\n      else missingFrames += 1;\n\n      if (fi === 0 || fi === frames.length - 1 || fi % 2 === 0) {\n        self.postMessage({\n          type: 'progress',\n          jobId,\n          percent: Math.floor(((fi + 1) / frames.length) * 96),\n          text: `Accumulating frame ${fi + 1} of ${frames.length}`,\n        });\n      }\n    }\n\n    if (jobId !== currentJob) return;\n    self.postMessage({ type: 'progress', jobId, percent: 97, text: 'Colouring accumulated rainfall' });\n\n    const rgba = new Uint8ClampedArray(width * height * 4);\n    for (let i = 0; i < totals.length; i += 1) {\n      const colour = colourForMm(totals[i], colourStops);\n      const o = i * 4;\n      rgba[o] = colour[0];\n      rgba[o + 1] = colour[1];\n      rgba[o + 2] = colour[2];\n      rgba[o + 3] = colour[3];\n    }\n\n    self.postMessage(\n      { type: 'done', jobId, width, height, totalsBuffer: totals.buffer, rgbaBuffer: rgba.buffer, validFrames, missingFrames },\n      [totals.buffer, rgba.buffer],\n    );\n  } catch (error) {\n    self.postMessage({ type: 'error', jobId, message: error?.message || 'Accumulation failed' });\n  }\n};\n"};
   window.__RADARLOOP_WORKERS__ = Object.fromEntries(
     Object.entries(__workerSources).map(([name, source]) => [
       name,
@@ -7662,11 +7662,22 @@ const OperaCanvasLayer = L.Layer.extend({
     requestAnimationFrame(() => this._render(generation));
   },
 
-  /** Builds the screen-pixel → grid-index map for the current view. */
+  /**
+   * Builds the screen-pixel → grid map for the current view.
+   *
+   * Two things come out of it: the cell each pixel falls in, and how far across
+   * that cell it fell. The second is what smoothing needs — zoomed in, one grid
+   * cell covers many screen pixels, and without a position inside the cell every
+   * one of them can only be given the same value, which is the blockiness.
+   */
   _buildProjectionIndex(width, height, generation) {
     const map = this._map;
     const size = map.getSize();
     const indices = new Int32Array(width * height).fill(-1);
+    // Grid coordinates measured from cell centres, so the interpolation is
+    // symmetric about each sample rather than offset half a cell.
+    const gridX = new Float32Array(width * height);
+    const gridY = new Float32Array(width * height);
     const [minX, minY, maxX, maxY] = this._extent;
     const dx = size.x / width;
     const dy = size.y / height;
@@ -7681,16 +7692,76 @@ const OperaCanvasLayer = L.Layer.extend({
           const ll = map.containerPointToLatLng([(x + 0.5) * dx, containerY]);
           const [px, py] = proj4('EPSG:4326', this._projection, [ll.lng, ll.lat]);
           if (px < minX || px >= maxX || py < minY || py >= maxY) continue;
-          const sx = Math.floor(((px - minX) / (maxX - minX)) * this._sw);
-          const sy = Math.floor(((maxY - py) / (maxY - minY)) * this._sh);
+          const fx = ((px - minX) / (maxX - minX)) * this._sw;
+          const fy = ((maxY - py) / (maxY - minY)) * this._sh;
+          const sx = Math.floor(fx);
+          const sy = Math.floor(fy);
           if (sx >= 0 && sx < this._sw && sy >= 0 && sy < this._sh) {
-            indices[y * width + x] = sy * this._sw + sx;
+            const pixel = y * width + x;
+            indices[pixel] = sy * this._sw + sx;
+            gridX[pixel] = fx - 0.5;
+            gridY[pixel] = fy - 0.5;
           }
         }
       }
       if (generation !== this._generation) return null;
     }
-    return indices;
+    return { indices, gridX, gridY };
+  },
+
+  /**
+   * Reads the grid under one screen pixel, interpolated between the four cells
+   * around it.
+   *
+   * Interpolating the encoded value rather than the colour is the whole point:
+   * the rainfall classes are applied afterwards, so their edges stay as hard as
+   * they ever were and only move to where the rate actually crosses them.
+   *
+   * Cells with no data are left out of the average instead of counted as dry,
+   * which would fringe every coverage gap and every coastline with rain that is
+   * not there.
+   *
+   * The weights are eased rather than straight. A plain linear blend is
+   * continuous but its slope is not: it changes direction at every cell edge,
+   * and once the rainfall classes cut through that the boundaries come out as
+   * straight facets meeting at corners — the grid still legible, just at
+   * forty-five degrees. Easing the fraction flattens the slope at each sample
+   * and the class edges come out as curves. It cannot overshoot the way a cubic
+   * would, which matters here: the result stays between the four cells it came
+   * from, so smoothing can never invent a heavier band than the data holds.
+   */
+  _sampleSmooth(gx, gy) {
+    const sw = this._sw;
+    const sh = this._sh;
+    const values = this._values;
+
+    const x0 = Math.floor(gx);
+    const y0 = Math.floor(gy);
+    const fx = gx - x0;
+    const fy = gy - y0;
+    const tx = fx * fx * (3 - 2 * fx);
+    const ty = fy * fy * (3 - 2 * fy);
+
+    let sum = 0;
+    let weight = 0;
+    for (let j = 0; j < 2; j += 1) {
+      const yy = y0 + j;
+      if (yy < 0 || yy >= sh) continue;
+      const wy = j ? ty : 1 - ty;
+      for (let i = 0; i < 2; i += 1) {
+        const xx = x0 + i;
+        if (xx < 0 || xx >= sw) continue;
+        const value = values[yy * sw + xx];
+        if (value === 255) continue;
+        const w = wy * (i ? tx : 1 - tx);
+        sum += value * w;
+        weight += w;
+      }
+    }
+    // Mostly gap: leave it a gap rather than let a sliver of a neighbour spread
+    // across the whole pixel.
+    if (weight < 0.25) return 255;
+    return Math.round(sum / weight);
   },
 
   _render(generation) {
@@ -7711,9 +7782,7 @@ const OperaCanvasLayer = L.Layer.extend({
 
     const ctx = canvas.getContext('2d', { alpha: true });
     if (!ctx) return;
-    // The same choice the radar composite makes: this canvas holds decoded
-    // values, so interpolating it interpolates reflectivity rather than colour.
-    ctx.imageSmoothingEnabled = isSmoothing();
+    const smooth = isSmoothing();
 
     const lut = getEncodedLut({ opera: true });
     const view = viewKey(map, width, height);
@@ -7731,24 +7800,26 @@ const OperaCanvasLayer = L.Layer.extend({
       return;
     }
 
-    let indices = projectionCache.get(view);
-    if (indices) {
-      touch(projectionCache, view, indices, PROJECTION_LIMIT);
+    let projection = projectionCache.get(view);
+    if (projection) {
+      touch(projectionCache, view, projection, PROJECTION_LIMIT);
     } else {
-      indices = this._buildProjectionIndex(width, height, generation);
-      if (!indices) return;
-      touch(projectionCache, view, indices, PROJECTION_LIMIT);
+      projection = this._buildProjectionIndex(width, height, generation);
+      if (!projection) return;
+      touch(projectionCache, view, projection, PROJECTION_LIMIT);
     }
 
     if (generation !== this._generation || !canvas.isConnected) return;
 
+    const { indices, gridX, gridY } = projection;
     const image = ctx.createImageData(width, height);
     const out = image.data;
     const values = this._values;
     for (let pixel = 0; pixel < indices.length; pixel += 1) {
       const source = indices[pixel];
       if (source < 0) continue;
-      const l = values[source] * 4;
+      const encoded = smooth ? this._sampleSmooth(gridX[pixel], gridY[pixel]) : values[source];
+      const l = encoded * 4;
       const o = pixel * 4;
       out[o] = lut[l];
       out[o + 1] = lut[l + 1];
@@ -8009,14 +8080,35 @@ __define('layers/windy.js', (__exports, __mod) => {
  *     main thread only blits the finished bitmap. The inline path below is kept
  *     as a fallback for browsers without OffscreenCanvas.
  *
- * Native tiles stop at zoom 7, so deeper zooms crop and nearest-neighbour scale
- * the z7 tile rather than letting the browser blur it.
+ * Native tiles stop at zoom 7, so deeper zooms crop the z7 tile and scale it
+ * here, where the reflectivity can be interpolated before it is coloured,
+ * rather than letting the browser scale the finished picture.
  */
 const { colourForMmh, encodedToMmh, getLevels, MIN_VISIBLE_MMH } = __mod('layers/radarScale.js');
 const { loadSetting, saveSetting } = __mod('core/util.js');
 const { available: workersAvailable, decodeTile } = __mod('layers/windyPool.js');
 const { isSmoothing } = __mod('layers/radarScale.js');
 const MAX_NATIVE_ZOOM = 7;
+
+/**
+ * How deep the tile grid is built, as opposed to how deep the provider's data
+ * goes.
+ *
+ * These are two different limits and conflating them is what made the composite
+ * look like a mosaic when zoomed in. Leaflet reads `maxNativeZoom` as "stop
+ * making tiles here", so with it set to 7 the map at zoom 10 laid down zoom-7
+ * tiles and stretched each one across eight times its width in CSS — a nearest
+ * neighbour blow-up of a finished picture, which no amount of care inside the
+ * tile can undo. Building the grid deeper hands each tile to `createTile`,
+ * which cuts its own piece out of the zoom-7 parent and resamples the
+ * reflectivity it carries before the colours go on.
+ *
+ * Ten rather than deeper because the cost is a tile grid: a viewport holds
+ * roughly the same number of tiles at any zoom it is built for, so this is the
+ * work the app already does at zoom 7 and no more. Past ten the picture is
+ * smooth enough that stretching it costs nothing visible.
+ */
+const MAX_TILE_ZOOM = 10;
 
 const LIVE_WINDOW_MS = 2 * 60 * 60 * 1000;
 const ARCHIVE_CUTOFF_KEY = 'windyArchiveCutoffMs';
@@ -8141,6 +8233,23 @@ function devicePixelRatioStep() {
 const COMPOSITE_RE = /\/radar2\/(?:archive\/)?composite\//;
 
 const WindyRadarTileLayer = L.TileLayer.extend({
+  /**
+   * Leaflet's own version takes x and y from the coordinates but the zoom from
+   * the layer, which would ask for tiles past zoom 7 now that the grid is built
+   * that deep. Here the coordinates decide all three, so `createTile` can ask
+   * for the parent it means to crop.
+   */
+  getTileUrl(coords) {
+    return L.Util.template(this._url, {
+      ...this.options,
+      r: L.Browser.retina ? '@2x' : '',
+      s: this._getSubdomain(coords),
+      x: coords.x,
+      y: coords.y,
+      z: coords.z,
+    });
+  },
+
   createTile(coords, done) {
     const tile = document.createElement('canvas');
     const size = this.getTileSize();
@@ -8155,6 +8264,11 @@ const WindyRadarTileLayer = L.TileLayer.extend({
     tile.style.width = `${size.x}px`;
     tile.style.height = `${size.y}px`;
     tile.className = 'windy-radar-tile';
+    // The stylesheet asks for nearest-neighbour scaling, which keeps the classes
+    // crisp when the picture is stretched but is exactly what smoothing is meant
+    // to get rid of. Past the depth of the grid there is still some stretching
+    // left, so let it interpolate then.
+    tile.style.imageRendering = isSmoothing() ? 'auto' : 'pixelated';
 
     // Above native zoom, crop the parent z7 tile instead of requesting a tile
     // that does not exist.
@@ -8259,25 +8373,27 @@ function createWindyRadarLayer(url, options = {}) {
     crossOrigin: true,
     refreshToken: options.refreshToken || Date.now(),
     /**
-     * Cap the tile zoom at Windy's native maximum, but do **not** raise it.
+     * Where the tile grid stops — not where the data does.
      *
-     * The original build set `minNativeZoom` to the maximum as well, forcing z7
-     * tiles at every zoom "for detail". Leaflet honours that by rendering the
-     * whole viewport at z7, so at map zoom 5 it requests sixteen times as many
-     * tiles — measured at ~392 per frame instead of ~35. Each of those is also
-     * decoded and recoloured per pixel, which is what made scrubbing heavy in
-     * both 2D and 3D. Windy serves every zoom from 3 upwards with real data, so
-     * the extra requests bought nothing that is visible at that scale.
+     * `minNativeZoom` must stay unset. The original build pinned it to the
+     * maximum, forcing z7 tiles at every zoom "for detail", and Leaflet honours
+     * that by rendering the whole viewport at z7: at map zoom 5 it asked for
+     * sixteen times as many tiles, measured at ~392 per frame instead of ~35,
+     * each decoded and recoloured per pixel. That is what made scrubbing heavy
+     * in both 2D and 3D, and it bought nothing — Windy serves every zoom from 3
+     * upwards with real data.
      *
-     * Above z7 there are no native tiles, so `createTile` crops and
-     * nearest-neighbour scales the z7 parent instead.
+     * Raising the maximum is the opposite case and costs nothing below zoom 7,
+     * where it does not apply. Above it there are no native tiles, so
+     * `createTile` crops the z7 parent — see MAX_TILE_ZOOM.
      */
-    maxNativeZoom: MAX_NATIVE_ZOOM,
+    maxNativeZoom: MAX_TILE_ZOOM,
     className: 'wx-tile windy-radar-tile',
   });
 }
 
 __exports.MAX_NATIVE_ZOOM = MAX_NATIVE_ZOOM;
+__exports.MAX_TILE_ZOOM = MAX_TILE_ZOOM;
 __exports.isWindyRadar = isWindyRadar;
 __exports.toLiveUrl = toLiveUrl;
 __exports.toArchiveUrl = toArchiveUrl;
@@ -21002,7 +21118,7 @@ function buildRadarExtras() {
 
   const smooth = switchRow({
     label: 'Smooth',
-    hint: '',
+    hint: 'Fills in between radar samples so close zooms are not blocky. The rainfall bands stay as sharp as they were.',
     checked: scale.isSmoothing(),
     onChange: (checked) => {
       scale.setSmoothing(checked);
@@ -21014,7 +21130,7 @@ function buildRadarExtras() {
 
   const panel = disclosure('Rainfall colour scale', [
     el('p', { class: 'tiny dim' },
-      ''),
+      'Applies to the two radar products that arrive as measurements rather than as a finished image.'),
     smooth.node,
     presets.node,
     preview,

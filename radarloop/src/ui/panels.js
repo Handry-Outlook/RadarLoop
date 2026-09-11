@@ -146,7 +146,7 @@ function buildRadarExtras() {
 
   const smooth = switchRow({
     label: 'Smooth',
-    hint: '',
+    hint: 'Fills in between radar samples so close zooms are not blocky. The rainfall bands stay as sharp as they were.',
     checked: scale.isSmoothing(),
     onChange: (checked) => {
       scale.setSmoothing(checked);
@@ -158,7 +158,7 @@ function buildRadarExtras() {
 
   const panel = disclosure('Rainfall colour scale', [
     el('p', { class: 'tiny dim' },
-      ''),
+      'Applies to the two radar products that arrive as measurements rather than as a finished image.'),
     smooth.node,
     presets.node,
     preview,

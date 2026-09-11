@@ -25,6 +25,31 @@
 const luts = new Map();
 
 /**
+ * How wide a grid the smoothing works on, and how wide its kernel is.
+ *
+ * The blur is measured against the radar's own sample spacing rather than
+ * against the output, which is what makes it behave the same at every zoom: the
+ * radius comes out at about two thirds of a sample whether that sample ends up
+ * three output pixels wide or fifty.
+ *
+ * What varies is how finely that is resolved. Three pixels per sample is the
+ * coarsest grid a radius of two fits on at all, and it is enough when the tile
+ * is only stretched a few times over. Stretched further the eye can follow the
+ * kernel itself, so the grid is refined — but only until it reaches a couple of
+ * hundred pixels, because the cost is the square of it and a tile has to decode
+ * in the time a scrubbed frame allows.
+ */
+const FIELD_WIDTH = 256;
+const FIELD_MIN_SCALE = 3;
+const FIELD_MAX_SCALE = 6;
+/** A little under a sample: enough to take the corners off the grid, not enough
+ *  to move a boundary somewhere the data does not put it. */
+const FIELD_KERNEL = 0.67;
+
+const fieldScale = (samples) =>
+  Math.max(FIELD_MIN_SCALE, Math.min(FIELD_MAX_SCALE, FIELD_WIDTH / samples));
+
+/**
  * Recolours decoded tile pixels in place through the active scale.
  *
  * @param {ImageData} imageData
@@ -89,6 +114,129 @@ async function fetchBitmap(urls, signal) {
     }
   }
   throw lastError || new Error('no tile URL succeeded');
+}
+
+/**
+ * Smooths the reflectivity field in place, before it is coloured.
+ *
+ * Interpolating during the draw is not enough on its own. Above the provider's
+ * native zoom a tile is a small crop of its parent blown up — at four zoom
+ * levels past it, thirty-two source pixels stretched across two hundred and
+ * fifty-six — and bilinear interpolation of that still carries the source grid
+ * plainly enough to read as blocks. Quantising into colour classes afterwards
+ * puts a hard edge on every one of those blocks, which is what makes it look
+ * pixelated rather than merely soft.
+ *
+ * So the values get a proper blur first, a little under a sample wide. The
+ * classes are applied to the result, so they stay exactly as sharp as they
+ * were: what moves is where the boundaries fall, not how crisp they are.
+ *
+ * Three box passes, which is close enough to a Gaussian for this and costs four
+ * additions per pixel per pass rather than a kernel multiply.
+ *
+ * Coverage gaps are held out of it. The provider masks them in blue, and a blur
+ * that averaged them in would pull every boundary inward and invent a soft fringe
+ * of drizzle around each one; each pass therefore averages only the samples that
+ * carry data and divides by how many it found.
+ */
+function smoothField(imageData, radius) {
+  const { data, width, height } = imageData;
+  const n = width * height;
+  const value = new Float32Array(n);
+  const weight = new Float32Array(n);
+
+  for (let i = 0, p = 0; i < data.length; i += 4, p += 1) {
+    // Nothing was drawn here, or it is the provider's no-data mask (blue
+    // dominant) rather than weak echo. Either way it is not a sample.
+    if (data[i + 3] < 2) continue;
+    if (data[i + 2] > data[i] + data[i + 1] && data[i + 2] > 24) continue;
+    value[p] = data[i] + data[i + 1];
+    weight[p] = 1;
+  }
+
+  const valueTmp = new Float32Array(n);
+  const weightTmp = new Float32Array(n);
+
+  for (let pass = 0; pass < 3; pass += 1) {
+    blurAxis(value, weight, valueTmp, weightTmp, width, height, radius, true);
+    blurAxis(valueTmp, weightTmp, value, weight, width, height, radius, false);
+  }
+
+  // Back into the pixels, in the form `recolour` reads: the sum in red and
+  // green, and blue carrying the mask.
+  for (let i = 0, p = 0; i < data.length; i += 4, p += 1) {
+    if (weight[p] <= 0.02) {
+      data[i] = 0;
+      data[i + 1] = 0;
+      data[i + 2] = 255;
+      continue;
+    }
+    const sum = Math.max(0, Math.min(510, value[p] / weight[p]));
+    data[i] = Math.round(sum / 2);
+    data[i + 1] = sum - data[i];
+    data[i + 2] = 0;
+    data[i + 3] = 255;
+  }
+}
+
+/** One box pass along a single axis, carrying the weights with the values. */
+function blurAxis(value, weight, outValue, outWeight, width, height, radius, horizontal) {
+  const outer = horizontal ? height : width;
+  const inner = horizontal ? width : height;
+  const step = horizontal ? 1 : width;
+
+  for (let o = 0; o < outer; o += 1) {
+    const base = horizontal ? o * width : o;
+    let sumValue = 0;
+    let sumWeight = 0;
+
+    // Prime the window on the first cell of the row.
+    for (let k = 0; k <= radius && k < inner; k += 1) {
+      sumValue += value[base + k * step];
+      sumWeight += weight[base + k * step];
+    }
+    outValue[base] = sumValue;
+    outWeight[base] = sumWeight;
+
+    for (let i = 1; i < inner; i += 1) {
+      const add = i + radius;
+      const drop = i - radius - 1;
+      if (add < inner) {
+        sumValue += value[base + add * step];
+        sumWeight += weight[base + add * step];
+      }
+      if (drop >= 0) {
+        sumValue -= value[base + drop * step];
+        sumWeight -= weight[base + drop * step];
+      }
+      outValue[base + i * step] = sumValue;
+      outWeight[base + i * step] = sumWeight;
+    }
+  }
+}
+
+/**
+ * A third canvas, holding the tile plus a margin of the data around it.
+ *
+ * The smoothing is a local average, so a pixel on the tile's edge would
+ * otherwise average only the half of its neighbourhood that fell inside the
+ * tile — and the tile next to it would do the same from the other side, leaving
+ * a visible join down every boundary. Drawing a margin of the surrounding data
+ * and discarding it afterwards gives the edge pixels the neighbours they need.
+ */
+let padded = null;
+let pctx = null;
+
+function paddedSurface(width, height) {
+  if (!padded) {
+    padded = new OffscreenCanvas(width, height);
+    pctx = padded.getContext('2d', { willReadFrequently: true, alpha: true });
+  } else if (padded.width !== width || padded.height !== height) {
+    padded.width = width;
+    padded.height = height;
+  }
+  pctx.clearRect(0, 0, width, height);
+  return pctx;
 }
 
 /** One reusable canvas per worker — tiles in a frame share a size. */
@@ -291,29 +439,84 @@ self.onmessage = async (event) => {
     }
 
     const { bitmap, usedIndex } = await fetchBitmap(urls);
-    const context = surface(dw, dh);
-    // Smoothing the *data* is what makes this sharp rather than blurred: the
-    // channels carry reflectivity, so interpolating them interpolates the value,
-    // and the colour table then re-quantises it into the same hard bands.
-    context.imageSmoothingEnabled = job.smooth === true;
-    context.imageSmoothingQuality = 'high';
+    const smooth = job.smooth === true;
 
-    if (crop) {
-      const sw = bitmap.width / crop.scale;
-      const sh = bitmap.height / crop.scale;
+    // The source rectangle this tile is cut from. Past the provider's native
+    // zoom that is a fraction of the parent tile, which is where the stretch —
+    // and the blockiness — comes from.
+    const sx = crop ? (crop.ix * bitmap.width) / crop.scale : 0;
+    const sy = crop ? (crop.iy * bitmap.height) / crop.scale : 0;
+    const sw = crop ? bitmap.width / crop.scale : bitmap.width;
+    const sh = crop ? bitmap.height / crop.scale : bitmap.height;
+
+    // How many output pixels one sample covers. At two or less the tile is near
+    // enough its own resolution that there is no grid to see, and the blur would
+    // only cost detail.
+    const up = Math.min(dw / sw, dh / sh);
+    const soften = smooth && up >= 3;
+
+    if (soften) {
+      // Smooth on a grid a few pixels per sample, not at output resolution.
+      // A sample is all the detail the data has, so that is enough to carry the
+      // kernel, and the rest of the stretch is then one hardware-interpolated
+      // draw of a field that is already smooth. Doing it at output resolution
+      // instead cost fifty-nine milliseconds a tile against six, for a result
+      // no eye could separate.
+      const scale = fieldScale(Math.max(sw, sh));
+      const radius = Math.max(1, Math.round(scale * FIELD_KERNEL));
+      // Three box passes reach three radii, so that is how much of the
+      // surrounding data each tile has to bring in with it.
+      const margin = radius * 3;
+      const mw = Math.max(1, Math.round(sw * scale));
+      const mh = Math.max(1, Math.round(sh * scale));
+      const work = paddedSurface(mw + margin * 2, mh + margin * 2);
+      work.imageSmoothingEnabled = true;
+      work.imageSmoothingQuality = 'high';
+
+      // Widen the source rectangle by the margin, then pull it back inside the
+      // bitmap — the destination moves with it, so the tile stays registered.
+      // Without the margin each tile would average only the half of every edge
+      // pixel's surroundings that fell inside it, and its neighbour would do the
+      // same from the other side, leaving a join down every boundary.
+      const pad = margin / scale;
+      const x0 = Math.max(0, sx - pad);
+      const y0 = Math.max(0, sy - pad);
+      const x1 = Math.min(bitmap.width, sx + sw + pad);
+      const y1 = Math.min(bitmap.height, sy + sh + pad);
+      work.drawImage(
+        bitmap,
+        x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0),
+        margin + (x0 - sx) * scale, margin + (y0 - sy) * scale,
+        (x1 - x0) * scale, (y1 - y0) * scale,
+      );
+      bitmap.close();
+
+      const field = work.getImageData(0, 0, mw + margin * 2, mh + margin * 2);
+      smoothField(field, radius);
+      work.putImageData(field, 0, 0);
+
+      const context = surface(dw, dh);
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = 'high';
+      context.drawImage(padded, margin, margin, mw, mh, 0, 0, dw, dh);
+      const pixels = context.getImageData(0, 0, dw, dh);
+      context.putImageData(recolour(pixels, lut), 0, 0);
+    } else {
+      const context = surface(dw, dh);
+      // Interpolating the *channels* interpolates the value they encode, so the
+      // colour table still re-quantises the result into the same hard bands.
+      // That is what keeps this sharp rather than blurred.
+      context.imageSmoothingEnabled = smooth;
+      context.imageSmoothingQuality = 'high';
       context.drawImage(
         bitmap,
-        Math.round(crop.ix * sw), Math.round(crop.iy * sh),
-        Math.max(1, Math.round(sw)), Math.max(1, Math.round(sh)),
+        sx, sy, Math.max(1, sw), Math.max(1, sh),
         0, 0, dw, dh,
       );
-    } else {
-      context.drawImage(bitmap, 0, 0, dw, dh);
+      bitmap.close();
+      const pixels = context.getImageData(0, 0, dw, dh);
+      context.putImageData(recolour(pixels, lut), 0, 0);
     }
-    bitmap.close();
-
-    const pixels = context.getImageData(0, 0, dw, dh);
-    context.putImageData(recolour(pixels, lut), 0, 0);
 
     const out = canvas.transferToImageBitmap();
     self.postMessage({ id, ok: true, bitmap: out, usedIndex }, [out]);
