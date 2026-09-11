@@ -1708,6 +1708,13 @@ the lightest rain there is.
 The legend's tick labels now come from the ladder rather than being written out,
 so a rescale cannot leave them describing a scale that no longer exists.
 
+**A custom period opens on its first moment.** Applying one used to park the
+scrubber at the *end* of the period, which meant landing on a full age window
+before touching anything — on a convective afternoon, forty thousand marks at
+once, and nothing left to play out. It opens at the start now, so the map begins
+clear and fills as the scrubber moves. An outlook still opens at its end, because
+for one in force that is now, and now is the state a forecaster wants.
+
 **A filtered period does not widen the strike window.** Applying a filter sets
 the timeline's whole span, and it used to set the strike window with it — so
 choosing a week showed a week of strikes at once, whatever the age window said.

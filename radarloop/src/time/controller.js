@@ -150,7 +150,17 @@ export function setHistorySpan(hours) {
  * @param {Date} end
  * @param {{label?: string, source?: string}} [meta]
  */
-export function focusWindow(start, end, { label = null, source = null } = {}) {
+/**
+ * Points the scrubber at a window.
+ *
+ * `at` decides where inside it the scrubber lands. An outlook opens at its end,
+ * which for one in force is now — that is the state a forecaster wants to see.
+ * A filter the user has just typed opens at its start, so the map begins clear
+ * and fills as they drag: landing at the end put a full age window on screen
+ * before they had touched anything, which on a convective afternoon is forty
+ * thousand strikes at once and nothing to play with.
+ */
+export function focusWindow(start, end, { label = null, source = null, at = 'end' } = {}) {
   if (!(start instanceof Date) || !(end instanceof Date)) return false;
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
   if (end <= start) return false;
@@ -165,7 +175,7 @@ export function focusWindow(start, end, { label = null, source = null } = {}) {
   time.mode = 'inputs';
 
   stop();
-  setTime(end.getTime(), { immediate: true });
+  setTime((at === 'start' ? start : end).getTime(), { immediate: true });
   emit(EVENTS.TIME_FOCUS, { start, end, label, source });
   return true;
 }
@@ -185,7 +195,7 @@ export const focusLabel = () => time.focusLabel;
 
 /** Applies an explicit filter range from the time-filter controls. */
 export function applyFilter(start, end) {
-  return focusWindow(start, end, { label: 'Time filter', source: 'filter' });
+  return focusWindow(start, end, { label: 'Time filter', source: 'filter', at: 'start' });
 }
 
 export function clearFilter() {

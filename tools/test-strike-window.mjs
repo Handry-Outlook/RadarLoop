@@ -22,6 +22,12 @@ const ok = (name, condition, detail = '') => {
 
 await page.goto('http://localhost:8080/index.html', { waitUntil: 'domcontentloaded', timeout: 60000 });
 await page.waitForTimeout(12000);
+await page.waitForFunction(() => {
+  const n = window.RadarLoop?.lightningAll?.().length ?? 0;
+  const settled = n > 0 && n === window.__lastStrikeCount;
+  window.__lastStrikeCount = n;
+  return settled;
+}, { timeout: 90000, polling: 3000 });
 
 const counts = await page.evaluate(async () => {
   const settle = () => new Promise((r) => setTimeout(r, 1800));
@@ -100,6 +106,61 @@ console.log(`  ${JSON.stringify(focused)}`);
 ok('a period whose age window matches its length still shows all of it',
    Math.abs(focused.shown - focused.inWindow) <= Math.max(20, focused.inWindow * 0.02),
    `${focused.shown} shown of ${focused.inWindow}`);
+
+
+/* ---- a custom period opens clear and fills as you drag ---- */
+console.log('\n=== dragging inside a period ===');
+const drag = await page.evaluate(async () => {
+  const settle = () => new Promise((r) => setTimeout(r, 1800));
+  const all = window.RadarLoop.lightningAll();
+  const hours = new Map();
+  for (const s of all) hours.set(Math.floor(s.ms / 3600000), (hours.get(Math.floor(s.ms / 3600000)) || 0) + 1);
+  const [hour] = [...hours.entries()].sort((a, b) => b[1] - a[1])[0];
+  const end = new Date(hour * 3600000 + 3600000);
+  const start = new Date(end.getTime() - 12 * 3600000);
+
+  window.RadarLoop.lightning.showAll = false;
+  window.RadarLoop.lightning.lifespanHours = 1;
+  window.RadarLoop.playback.applyFilter(start, end);
+  await settle();
+  const onOpening = {
+    shown: window.RadarLoop.lightningFiltered().length,
+    at: new Date(window.RadarLoop.time.current).toISOString(),
+  };
+
+  const counts = [];
+  for (const hoursIn of [0.5, 3, 6, 12]) {
+    window.RadarLoop.playback.setTime(start.getTime() + hoursIn * 3600000, { immediate: true });
+    // eslint-disable-next-line no-await-in-loop
+    await settle();
+    const at = start.getTime() + hoursIn * 3600000;
+    const from = Math.max(start.getTime(), at - 3600000);
+    counts.push({
+      hoursIn,
+      shown: window.RadarLoop.lightningFiltered().length,
+      expected: all.filter((s) => s.ms > from && s.ms <= at).length,
+      sinceStart: all.filter((s) => s.ms > start.getTime() && s.ms <= at).length,
+    });
+  }
+  window.RadarLoop.playback.clearFilter();
+  return { onOpening, counts };
+});
+console.log(`  opens at ${drag.onOpening.at} with ${drag.onOpening.shown}`);
+for (const c of drag.counts) {
+  console.log(`  +${String(c.hoursIn).padStart(4)}h  shown ${String(c.shown).padStart(6)}   window holds ${String(c.expected).padStart(6)}   since start ${c.sinceStart}`);
+}
+
+// Landing at the end put a full age window on screen before anything was
+// touched; on a convective afternoon that is forty thousand marks at once.
+ok('a custom period opens on its first moment, with nothing shown',
+   drag.onOpening.shown === 0 && drag.onOpening.at.startsWith('2026-06-25T22:00'),
+   JSON.stringify(drag.onOpening));
+ok('dragging forward shows the age window, not everything since the start',
+   drag.counts.every((c) => Math.abs(c.shown - c.expected) <= Math.max(20, c.expected * 0.02)),
+   JSON.stringify(drag.counts.map((c) => [c.shown, c.expected])));
+ok('which is far less than the period holds by the end',
+   drag.counts[drag.counts.length - 1].sinceStart > drag.counts[drag.counts.length - 1].shown * 1.5,
+   JSON.stringify(drag.counts[drag.counts.length - 1]));
 
 
 console.log('\n=== page errors ===');
