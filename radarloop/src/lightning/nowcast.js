@@ -1405,10 +1405,19 @@ export function hailRisk({ flashesPerMinute = 0, peakDbz = null, largeHailArea =
   if (jump) risk = Math.min(1, risk + 0.1);
   risk = Math.min(1, risk);
 
-  if (risk >= 0.80) return { risk, level: 3, label: 'Large hail likely' };
-  if (risk >= 0.63) return { risk, level: 2, label: 'Hail likely' };
-  if (risk >= 0.38) return { risk, level: 1, label: 'Hail possible' };
-  return { risk, level: 0, label: 'Hail unlikely' };
+  // Deliberately measured wording. This is a radar echo and a flash rate, not a
+  // hail report: it says a storm has the structure hail comes from, which is a
+  // reason to look rather than a reason to be alarmed. "Likely" claims more than
+  // the evidence supports and reads as a warning, which this is not.
+  //
+  // The scale still has four steps and the outline still has three colours; only
+  // the words are softer. Level 1 is named for the signal rather than the
+  // outcome, so that "possible" belongs to one level and one colour instead of
+  // being the legend's word for amber and the popup's word for cyan.
+  if (risk >= 0.80) return { risk, level: 3, label: 'Large hail possible' };
+  if (risk >= 0.63) return { risk, level: 2, label: 'Hail possible' };
+  if (risk >= 0.38) return { risk, level: 1, label: 'Marginal hail signal' };
+  return { risk, level: 0, label: 'No hail signal' };
 }
 
 export function confidenceColour(confidence) {

@@ -307,19 +307,19 @@ const severity = await page.evaluate(() => {
 
     hail: {
       noRadar: hailRisk({ flashesPerMinute: 40, peakDbz: null }),
-      weakEcho: hailRisk({ flashesPerMinute: 40, peakDbz: 43 }).label,
-      rainShaft: hailRisk({ flashesPerMinute: 0.5, peakDbz: 54 }).label,
-      vigorous: hailRisk({ flashesPerMinute: 35, peakDbz: 57, largeHailArea: 0.004 }).label,
-      severe: hailRisk({ flashesPerMinute: 90, peakDbz: 63, largeHailArea: 0.03, jump: true }).label,
+      weakEcho: hailRisk({ flashesPerMinute: 40, peakDbz: 43 }),
+      rainShaft: hailRisk({ flashesPerMinute: 0.5, peakDbz: 54 }),
+      vigorous: hailRisk({ flashesPerMinute: 35, peakDbz: 57, largeHailArea: 0.004 }),
+      severe: hailRisk({ flashesPerMinute: 90, peakDbz: 63, largeHailArea: 0.03, jump: true }),
       // A severe UK afternoon as this composite actually renders one: a deep
       // core near the top of its range and a busy but not extraordinary flash
       // rate. The old scale scored this at nothing, which is the complaint.
-      severeUkDay: hailRisk({ flashesPerMinute: 6.3, peakDbz: 61, largeHailArea: 0.0247 }).label,
-      supercell: hailRisk({ flashesPerMinute: 19, peakDbz: 63, largeHailArea: 0.0273 }).label,
-      strongModestCore: hailRisk({ flashesPerMinute: 25, peakDbz: 52, largeHailArea: 0.0005 }).label,
-      quietDeepEcho: hailRisk({ flashesPerMinute: 0.6, peakDbz: 64, largeHailArea: 0.056 }).label,
-      strongNoHail: hailRisk({ flashesPerMinute: 10, peakDbz: 48 }).label,
-      ordinary: hailRisk({ flashesPerMinute: 3, peakDbz: 45 }).label,
+      severeUkDay: hailRisk({ flashesPerMinute: 6.3, peakDbz: 61, largeHailArea: 0.0247 }),
+      supercell: hailRisk({ flashesPerMinute: 19, peakDbz: 63, largeHailArea: 0.0273 }),
+      strongModestCore: hailRisk({ flashesPerMinute: 25, peakDbz: 52, largeHailArea: 0.0005 }),
+      quietDeepEcho: hailRisk({ flashesPerMinute: 0.6, peakDbz: 64, largeHailArea: 0.056 }),
+      strongNoHail: hailRisk({ flashesPerMinute: 10, peakDbz: 48 }),
+      ordinary: hailRisk({ flashesPerMinute: 3, peakDbz: 45 }),
     },
   };
 });
@@ -339,31 +339,33 @@ ok('a strong echo raises a moderate rate',
 // Lightning alone cannot tell a hailstorm from a vigorous rain storm, and
 // saying so beats a number that looks like it knows.
 ok('hail is not guessed at without radar', severity.hail.noRadar === null, String(severity.hail.noRadar));
-ok('a weak echo is no hail whatever the flash rate', /unlikely|No hail/i.test(severity.hail.weakEcho),
-   severity.hail.weakEcho);
+const level = (h) => (h === null ? null : h.level);
+const says = (h) => (h === null ? 'null' : `${h.label} (${h.risk.toFixed(2)})`);
+ok('a weak echo is no hail whatever the flash rate', level(severity.hail.weakEcho) === 0,
+   says(severity.hail.weakEcho));
 ok('a bright echo with no lightning is treated as rain, not hail',
-   /unlikely|possible/i.test(severity.hail.rainShaft), severity.hail.rainShaft);
-ok('a strong echo with a high flash rate is hail', /likely/i.test(severity.hail.vigorous),
-   severity.hail.vigorous);
-ok('and a deeper one with a jump is large hail', /Large hail/i.test(severity.hail.severe),
-   severity.hail.severe);
+   level(severity.hail.rainShaft) <= 1, says(severity.hail.rainShaft));
+ok('a strong echo with a high flash rate is hail', level(severity.hail.vigorous) >= 2,
+   says(severity.hail.vigorous));
+ok('and a deeper one with a jump is large hail', level(severity.hail.severe) === 3,
+   says(severity.hail.severe));
 // Measured on the 27 August supercell day: the cells that produced hail read 57
 // to 63 dBZ with a few percent of the intensity square above 60.
-ok('a severe day on this composite does report hail', /likely/i.test(severity.hail.severeUkDay),
-   severity.hail.severeUkDay);
-ok('a strong storm without a deep core does not',
-   /unlikely|possible/i.test(severity.hail.strongNoHail), severity.hail.strongNoHail);
+ok('a severe day on this composite does report hail', level(severity.hail.severeUkDay) >= 2,
+   says(severity.hail.severeUkDay));
+ok('a strong storm without a deep core does not', level(severity.hail.strongNoHail) <= 1,
+   says(severity.hail.strongNoHail));
 ok('the supercell itself is the one large-hail call',
-   /Large hail/i.test(severity.hail.supercell), severity.hail.supercell);
+   level(severity.hail.supercell) === 3, says(severity.hail.supercell));
 // A strong storm with only a modest core is worth mentioning and not worth an
 // amber outline, which is drawn at "likely" and above.
-ok('a high flash rate over a modest core is possible, not likely',
-   /possible/i.test(severity.hail.strongModestCore), severity.hail.strongModestCore);
+ok('a high flash rate over a modest core does not reach the amber step',
+   level(severity.hail.strongModestCore) === 1, says(severity.hail.strongModestCore));
 // The one that used to come out "likely" on the strength of its echo alone.
 ok('a deep echo with almost no lightning is not called hail',
-   /unlikely|possible/i.test(severity.hail.quietDeepEcho), severity.hail.quietDeepEcho);
-ok('and an ordinary one does not', /unlikely|No hail/i.test(severity.hail.ordinary),
-   severity.hail.ordinary);
+   level(severity.hail.quietDeepEcho) <= 1, says(severity.hail.quietDeepEcho));
+ok('and an ordinary one does not', level(severity.hail.ordinary) <= 1,
+   says(severity.hail.ordinary));
 
 console.log('\n=== outline colours ===');
 const edges = await page.evaluate(() => {

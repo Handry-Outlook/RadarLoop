@@ -90,8 +90,8 @@ function nowcastGroup() {
   return el('div', { class: 'legend-group' }, [
     el('div', { class: 'legend-group__title' }, 'Storm projection'),
     el('div', { class: 'legend-item' }, [swatch('#22d3ee'), el('span', { class: 'dim' }, 'Tracked storm')]),
-    el('div', { class: 'legend-item' }, [swatch('#fbbf24'), el('span', { class: 'dim' }, 'Hail likely')]),
-    el('div', { class: 'legend-item' }, [swatch('#ff33d6'), el('span', { class: 'dim' }, 'Large hail likely')]),
+    el('div', { class: 'legend-item' }, [swatch('#fbbf24'), el('span', { class: 'dim' }, 'Hail possible')]),
+    el('div', { class: 'legend-item' }, [swatch('#ff33d6'), el('span', { class: 'dim' }, 'Large hail possible')]),
     el('p', { class: 'tiny dim' }, 'Solid is where it is now, dashed where it is heading.'),
   ]);
 }

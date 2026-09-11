@@ -1647,8 +1647,19 @@ over the Chilterns it reads a 67 dBZ core, and the cells that produced the hail
 come out "Large hail likely" at nineteen flashes a minute and "Hail likely" at
 six.
 
-**Three steps of one scale.** Cyan for a tracked storm, amber for hail likely,
-magenta for large hail likely.
+**Three steps of one scale.** Cyan for a tracked storm, amber for hail possible,
+magenta for large hail possible.
+
+The wording is deliberately measured. This is a radar echo and a flash rate, not
+a hail report: it says a storm has the structure hail comes from, which is a
+reason to look rather than a reason to be alarmed. "Likely" claims more than the
+evidence supports and reads as a warning, which this is not. The scale still has
+four steps and the outline still has three colours; only the words are softer.
+
+Level one is named for the signal rather than the outcome — "marginal hail
+signal" — so that "possible" belongs to one level and one colour. Softening the
+legend alone would have made it the legend's word for amber and the popup's word
+for cyan at the same time.
 
 One scale, not three unrelated things. The earlier arrangement had a colour for
 high impact competing with the hail call for the same line — whichever won, the
@@ -1662,8 +1673,8 @@ disappeared against bright echoes and a light base map alike. The rainfall scale
 does reach magenta, but only in its last two classes and as a filled field —
 against a thin haloed outline there is no confusing the two.
 
-"Hail possible" stays cyan, because a qualified call does not deserve the colour
-of an asserted one, and the popup says it either way. The thresholds are 0.38,
+A marginal signal stays cyan, because a qualified call does not deserve the
+colour of an asserted one, and the popup says it either way. The thresholds are 0.38,
 0.63 and 0.80, which on the 27 August supercell day puts the supercell in
 magenta, the two cells beside it in amber, and the other nine in cyan.
 
