@@ -25,6 +25,45 @@
 const luts = new Map();
 
 /**
+ * Parent tiles, held just long enough to be shared.
+ *
+ * Past native zoom every tile on screen is a crop of one of a handful of parent
+ * tiles, and each also reads a strip of its neighbours for the smoothing. Left
+ * alone that is the same image decoded dozens of times over; the HTTP cache
+ * spares the network but not `createImageBitmap`. The promise goes in rather
+ * than the bitmap so that tiles asking for the same parent at the same moment
+ * wait on one decode between them.
+ */
+const bitmapCache = new Map();
+const BITMAP_CACHE_LIMIT = 24;
+
+function cachedBitmap(urls) {
+  const key = urls[0];
+  const hit = bitmapCache.get(key);
+  if (hit) {
+    // Freshen it: the map's insertion order is the eviction order.
+    bitmapCache.delete(key);
+    bitmapCache.set(key, hit);
+    return hit;
+  }
+
+  const entry = fetchBitmap(urls);
+  bitmapCache.set(key, entry);
+  // A failure must not be remembered, or the tile can never recover.
+  entry.catch(() => {
+    if (bitmapCache.get(key) === entry) bitmapCache.delete(key);
+  });
+
+  while (bitmapCache.size > BITMAP_CACHE_LIMIT) {
+    const oldest = bitmapCache.keys().next().value;
+    const dropped = bitmapCache.get(oldest);
+    bitmapCache.delete(oldest);
+    dropped.then((e) => e.bitmap.close()).catch(() => {});
+  }
+  return entry;
+}
+
+/**
  * How wide a grid the smoothing works on, and how wide its kernel is.
  *
  * The blur is measured against the radar's own sample spacing rather than
@@ -213,6 +252,33 @@ function blurAxis(value, weight, outValue, outWeight, width, height, radius, hor
       outWeight[base + i * step] = sumWeight;
     }
   }
+}
+
+/**
+ * The source patch: this tile's piece of the data plus a margin of what
+ * surrounds it, at the resolution the provider sent, before anything is scaled.
+ *
+ * It exists so that the scaling afterwards is a single operation over a
+ * continuous field. Assembled straight onto the working canvas instead, each
+ * piece is resampled by its own call — and a three-pixel sliver from the tile
+ * next door does not come out of that the same way the wide piece beside it
+ * does, which put a faint line down every boundary between two provider tiles.
+ * Copied one to one there is no resampling to disagree about.
+ */
+let patch = null;
+let patchCtx = null;
+
+function patchSurface(width, height) {
+  if (!patch) {
+    patch = new OffscreenCanvas(width, height);
+    patchCtx = patch.getContext('2d', { alpha: true });
+  } else if (patch.width !== width || patch.height !== height) {
+    patch.width = width;
+    patch.height = height;
+  }
+  patchCtx.clearRect(0, 0, width, height);
+  patchCtx.imageSmoothingEnabled = false;
+  return patchCtx;
 }
 
 /**
@@ -438,7 +504,9 @@ self.onmessage = async (event) => {
       return;
     }
 
-    const { bitmap, usedIndex } = await fetchBitmap(urls);
+    // Not closed by this path: the cache owns these and the tile beside this
+    // one is about to want the same image.
+    const { bitmap, usedIndex } = await cachedBitmap(urls);
     const smooth = job.smooth === true;
 
     // The source rectangle this tile is cut from. Past the provider's native
@@ -464,32 +532,73 @@ self.onmessage = async (event) => {
       // no eye could separate.
       const scale = fieldScale(Math.max(sw, sh));
       const radius = Math.max(1, Math.round(scale * FIELD_KERNEL));
-      // Three box passes reach three radii, so that is how much of the
-      // surrounding data each tile has to bring in with it.
-      const margin = radius * 3;
+      // Three box passes reach three radii, and one sample wider again,
+      // rounded to whole samples so
+      // the patch below can be copied without resampling. Canvas scaling
+      // flattens the outermost half-sample of whatever rectangle it is given,
+      // and without the extra the blur would carry that flattened edge back into
+      // the tile's own pixels — differently on each side of a join.
+      const padSamples = Math.ceil((radius * 3 + scale) / scale);
+      const margin = padSamples * scale;
       const mw = Math.max(1, Math.round(sw * scale));
       const mh = Math.max(1, Math.round(sh * scale));
       const work = paddedSurface(mw + margin * 2, mh + margin * 2);
       work.imageSmoothingEnabled = true;
       work.imageSmoothingQuality = 'high';
 
-      // Widen the source rectangle by the margin, then pull it back inside the
-      // bitmap — the destination moves with it, so the tile stays registered.
-      // Without the margin each tile would average only the half of every edge
-      // pixel's surroundings that fell inside it, and its neighbour would do the
-      // same from the other side, leaving a join down every boundary.
-      const pad = margin / scale;
-      const x0 = Math.max(0, sx - pad);
-      const y0 = Math.max(0, sy - pad);
-      const x1 = Math.min(bitmap.width, sx + sw + pad);
-      const y1 = Math.min(bitmap.height, sy + sh + pad);
-      work.drawImage(
-        bitmap,
-        x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0),
-        margin + (x0 - sx) * scale, margin + (y0 - sy) * scale,
-        (x1 - x0) * scale, (y1 - y0) * scale,
-      );
-      bitmap.close();
+      /*
+       * The margin, taken from wherever the data actually is.
+       *
+       * A blur is an average of a neighbourhood, so a tile that can only see
+       * itself averages half a neighbourhood along each of its edges and leans
+       * inward — and the tile beside it leans the other way, which is a seam.
+       * Inside a provider tile there is always more data to read, but a crop on
+       * its edge runs out, and that is where the joins showed: measured at two
+       * hundred rows of five hundred and twelve changing rainfall class across
+       * one, against four for an ordinary step. So the patch is assembled from
+       * the provider tile and whichever of its eight neighbours the widened
+       * rectangle reaches into.
+       */
+      const bw = bitmap.width;
+      const bh = bitmap.height;
+      const px0 = sx - padSamples;
+      const py0 = sy - padSamples;
+      const pw = sw + padSamples * 2;
+      const ph = sh + padSamples * 2;
+      const assembled = patchSurface(pw, ph);
+
+      for (let gy = -1; gy <= 1; gy += 1) {
+        for (let gx = -1; gx <= 1; gx += 1) {
+          const ox = gx * bw;
+          const oy = gy * bh;
+          const cx0 = Math.max(px0, ox);
+          const cy0 = Math.max(py0, oy);
+          const cx1 = Math.min(px0 + pw, ox + bw);
+          const cy1 = Math.min(py0 + ph, oy + bh);
+          if (cx1 <= cx0 || cy1 <= cy0) continue;
+
+          let source = bitmap;
+          if (gx || gy) {
+            const at = job.neighbours && job.neighbours[`${gx},${gy}`];
+            if (!at) continue;
+            // A missing neighbour — the edge of the world, or a tile the
+            // provider does not have — is left out, and the weighted blur falls
+            // back to whatever it can see.
+            // eslint-disable-next-line no-await-in-loop
+            const got = await cachedBitmap(at).catch(() => null);
+            if (!got) continue;
+            source = got.bitmap;
+          }
+
+          assembled.drawImage(
+            source,
+            cx0 - ox, cy0 - oy, cx1 - cx0, cy1 - cy0,
+            cx0 - px0, cy0 - py0, cx1 - cx0, cy1 - cy0,
+          );
+        }
+      }
+
+      work.drawImage(patch, 0, 0, pw, ph, 0, 0, pw * scale, ph * scale);
 
       const field = work.getImageData(0, 0, mw + margin * 2, mh + margin * 2);
       smoothField(field, radius);
@@ -498,7 +607,19 @@ self.onmessage = async (event) => {
       const context = surface(dw, dh);
       context.imageSmoothingEnabled = true;
       context.imageSmoothingQuality = 'high';
-      context.drawImage(padded, margin, margin, mw, mh, 0, 0, dw, dh);
+      // Drawn wider than the tile and clipped back to it. Asked for exactly
+      // the tile's own rectangle, the resampler has nothing beyond its edges to
+      // read and flattens the last half pixel — on both sides of a join, which
+      // is a faint line down it. Reaching two pixels further puts that flat edge
+      // outside the tile, where it is thrown away.
+      const bleed = 2;
+      const ex = (bleed * dw) / mw;
+      const ey = (bleed * dh) / mh;
+      context.drawImage(
+        padded,
+        margin - bleed, margin - bleed, mw + bleed * 2, mh + bleed * 2,
+        -ex, -ey, dw + ex * 2, dh + ey * 2,
+      );
       const pixels = context.getImageData(0, 0, dw, dh);
       context.putImageData(recolour(pixels, lut), 0, 0);
     } else {
@@ -513,7 +634,6 @@ self.onmessage = async (event) => {
         sx, sy, Math.max(1, sw), Math.max(1, sh),
         0, 0, dw, dh,
       );
-      bitmap.close();
       const pixels = context.getImageData(0, 0, dw, dh);
       context.putImageData(recolour(pixels, lut), 0, 0);
     }

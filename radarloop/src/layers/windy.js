@@ -231,8 +231,37 @@ const WindyRadarTileLayer = L.TileLayer.extend({
     /* ---- off-thread path: fetch, decode, crop and recolour in a worker ---- */
     if (isComposite && workersAvailable()) {
       // Live URLs are cache-busted; archive URLs are immutable and must not be.
-      const urls = archiveFirst ? [archiveUrl] : [withCacheBuster(liveUrl, token), archiveUrl];
-      decodeTile({ urls, dw: tile.width, dh: tile.height, crop, smooth: isSmoothing() })
+      const address = (c) => {
+        const live = toLiveUrl(this.getTileUrl(c));
+        return archiveFirst ? [toArchiveUrl(live)] : [withCacheBuster(live, token), toArchiveUrl(live)];
+      };
+      const urls = address(nativeCoords);
+
+      /*
+       * The eight tiles around this one's parent.
+       *
+       * Smoothing averages a neighbourhood, and a tile cut from the edge of its
+       * parent has no data on that side to average — so it leans inward, its
+       * neighbour leans the other way, and the join between them shows. These
+       * give the worker somewhere to read from. They are nearly always already
+       * in the browser's cache, since the map is drawing them too.
+       */
+      const neighbours = {};
+      if (isSmoothing()) {
+        const span = 2 ** nativeZoom;
+        for (let gy = -1; gy <= 1; gy += 1) {
+          for (let gx = -1; gx <= 1; gx += 1) {
+            if (!gx && !gy) continue;
+            const y = nativeCoords.y + gy;
+            // Past the poles there is no tile; around the date line there is.
+            if (y < 0 || y >= span) continue;
+            const x = ((nativeCoords.x + gx) % span + span) % span;
+            neighbours[`${gx},${gy}`] = address({ x, y, z: nativeZoom });
+          }
+        }
+      }
+
+      decodeTile({ urls, dw: tile.width, dh: tile.height, crop, neighbours, smooth: isSmoothing() })
         .then(({ bitmap, usedIndex }) => {
           // Falling through to the archive means the live endpoint has aged out
           // for this frame; remember the boundary so later frames skip the miss.
