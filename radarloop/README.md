@@ -1647,19 +1647,25 @@ over the Chilterns it reads a 67 dBZ core, and the cells that produced the hail
 come out "Large hail likely" at nineteen flashes a minute and "Hail likely" at
 six.
 
-**Two colours, and only two.** A tracked storm, and one carrying hail. There was
-a third for high impact, and it competed with the hail call for the same line —
-whichever won, the other went unsaid, and since any hail level at all claimed the
-colour, the high-impact one effectively never appeared. Severity is already
-carried by the line weight, the popup and the impact label; hail is the thing a
-colour is worth spending on, because it is the only one of the two that changes
-what somebody does.
+**Three steps of one scale.** Cyan for a tracked storm, amber for hail likely,
+magenta for large hail likely.
 
-Amber is drawn at "likely" and above, so a qualified call does not take the
-colour of an asserted one — "possible" stays in the popup, where a qualified
-statement belongs. The thresholds are 0.38, 0.63 and 0.80, which on the
-27 August supercell day puts three of twelve cells in amber: the supercell and
-the two cells beside it that were producing hail.
+One scale, not three unrelated things. The earlier arrangement had a colour for
+high impact competing with the hail call for the same line — whichever won, the
+other went unsaid, and since any hail level at all claimed the colour, the
+high-impact one effectively never appeared. Severity is still carried, by the
+line weight, the popup and the impact label; hail gets the hue because it is the
+one that changes what somebody does.
+
+Magenta rather than white for the top step: white was the previous top and
+disappeared against bright echoes and a light base map alike. The rainfall scale
+does reach magenta, but only in its last two classes and as a filled field —
+against a thin haloed outline there is no confusing the two.
+
+"Hail possible" stays cyan, because a qualified call does not deserve the colour
+of an asserted one, and the popup says it either way. The thresholds are 0.38,
+0.63 and 0.80, which on the 27 August supercell day puts the supercell in
+magenta, the two cells beside it in amber, and the other nine in cyan.
 
 **Every cell has a direction, and somewhere to go.** Two ways a projection could
 come out blank, both of which look on the map like a storm going nowhere.

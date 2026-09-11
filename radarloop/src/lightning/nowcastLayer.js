@@ -41,6 +41,15 @@ const EDGE = '#22d3ee';
  * field. With the halo under it there is no mistaking one for the other.
  */
 const HAIL_EDGE = '#fbbf24';
+
+/**
+ * Large hail: magenta, a step beyond amber in the direction people already read
+ * as worse. Not white, which was the previous top step and disappeared against
+ * bright echoes and a light base map alike. The rainfall scale does reach
+ * magenta, but only in its last two classes and as a filled field — against a
+ * thin haloed outline there is no confusing the two.
+ */
+const SEVERE_HAIL_EDGE = '#ff33d6';
 const HALO = 'rgba(2, 6, 23, 0.85)';
 
 let group = null;
@@ -123,16 +132,15 @@ export function drawNowcast(filtered, reference) {
 
     const impact = cluster.impact;
     const strongAlert = impact.level >= 4;
-    // Two colours, and only two: a tracked storm, and one carrying hail. A third
-    // for high impact competed with the hail call for the same line — whichever
-    // won, the other went unsaid — and severity is already in the line weight,
-    // the popup and the impact label. Hail is the thing a colour is worth
-    // spending on, because it is the only one that changes what you do.
+    // Three steps of one scale, rather than three unrelated things competing for
+    // the same line. The scale is hail, because it is the one that changes what
+    // somebody does; severity is carried by the line weight, the popup and the
+    // impact label alongside it.
     //
-    // Amber is for "likely" and above. "Possible" stays in the popup, where a
-    // qualified statement belongs.
-    const hailing = (cluster.hail?.level ?? 0) >= 2;
-    const edge = hailing ? HAIL_EDGE : EDGE;
+    // Cyan is a tracked storm, which includes "hail possible" — a qualified call
+    // does not deserve the colour of an asserted one, and the popup says it.
+    const hail = cluster.hail?.level ?? 0;
+    const edge = hail >= 3 ? SEVERE_HAIL_EDGE : (hail >= 2 ? HAIL_EDGE : EDGE);
     const baseOpacity = Math.max(0.45, cluster.confidence * 0.8 + 0.2);
 
     /** A line with a dark halo under it, so it reads on any background. */

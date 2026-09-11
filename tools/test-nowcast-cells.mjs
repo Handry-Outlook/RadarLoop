@@ -365,6 +365,44 @@ ok('a deep echo with almost no lightning is not called hail',
 ok('and an ordinary one does not', /unlikely|No hail/i.test(severity.hail.ordinary),
    severity.hail.ordinary);
 
+console.log('\n=== outline colours ===');
+const edges = await page.evaluate(() => {
+  const { hailRisk } = window.__nowcast;
+  // The colours the layer picks, by hail level.
+  const edgeFor = (level) => (level >= 3 ? '#ff33d6' : (level >= 2 ? '#fbbf24' : '#22d3ee'));
+  const cell = (dbz, rate, area) => {
+    const h = hailRisk({ flashesPerMinute: rate, peakDbz: dbz, largeHailArea: area });
+    return { label: h.label, level: h.level, edge: edgeFor(h.level) };
+  };
+  return {
+    // The 27 August cells, as measured.
+    supercell: cell(63, 18.9, 0.0273),
+    active: cell(61, 7.1, 0.0247),
+    modest: cell(57, 5.7, 0.0087),
+    quietDeep: cell(64, 0.6, 0.056),
+    shower: cell(45, 8, 0.001),
+  };
+});
+console.log(`  ${JSON.stringify(edges)}`);
+
+const cyan = '#22d3ee';
+const amber = '#fbbf24';
+const magenta = '#ff33d6';
+ok('a large-hail call gets its own colour', edges.supercell.edge === magenta,
+   `${edges.supercell.label} -> ${edges.supercell.edge}`);
+ok('a hail-likely call is amber', edges.active.edge === amber,
+   `${edges.active.label} -> ${edges.active.edge}`);
+// A qualified call does not deserve the colour of an asserted one.
+ok('"possible" stays a tracked storm', edges.modest.edge === cyan && edges.quietDeep.edge === cyan,
+   `${edges.modest.label} / ${edges.quietDeep.label}`);
+ok('and so does an ordinary shower', edges.shower.edge === cyan,
+   `${edges.shower.label} -> ${edges.shower.edge}`);
+// White was the previous top step and vanished against bright echoes and a
+// light base map alike.
+ok('no step is white', [edges.supercell.edge, edges.active.edge, edges.modest.edge]
+   .every((c) => c !== '#f8fafc' && c !== '#ffffff'), 'white is gone');
+
+
 console.log('\n=== the outline sits above the weather ===');
 const stack = await page.evaluate(() => {
   const map = window.RadarLoop.map();
