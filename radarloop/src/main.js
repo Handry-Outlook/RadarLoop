@@ -55,7 +55,7 @@ import { dbzToMmh, encodedToDbz, encodedToMmh } from './layers/radarScale.js';
 import { bestShift, measureMotion } from './lightning/radarMotion.js';
 import {
   calculateNowcast, hailRisk, impactLevel, nowcastInternals, radarHints, remainingLifeMinutes,
-  resetNowcastHistory, resetRadarHints,
+  resetNowcastHistory, resetRadarHints, seedRadarHint,
 } from './lightning/nowcast.js';
 
 /* ------------------------------------------------------------------ *
@@ -607,7 +607,7 @@ window.__strikeStore = { summary: strikeStoreSummary, prune: strikeStorePrune };
 window.__nowcast = {
   bestShift, measureMotion, calculateNowcast, radarHints, resetRadarHints,
   remainingLife: remainingLifeMinutes, resetNowcastHistory, nowcastInternals,
-  impactLevel, hailRisk,
+  impactLevel, hailRisk, seedRadarHint,
 };
 window.__windyLightning = {
   decodeFeed, decodeStrike, parseFrame, bufferStrikes, framesCovering, feedStats,

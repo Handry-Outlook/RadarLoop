@@ -13,7 +13,7 @@ import { lightning, time } from '../core/state.js';
 import { throttle } from '../core/util.js';
 import { activeWindow, domain } from '../time/controller.js';
 import { ensureCoverage, fetchStrikes, filterWindow, noteVisible, oldestRetained, pruneBefore } from './source.js';
-import { drawStrikes, refreshColours, removeStrikeLayer } from './render.js';
+import { drawStrikes, FRESH_WINDOW_MS, refreshColours, removeStrikeLayer } from './render.js';
 import { playThunder, updateCounter, updateHeatmap, clearOverlays } from './overlays.js';
 import { installAudioUnlock } from './audio.js';
 import { is3D, setStrikes as set3DStrikes } from '../core/map3d.js';
@@ -97,7 +97,14 @@ export const refresh = throttle((options = {}) => {
   drawNowcast(filtered, end);
 
   // 3D shares the selection but not the Leaflet layers, so it is fed directly.
-  if (is3D()) set3DStrikes(filtered, { end, lifespanHours: lightning.lifespanHours });
+  if (is3D()) {
+    set3DStrikes(filtered, {
+      end,
+      lifespanHours: lightning.lifespanHours,
+      // The same minute 2D calls fresh, so the bolt appears in both views.
+      freshSince: endMs - FRESH_WINDOW_MS,
+    });
+  }
 
   // The cue marks strikes that have just appeared on the map.
   //

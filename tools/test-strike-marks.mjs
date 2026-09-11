@@ -161,6 +161,45 @@ const legend = await page.evaluate(() =>
   [...document.querySelectorAll('#legend-body p')].map((n) => n.textContent).join(' | '));
 ok('the legend says what the shapes mean', /bolt/i.test(legend), legend);
 
+/* ---- and the same scheme in 3D ---- */
+console.log('\n=== 3D ===');
+await page.evaluate(() => document.getElementById('btn-3d').click());
+const gl = await page.evaluate(async () => {
+  for (let i = 0; i < 60; i += 1) {
+    await new Promise((r) => setTimeout(r, 500));
+    if (window.RadarLoop.gl()?.getLayer?.('wx-strikes-layer')) break;
+  }
+  const map = window.RadarLoop.gl();
+  const layer = map?.getLayer('wx-strikes-layer');
+  if (!layer) return { layer: false };
+  const colour = map.getPaintProperty('wx-strikes-layer', 'circle-color');
+  return {
+    layer: true,
+    expression: Array.isArray(colour) ? colour[0] : typeof colour,
+    colours: Array.isArray(colour) ? colour.filter((v) => typeof v === 'string' && v.startsWith('#')) : [],
+    freshLayer: !!map.getLayer('wx-strikes-fresh-layer'),
+    freshType: map.getLayer('wx-strikes-fresh-layer')?.type ?? null,
+    ramp: window.__strikeRender.ageStops().map(([, c]) => c),
+  };
+});
+console.log(`  ${JSON.stringify(gl)}`);
+ok('the 3D strike layer exists', gl.layer === true);
+// It carried a hardcoded copy of the old ramp under a comment claiming it
+// matched 2D, which it had not for some time.
+ok('3D uses the same colours as 2D',
+   JSON.stringify(gl.colours) === JSON.stringify(gl.ramp),
+   `${JSON.stringify(gl.colours)} against ${JSON.stringify(gl.ramp)}`);
+// 2D draws discrete bands, so a gradient here would be a second mismatch — and
+// interpolating a ramp that crosses red to blue passes through colours that are
+// in neither.
+ok('and steps between them rather than blending', gl.expression === 'step', String(gl.expression));
+ok('with the newest minute drawn as bolts', gl.freshLayer === true && gl.freshType === 'symbol',
+   `${gl.freshLayer} ${gl.freshType}`);
+await page.screenshot({ path: 'shots/strike-marks-3d.png' });
+await page.evaluate(() => document.getElementById('btn-3d').click());
+await page.waitForTimeout(2000);
+
+
 console.log('\n=== page errors ===');
 const real = [...new Set(errors)];
 if (real.length) real.forEach((e) => console.log(`  ${e}`));

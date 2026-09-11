@@ -13,6 +13,7 @@
  */
 
 import { CREDENTIALS, MAP_DEFAULTS } from '../config.js';
+import { ageStops as strikeAgeStops, strikeFreshColour, traceBolt } from '../lightning/render.js';
 import { emit, EVENTS } from './bus.js';
 import { runtime, slots } from './state.js';
 import { getBasemap, map } from './map.js';
@@ -206,28 +207,78 @@ export {
   toGlWmsTemplate,
 } from './mirror3d.js';
 
-/** Draws the filtered strikes as a GL circle layer. */
-export function setStrikes(strikes, { end, lifespanHours }) {
+/** A bolt icon for GL, drawn once and registered under a name. */
+function ensureBoltIcon(map) {
+  if (map.hasImage('wx-strike-bolt')) return 'wx-strike-bolt';
+  const size = 24;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const half = size / 2;
+  ctx.beginPath();
+  traceBolt(ctx, half, half, half * 0.92);
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(2,6,23,0.75)';
+  ctx.stroke();
+  ctx.fillStyle = strikeFreshColour();
+  ctx.fill();
+  map.addImage('wx-strike-bolt', ctx.getImageData(0, 0, size, size), { pixelRatio: 2 });
+  return 'wx-strike-bolt';
+}
+
+/**
+ * Draws the filtered strikes.
+ *
+ * The colours and the banding come from the 2D renderer rather than being
+ * written out again. They were written out again, and went stale: the ramp here
+ * was still gold-to-violet under a comment claiming it matched, long after 2D had
+ * moved to the operational white-to-navy scale.
+ *
+ * A step expression, not an interpolation. 2D draws discrete bands, so a
+ * gradient here would be a second way of not matching — and a gradient through a
+ * ramp that crosses from red to blue passes through colours that are in neither.
+ *
+ * Strikes from the last minute are a bolt, as in 2D. Those are few, so they can
+ * afford a symbol layer; the rest stay circles, which is the one thing 3D still
+ * does differently — at these sizes a two-pixel circle and a two-pixel square are
+ * the same handful of pixels, and a symbol layer for forty thousand of them is
+ * not.
+ */
+export function setStrikes(strikes, { end, lifespanHours, freshSince = 0 }) {
   if (!gl || !ready) return;
   const sourceId = 'wx-strikes';
   const layerId = 'wx-strikes-layer';
+  const freshSourceId = 'wx-strikes-fresh';
+  const freshLayerId = 'wx-strikes-fresh-layer';
 
   const lifespanMs = Math.max(1, lifespanHours) * 3600 * 1000;
   const endMs = end instanceof Date ? end.getTime() : end;
 
-  const data = {
-    type: 'FeatureCollection',
-    features: strikes.map((s) => ({
+  const aged = [];
+  const fresh = [];
+  for (const s of strikes) {
+    const feature = {
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [s.lon, s.lat] },
       properties: { age: Math.min(1, Math.max(0, (endMs - s.ms) / lifespanMs)) },
-    })),
-  };
+    };
+    (freshSince && s.ms >= freshSince ? fresh : aged).push(feature);
+  }
+
+  const data = { type: 'FeatureCollection', features: aged };
+  const freshData = { type: 'FeatureCollection', features: fresh };
+
+  // ['step', input, first, limit1, second, limit2, third, ...]
+  const stops = strikeAgeStops();
+  const colourExpression = ['step', ['get', 'age'], stops[0][1]];
+  for (let i = 0; i < stops.length - 1; i += 1) colourExpression.push(stops[i][0], stops[i + 1][1]);
 
   try {
     const existing = gl.getSource(sourceId);
     if (existing) {
       existing.setData(data);
+      gl.getSource(freshSourceId)?.setData(freshData);
       return;
     }
     gl.addSource(sourceId, { type: 'geojson', data });
@@ -237,14 +288,25 @@ export function setStrikes(strikes, { end, lifespanHours }) {
       source: sourceId,
       paint: {
         'circle-radius': ['interpolate', ['linear'], ['zoom'], 3, 2, 10, 5],
-        // Same age ramp as the 2D renderer.
-        'circle-color': [
-          'interpolate', ['linear'], ['get', 'age'],
-          0, '#ffd700', 0.2, '#ff00ff', 0.5, '#ff69b4', 0.8, '#800080', 1, '#4b0082',
-        ],
-        'circle-opacity': 0.9,
-        'circle-stroke-width': 0.5,
-        'circle-stroke-color': '#000',
+        'circle-color': colourExpression,
+        'circle-opacity': 0.95,
+        // The same dark edge the 2D marks carry, for the same reason: the
+        // newest band is white and the base map underneath might be too.
+        'circle-stroke-width': 0.8,
+        'circle-stroke-color': 'rgba(2,6,23,0.55)',
+      },
+    });
+
+    gl.addSource(freshSourceId, { type: 'geojson', data: freshData });
+    gl.addLayer({
+      id: freshLayerId,
+      type: 'symbol',
+      source: freshSourceId,
+      layout: {
+        'icon-image': ensureBoltIcon(gl),
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 3, 0.5, 10, 0.9],
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
       },
     });
   } catch (error) {

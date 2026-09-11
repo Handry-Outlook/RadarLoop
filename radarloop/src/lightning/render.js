@@ -50,7 +50,7 @@ const AGE_STOPS = [
 const FRESH_BAND = -2;
 
 /** How recent a strike must be to count as just-struck. */
-const FRESH_WINDOW_MS = 60 * 1000;
+export const FRESH_WINDOW_MS = 60 * 1000;
 const FRESH_COLOUR = '#38bdf8';
 
 /**
@@ -61,6 +61,14 @@ const FRESH_COLOUR = '#38bdf8';
  * anything, and an unhaloed white square on light terrain is not there at all.
  */
 const MARK_HALO = 'rgba(2,6,23,0.55)';
+
+/** The arrivals colour, for anything drawing strikes outside this module. */
+export const strikeFreshColour = () => FRESH_COLOUR;
+
+/** Adds a bolt to a path, so 2D and 3D draw the same shape. */
+export function traceBolt(ctx, x, y, size) {
+  tracePath(ctx, BOLT, x, y, size);
+}
 
 /** The age ramp, for the legend and the checks. */
 export const ageStops = () => AGE_STOPS.map(([limit, colour]) => [limit, colour]);

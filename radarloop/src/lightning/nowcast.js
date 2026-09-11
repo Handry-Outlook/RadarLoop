@@ -570,6 +570,18 @@ export function resetRadarHints() {
 }
 
 /** What the nowcast knows from radar right now. For diagnostics and checks. */
+/**
+ * Plants a measurement, for the checks.
+ *
+ * The blend between radar and the strike track is the part of this worth
+ * testing and the hardest to arrange: it needs a real storm under real radar
+ * coverage at a moment the archive still holds. Seeding one turns that into an
+ * ordinary check.
+ */
+export function seedRadarHint(lat, lon, measurement, atMs = Date.now()) {
+  hints.set(hintKey(lat, lon), { ...measurement, at: atMs });
+}
+
 export const radarHints = () => [...hints.entries()].map(([key, value]) => ({ key, ...value }));
 
 
@@ -731,6 +743,15 @@ export function remainingLifeMinutes({ latest, previous }, windowMin, ageMin, si
   return Math.round(Math.max(MIN_LIFE_MIN, Math.min(MAX_LIFE_MIN, minutes)));
 }
 
+/**
+ * How much more a radar-measured motion is worth than a strike-fitted one.
+ *
+ * Four means radar has to be four times worse before the two are even. At its
+ * quality floor it still carries about 60% of a good lightning fit; a clean
+ * correlation against a weak track is over 95%.
+ */
+const RADAR_MOTION_WEIGHT = 4;
+
 const MAX_SPEED_KMH = 80;
 let previousNowcasts = [];
 let lastRaw = [];
@@ -822,6 +843,8 @@ export function calculateNowcast(strikes, reference = new Date()) {
   const fromRadar = centreLat === null ? null : radarHintFor(centreLat, centreLon, referenceMs);
   if (centreLat !== null) refreshRadarHints([[centreLat, centreLon]], referenceMs);
 
+  // Radar first, and not only as a fallback ordering: it is the better estimate
+  // for the same reason it is weighted higher in the blend below.
   let steering = fromRadar && fromRadar.quality > 0 ? fromRadar : null;
   if (!steering) {
     // A pass with nothing to advect by produces blobs rather than cells, which
@@ -903,7 +926,19 @@ export function calculateNowcast(strikes, reference = new Date()) {
       // Blended as vectors, weighted by how much each estimate has earned. Two
       // bearings cannot be averaged arithmetically — north-by-one-degree and
       // north-by-minus-one average to south — and the speeds want combining too.
-      const weight = radar.quality / (radar.quality + lightningQuality + 1e-6);
+      //
+      // Radar counts for several times what the strike track does, and the
+      // reason is in what each one measures. Radar correlates the precipitation
+      // field against itself a quarter of an hour later: it is the displacement
+      // of the storm, measured directly, from tens of thousands of pixels. The
+      // strike track is the drift of a centroid of discharges, and discharges
+      // are scattered across the whole convective area more or less at random —
+      // a cell producing six flashes in five minutes moves its centroid
+      // kilometres for reasons that have nothing to do with where it is going.
+      // Weighting them by their own fitted quality alone treated a tidy fit of
+      // noise as the equal of a measurement.
+      const weight = (radar.quality * RADAR_MOTION_WEIGHT)
+        / (radar.quality * RADAR_MOTION_WEIGHT + lightningQuality + 1e-6);
       const toRad = Math.PI / 180;
       const u = lightningSpeed * Math.sin(lightningDirection * toRad) * (1 - weight)
         + radar.speedKmH * Math.sin(radar.directionDeg * toRad) * weight;

@@ -136,6 +136,73 @@ ok('and at about the speed it was moving',
    Object.values(headings).every((h) => h && h.speed > 28 && h.speed < 52),
    JSON.stringify(Object.values(headings).map((h) => h?.speed)));
 
+console.log('\n=== radar against the strike track ===');
+const blend = await page.evaluate(() => {
+  const { calculateNowcast, resetRadarHints, resetNowcastHistory, seedRadarHint } = window.__nowcast;
+  const now = Date.now();
+  // A clean strike track heading due east at 40 km/h.
+  const track = () => {
+    const out = [];
+    for (let step = 0; step < 20; step += 1) {
+      const minutes = (20 - step) * 4;
+      const km = (40 * minutes) / 60;
+      const lon = -1.5 + km / (111 * Math.cos((52.5 * Math.PI) / 180));
+      for (let i = 0; i < 8; i += 1) {
+        out.push({ ms: now - minutes * 60000 + i * 900, lat: 52.5 + ((i % 3) - 1) * 0.02, lon: lon + (Math.floor(i / 3) - 1) * 0.025 });
+      }
+    }
+    return out.sort((a, b) => a.ms - b.ms);
+  };
+  // Note the sign: the track is built backwards in time, so it runs westwards.
+  const strikes = track();
+
+  const run = (hint) => {
+    resetRadarHints();
+    resetNowcastHistory();
+    if (hint) {
+      let minLat = 90; let maxLat = -90; let minLon = 180; let maxLon = -180;
+      for (const s of strikes) {
+        minLat = Math.min(minLat, s.lat); maxLat = Math.max(maxLat, s.lat);
+        minLon = Math.min(minLon, s.lon); maxLon = Math.max(maxLon, s.lon);
+      }
+      for (let lat = minLat - 0.5; lat <= maxLat + 0.5; lat += 0.2) {
+        for (let lon = minLon - 0.5; lon <= maxLon + 0.5; lon += 0.2) {
+          seedRadarHint(lat, lon, hint, now);
+        }
+      }
+    }
+    const got = calculateNowcast(strikes, new Date(now));
+    return got[0] ? { dir: Math.round(got[0].directionDeg), speed: Math.round(got[0].speedKmH), source: got[0].motionSource } : null;
+  };
+
+  const lightningOnly = run(null);
+  // A confident radar measurement pointing somewhere else entirely.
+  const disagreeing = run({ speedKmH: 55, directionDeg: (lightningOnly.dir + 90) % 360, quality: 0.6, trend: 1, peakDbz: 48 });
+  // And a barely-usable one, which should barely move it.
+  const weak = run({ speedKmH: 55, directionDeg: (lightningOnly.dir + 90) % 360, quality: 0.03, trend: 1, peakDbz: 48 });
+  return { lightningOnly, disagreeing, weak };
+});
+console.log(`  ${JSON.stringify(blend)}`);
+
+const apart = (a, b) => Math.abs(((a - b) % 360 + 540) % 360 - 180);
+const pulledBy = apart(blend.disagreeing.dir, blend.lightningOnly.dir);
+const weakPull = apart(blend.weak.dir, blend.lightningOnly.dir);
+console.log(`  a confident radar pulls the heading ${pulledBy}°, a weak one ${weakPull}°`);
+
+ok('with no radar the heading is the strike track', blend.lightningOnly.source === 'lightning',
+   String(blend.lightningOnly.source));
+// Radar measures the displacement of the precipitation field directly; the
+// strike track is the drift of a centroid of scattered discharges. Weighting
+// them by fitted quality alone made a tidy fit of noise the equal of a
+// measurement, so a confident radar should take most of the way.
+ok('a confident radar takes the heading most of the way to its own',
+   pulledBy > 60, `${pulledBy}° of 90`);
+ok('and says both sources were used', blend.disagreeing.source === 'radar+lightning',
+   String(blend.disagreeing.source));
+ok('while a barely-usable one barely moves it', weakPull < pulledBy / 2,
+   `${weakPull}° against ${pulledBy}°`);
+
+
 console.log('\n=== how long it has left ===');
 const life = await page.evaluate(() => {
   const { remainingLife } = window.__nowcast;

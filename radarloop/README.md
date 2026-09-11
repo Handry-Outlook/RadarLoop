@@ -1730,6 +1730,31 @@ period still shows. That is worth a check rather than an argument — the first
 reading of the code said outlooks took a different path through the timeline
 entirely, and they do not.
 
+**3D draws the same scheme.** It had a hardcoded copy of the age ramp under a
+comment saying it matched the 2D renderer, and it had not for some time — still
+gold through magenta to violet long after 2D moved to the operational
+white-to-navy scale. It reads the ramp from the renderer now, and steps between
+the bands rather than interpolating, because 2D draws discrete bands and because
+a gradient across a ramp that crosses red to blue passes through colours that
+are in neither. Strikes from the last minute are bolts there too, as a symbol
+layer; the aged ones stay circles, which is the one thing 3D still does
+differently — at two or three pixels a circle and a square are the same handful
+of pixels, and a symbol layer for forty thousand of them is not.
+
+**Radar carries four times the weight of the strike track** in the motion blend.
+The two were weighted by their own fitted quality alone, which treated a tidy fit
+of noise as the equal of a measurement. They are not the same kind of evidence:
+radar correlates the precipitation field against itself a quarter of an hour
+later, so it measures the displacement of the storm directly from tens of
+thousands of pixels, while the strike track is the drift of a centroid of
+discharges scattered more or less at random across the whole convective area — a
+cell producing six flashes in five minutes moves its centroid kilometres for
+reasons that have nothing to do with where it is going.
+
+At the weighting of four, a confident radar measurement takes a heading 79° of
+the 90° towards its own answer, and a barely-usable one moves it 13°. Both are
+checked, against a seeded measurement rather than against the weather.
+
 **The age ramp.** Six even bands: white, red, deep red, maroon, then blue and
 navy. The two ends are opposite in both hue and temperature, so a white mark
 never reads as an old one — which the previous ramp could not manage, running

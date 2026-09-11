@@ -8307,6 +8307,14 @@ const FRESH_COLOUR = '#38bdf8';
  */
 const MARK_HALO = 'rgba(2,6,23,0.55)';
 
+/** The arrivals colour, for anything drawing strikes outside this module. */
+const strikeFreshColour = () => FRESH_COLOUR;
+
+/** Adds a bolt to a path, so 2D and 3D draw the same shape. */
+function traceBolt(ctx, x, y, size) {
+  tracePath(ctx, BOLT, x, y, size);
+}
+
 /** The age ramp, for the legend and the checks. */
 const ageStops = () => AGE_STOPS.map(([limit, colour]) => [limit, colour]);
 
@@ -9015,6 +9023,9 @@ function refreshColours() {
 
 const getStrikeLayer = () => layer;
 
+__exports.FRESH_WINDOW_MS = FRESH_WINDOW_MS;
+__exports.strikeFreshColour = strikeFreshColour;
+__exports.traceBolt = traceBolt;
 __exports.ageStops = ageStops;
 __exports.colourForAge = colourForAge;
 __exports.mercatorX = mercatorX;
@@ -11025,6 +11036,7 @@ __define('core/map3d.js', (__exports, __mod) => {
  * on mobile.
  */
 const { CREDENTIALS, MAP_DEFAULTS } = __mod('config.js');
+const { ageStops: strikeAgeStops, strikeFreshColour, traceBolt } = __mod('lightning/render.js');
 const { emit, EVENTS } = __mod('core/bus.js');
 const { runtime, slots } = __mod('core/state.js');
 const { getBasemap, map } = __mod('core/map.js');
@@ -11202,28 +11214,78 @@ function addBuildings() {
  * lifecycle and re-exports them so callers have one 3D entry point.
  * ------------------------------------------------------------------ */
 
-/** Draws the filtered strikes as a GL circle layer. */
-function setStrikes(strikes, { end, lifespanHours }) {
+/** A bolt icon for GL, drawn once and registered under a name. */
+function ensureBoltIcon(map) {
+  if (map.hasImage('wx-strike-bolt')) return 'wx-strike-bolt';
+  const size = 24;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const half = size / 2;
+  ctx.beginPath();
+  traceBolt(ctx, half, half, half * 0.92);
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(2,6,23,0.75)';
+  ctx.stroke();
+  ctx.fillStyle = strikeFreshColour();
+  ctx.fill();
+  map.addImage('wx-strike-bolt', ctx.getImageData(0, 0, size, size), { pixelRatio: 2 });
+  return 'wx-strike-bolt';
+}
+
+/**
+ * Draws the filtered strikes.
+ *
+ * The colours and the banding come from the 2D renderer rather than being
+ * written out again. They were written out again, and went stale: the ramp here
+ * was still gold-to-violet under a comment claiming it matched, long after 2D had
+ * moved to the operational white-to-navy scale.
+ *
+ * A step expression, not an interpolation. 2D draws discrete bands, so a
+ * gradient here would be a second way of not matching — and a gradient through a
+ * ramp that crosses from red to blue passes through colours that are in neither.
+ *
+ * Strikes from the last minute are a bolt, as in 2D. Those are few, so they can
+ * afford a symbol layer; the rest stay circles, which is the one thing 3D still
+ * does differently — at these sizes a two-pixel circle and a two-pixel square are
+ * the same handful of pixels, and a symbol layer for forty thousand of them is
+ * not.
+ */
+function setStrikes(strikes, { end, lifespanHours, freshSince = 0 }) {
   if (!gl || !ready) return;
   const sourceId = 'wx-strikes';
   const layerId = 'wx-strikes-layer';
+  const freshSourceId = 'wx-strikes-fresh';
+  const freshLayerId = 'wx-strikes-fresh-layer';
 
   const lifespanMs = Math.max(1, lifespanHours) * 3600 * 1000;
   const endMs = end instanceof Date ? end.getTime() : end;
 
-  const data = {
-    type: 'FeatureCollection',
-    features: strikes.map((s) => ({
+  const aged = [];
+  const fresh = [];
+  for (const s of strikes) {
+    const feature = {
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [s.lon, s.lat] },
       properties: { age: Math.min(1, Math.max(0, (endMs - s.ms) / lifespanMs)) },
-    })),
-  };
+    };
+    (freshSince && s.ms >= freshSince ? fresh : aged).push(feature);
+  }
+
+  const data = { type: 'FeatureCollection', features: aged };
+  const freshData = { type: 'FeatureCollection', features: fresh };
+
+  // ['step', input, first, limit1, second, limit2, third, ...]
+  const stops = strikeAgeStops();
+  const colourExpression = ['step', ['get', 'age'], stops[0][1]];
+  for (let i = 0; i < stops.length - 1; i += 1) colourExpression.push(stops[i][0], stops[i + 1][1]);
 
   try {
     const existing = gl.getSource(sourceId);
     if (existing) {
       existing.setData(data);
+      gl.getSource(freshSourceId)?.setData(freshData);
       return;
     }
     gl.addSource(sourceId, { type: 'geojson', data });
@@ -11233,14 +11295,25 @@ function setStrikes(strikes, { end, lifespanHours }) {
       source: sourceId,
       paint: {
         'circle-radius': ['interpolate', ['linear'], ['zoom'], 3, 2, 10, 5],
-        // Same age ramp as the 2D renderer.
-        'circle-color': [
-          'interpolate', ['linear'], ['get', 'age'],
-          0, '#ffd700', 0.2, '#ff00ff', 0.5, '#ff69b4', 0.8, '#800080', 1, '#4b0082',
-        ],
-        'circle-opacity': 0.9,
-        'circle-stroke-width': 0.5,
-        'circle-stroke-color': '#000',
+        'circle-color': colourExpression,
+        'circle-opacity': 0.95,
+        // The same dark edge the 2D marks carry, for the same reason: the
+        // newest band is white and the base map underneath might be too.
+        'circle-stroke-width': 0.8,
+        'circle-stroke-color': 'rgba(2,6,23,0.55)',
+      },
+    });
+
+    gl.addSource(freshSourceId, { type: 'geojson', data: freshData });
+    gl.addLayer({
+      id: freshLayerId,
+      type: 'symbol',
+      source: freshSourceId,
+      layout: {
+        'icon-image': ensureBoltIcon(gl),
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 3, 0.5, 10, 0.9],
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
       },
     });
   } catch (error) {
@@ -14548,6 +14621,18 @@ function resetRadarHints() {
 }
 
 /** What the nowcast knows from radar right now. For diagnostics and checks. */
+/**
+ * Plants a measurement, for the checks.
+ *
+ * The blend between radar and the strike track is the part of this worth
+ * testing and the hardest to arrange: it needs a real storm under real radar
+ * coverage at a moment the archive still holds. Seeding one turns that into an
+ * ordinary check.
+ */
+function seedRadarHint(lat, lon, measurement, atMs = Date.now()) {
+  hints.set(hintKey(lat, lon), { ...measurement, at: atMs });
+}
+
 const radarHints = () => [...hints.entries()].map(([key, value]) => ({ key, ...value }));
 
 
@@ -14709,6 +14794,15 @@ function remainingLifeMinutes({ latest, previous }, windowMin, ageMin, silentMin
   return Math.round(Math.max(MIN_LIFE_MIN, Math.min(MAX_LIFE_MIN, minutes)));
 }
 
+/**
+ * How much more a radar-measured motion is worth than a strike-fitted one.
+ *
+ * Four means radar has to be four times worse before the two are even. At its
+ * quality floor it still carries about 60% of a good lightning fit; a clean
+ * correlation against a weak track is over 95%.
+ */
+const RADAR_MOTION_WEIGHT = 4;
+
 const MAX_SPEED_KMH = 80;
 let previousNowcasts = [];
 let lastRaw = [];
@@ -14800,6 +14894,8 @@ function calculateNowcast(strikes, reference = new Date()) {
   const fromRadar = centreLat === null ? null : radarHintFor(centreLat, centreLon, referenceMs);
   if (centreLat !== null) refreshRadarHints([[centreLat, centreLon]], referenceMs);
 
+  // Radar first, and not only as a fallback ordering: it is the better estimate
+  // for the same reason it is weighted higher in the blend below.
   let steering = fromRadar && fromRadar.quality > 0 ? fromRadar : null;
   if (!steering) {
     // A pass with nothing to advect by produces blobs rather than cells, which
@@ -14881,7 +14977,19 @@ function calculateNowcast(strikes, reference = new Date()) {
       // Blended as vectors, weighted by how much each estimate has earned. Two
       // bearings cannot be averaged arithmetically — north-by-one-degree and
       // north-by-minus-one average to south — and the speeds want combining too.
-      const weight = radar.quality / (radar.quality + lightningQuality + 1e-6);
+      //
+      // Radar counts for several times what the strike track does, and the
+      // reason is in what each one measures. Radar correlates the precipitation
+      // field against itself a quarter of an hour later: it is the displacement
+      // of the storm, measured directly, from tens of thousands of pixels. The
+      // strike track is the drift of a centroid of discharges, and discharges
+      // are scattered across the whole convective area more or less at random —
+      // a cell producing six flashes in five minutes moves its centroid
+      // kilometres for reasons that have nothing to do with where it is going.
+      // Weighting them by their own fitted quality alone treated a tidy fit of
+      // noise as the equal of a measurement.
+      const weight = (radar.quality * RADAR_MOTION_WEIGHT)
+        / (radar.quality * RADAR_MOTION_WEIGHT + lightningQuality + 1e-6);
       const toRad = Math.PI / 180;
       const u = lightningSpeed * Math.sin(lightningDirection * toRad) * (1 - weight)
         + radar.speedKmH * Math.sin(radar.directionDeg * toRad) * weight;
@@ -15215,6 +15323,7 @@ __exports.profile = profile;
 __exports.thinAcrossTime = thinAcrossTime;
 __exports.convexHull = convexHull;
 __exports.resetRadarHints = resetRadarHints;
+__exports.seedRadarHint = seedRadarHint;
 __exports.radarHints = radarHints;
 __exports.remainingLifeMinutes = remainingLifeMinutes;
 __exports.nowcastInternals = nowcastInternals;
@@ -15450,7 +15559,7 @@ const { lightning, time } = __mod('core/state.js');
 const { throttle } = __mod('core/util.js');
 const { activeWindow, domain } = __mod('time/controller.js');
 const { ensureCoverage, fetchStrikes, filterWindow, noteVisible, oldestRetained, pruneBefore } = __mod('lightning/source.js');
-const { drawStrikes, refreshColours, removeStrikeLayer } = __mod('lightning/render.js');
+const { drawStrikes, FRESH_WINDOW_MS, refreshColours, removeStrikeLayer } = __mod('lightning/render.js');
 const { playThunder, updateCounter, updateHeatmap, clearOverlays } = __mod('lightning/overlays.js');
 const { installAudioUnlock } = __mod('lightning/audio.js');
 const { is3D, setStrikes: set3DStrikes } = __mod('core/map3d.js');
@@ -15533,7 +15642,14 @@ const refresh = throttle((options = {}) => {
   drawNowcast(filtered, end);
 
   // 3D shares the selection but not the Leaflet layers, so it is fed directly.
-  if (is3D()) set3DStrikes(filtered, { end, lifespanHours: lightning.lifespanHours });
+  if (is3D()) {
+    set3DStrikes(filtered, {
+      end,
+      lifespanHours: lightning.lifespanHours,
+      // The same minute 2D calls fresh, so the bolt appears in both views.
+      freshSince: endMs - FRESH_WINDOW_MS,
+    });
+  }
 
   // The cue marks strikes that have just appeared on the map.
   //
@@ -22326,7 +22442,7 @@ const { prune: strikeStorePrune, summary: strikeStoreSummary } = __mod('layers/s
 const { MMH_INTERVALS } = __mod('data/palettes.js');
 const { dbzToMmh, encodedToDbz, encodedToMmh } = __mod('layers/radarScale.js');
 const { bestShift, measureMotion } = __mod('lightning/radarMotion.js');
-const { calculateNowcast, hailRisk, impactLevel, nowcastInternals, radarHints, remainingLifeMinutes, resetNowcastHistory, resetRadarHints } = __mod('lightning/nowcast.js');
+const { calculateNowcast, hailRisk, impactLevel, nowcastInternals, radarHints, remainingLifeMinutes, resetNowcastHistory, resetRadarHints, seedRadarHint } = __mod('lightning/nowcast.js');
 /* ------------------------------------------------------------------ *
  * Session restore
  * ------------------------------------------------------------------ */
@@ -22876,7 +22992,7 @@ window.__strikeStore = { summary: strikeStoreSummary, prune: strikeStorePrune };
 window.__nowcast = {
   bestShift, measureMotion, calculateNowcast, radarHints, resetRadarHints,
   remainingLife: remainingLifeMinutes, resetNowcastHistory, nowcastInternals,
-  impactLevel, hailRisk,
+  impactLevel, hailRisk, seedRadarHint,
 };
 window.__windyLightning = {
   decodeFeed, decodeStrike, parseFrame, bufferStrikes, framesCovering, feedStats,
