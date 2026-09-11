@@ -1647,6 +1647,27 @@ over the Chilterns it reads a 67 dBZ core, and the cells that produced the hail
 come out "Large hail likely" at nineteen flashes a minute and "Hail likely" at
 six.
 
+**Amber is for a claim, not a maybe.** Any hail level at all used to colour the
+outline, which took the hue away from high impact entirely: on a day with several
+deep echoes every outline was amber and the white one did not exist. Amber is
+drawn at "likely" and above now. "Possible" stays in the popup, where a qualified
+statement belongs, and leaves the outline free to say what the impact scale says.
+The thresholds moved up with it, to 0.38, 0.58 and 0.78.
+
+**Every cell has a direction, and somewhere to go.** Two ways a projection could
+come out blank, both of which look on the map like a storm going nowhere.
+
+A cluster that is a single time bin, or whose track is too short to fit, had no
+velocity — so its projected footprint landed exactly on its current one. A cell
+embedded in a flow is going wherever the flow goes unless it says otherwise, and
+the field's steering is already measured; it is what the clustering used to
+separate the cells in the first place. Those cells take it now, and the popup says
+so rather than passing it off as a fit.
+
+And a cell whose expected life was shorter than the projection steps kept none of
+them. Twenty minutes left is still twenty minutes of going somewhere, so the
+shortest step always survives and only the longer ones are dropped.
+
 **Intensity is read from the storm, not its neighbourhood.** Finding a
 displacement and reading an intensity want opposite things from a window.
 Correlation wants context — a wide field, so the match is distinctive and a storm

@@ -1085,6 +1085,21 @@ export function calculateNowcast(strikes, reference = new Date()) {
       }
     }
 
+    // A cell with nothing of its own to go on takes the field's motion.
+    //
+    // Some clusters are a single time bin, or a track so short the fit finds
+    // nothing in it, and those came out at a standstill: the projected footprint
+    // landed exactly on the current one, drawn on top of it, so the storm had no
+    // direction at all. A cell embedded in a flow is going wherever the flow is
+    // going unless it says otherwise, and the steering is already measured — it
+    // is what the clustering used to separate the cells in the first place.
+    let motionSource = radar && radar.quality > 0 ? 'radar+lightning' : 'lightning';
+    if (speedKmH < 3 && steering && steering.speedKmH > 3) {
+      speedKmH = steering.speedKmH;
+      directionDeg = steering.directionDeg;
+      motionSource = fromRadar === steering ? 'radar (field)' : 'field';
+    }
+
     // A "lightning jump" — a sudden rate increase — usually precedes intensification.
     const cutoff = referenceMs - jumpWindow;
     const latest = cluster.filter((s) => s.ms >= cutoff).length;
@@ -1139,7 +1154,7 @@ export function calculateNowcast(strikes, reference = new Date()) {
       baseLon,
       speedKmH, directionDeg, regressionScore, consistency, residualKm,
       confidence, clusterSize: cluster.length, bins: bins.length,
-      jump, growing, lifeMinutes, flashesPerMinute, impact, hail,
+      jump, growing, lifeMinutes, flashesPerMinute, impact, hail, motionSource,
       decaying: shrinking === null ? decayFactor < 0.5 : shrinking || decayFactor < 0.5,
       radar,
     });
@@ -1237,7 +1252,14 @@ function smoothAndProject(entry, referenceMs, minClusterSize, steps) {
     // A plus-sixty footprint for a cell with twenty minutes left is a drawing of
     // something that will not be there, and it is the projection people read.
     const horizon = entry.lifeMinutes ?? Infinity;
-    for (const minutes of steps.filter((m) => m <= horizon * 1.1)) {
+    // At least one projection always survives. Cutting every step left a cell
+    // drawing its current footprint and nothing else, which on the map is
+    // indistinguishable from a storm that is not going anywhere — and a cell
+    // with twenty minutes left is still going somewhere for those twenty
+    // minutes. The longer steps are the ones worth dropping.
+    const within = steps.filter((m) => m <= horizon * 1.1);
+    const kept = within.length ? within : [steps[0]];
+    for (const minutes of kept) {
       const moved = translatePolygon(ring, directionDeg, speedKmH * (minutes / 60));
       // Growing storms expand, decaying ones shrink.
       let scale = 1;
@@ -1267,7 +1289,7 @@ function smoothAndProject(entry, referenceMs, minClusterSize, steps) {
     directionDeg,
     confidence: entry.confidence,
     clusterSize: entry.clusterSize,
-    motionSource: entry.radar?.quality > 0 ? 'radar+lightning' : 'lightning',
+    motionSource: entry.motionSource ?? (entry.radar?.quality > 0 ? 'radar+lightning' : 'lightning'),
     radarTrend: entry.radar?.trend ?? null,
     lifeMinutes: entry.lifeMinutes ?? null,
     flashesPerMinute: entry.flashesPerMinute ?? 0,
@@ -1383,9 +1405,9 @@ export function hailRisk({ flashesPerMinute = 0, peakDbz = null, largeHailArea =
   if (jump) risk = Math.min(1, risk + 0.1);
   risk = Math.min(1, risk);
 
-  if (risk >= 0.75) return { risk, level: 3, label: 'Large hail likely' };
-  if (risk >= 0.52) return { risk, level: 2, label: 'Hail likely' };
-  if (risk >= 0.3) return { risk, level: 1, label: 'Hail possible' };
+  if (risk >= 0.78) return { risk, level: 3, label: 'Large hail likely' };
+  if (risk >= 0.58) return { risk, level: 2, label: 'Hail likely' };
+  if (risk >= 0.38) return { risk, level: 1, label: 'Hail possible' };
   return { risk, level: 0, label: 'Hail unlikely' };
 }
 

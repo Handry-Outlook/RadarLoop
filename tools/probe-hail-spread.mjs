@@ -44,13 +44,17 @@ const report = await page.evaluate(async (atMs) => {
       bigCore: m ? +(m.largeHailArea * 100).toFixed(2) : null,
       risk: verdict ? +verdict.risk.toFixed(2) : null,
       label: verdict ? verdict.label : null,
+      speed: Math.round(c.speedKmH),
+      dir: Math.round(c.directionDeg),
+      motion: c.motionSource,
+      impact: c.impact.level,
     });
   }
   return out;
 }, at);
 
-console.log('  size  rate/min   position        peak dBZ  >=60 %   risk  verdict');
+console.log('  size  rate/min   peak dBZ  >=60 %   risk  verdict            speed  dir  motion');
 for (const r of report) {
-  console.log(`  ${String(r.size).padStart(4)}  ${String(r.rate).padStart(8)}   ${String(r.at).padEnd(16)} ${String(r.peakDbz ?? '—').padStart(8)}  ${String(r.bigCore ?? '—').padStart(6)}  ${String(r.risk ?? '—').padStart(5)}  ${r.label ?? '—'}`);
+  console.log(`  ${String(r.size).padStart(4)}  ${String(r.rate).padStart(8)}   ${String(r.peakDbz ?? '—').padStart(8)}  ${String(r.bigCore ?? '—').padStart(6)}  ${String(r.risk ?? '—').padStart(5)}  ${String(r.label ?? '—').padEnd(18)} ${String(r.speed).padStart(5)}  ${String(r.dir).padStart(3)}  ${r.motion}`);
 }
 await browser.close();

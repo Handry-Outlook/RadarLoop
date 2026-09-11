@@ -203,6 +203,60 @@ ok('while a barely-usable one barely moves it', weakPull < pulledBy / 2,
    `${weakPull}° against ${pulledBy}°`);
 
 
+console.log('\n=== a cell with nothing to fit ===');
+const stalled = await page.evaluate(() => {
+  const { calculateNowcast, resetRadarHints, resetNowcastHistory } = window.__nowcast;
+  const now = Date.now();
+  const out = [];
+
+  // A long track, which is what gives the field its steering: due east at 40.
+  for (let step = 0; step < 20; step += 1) {
+    const minutes = (20 - step) * 4;
+    const km = (40 * minutes) / 60;
+    const lon = -1.5 + km / (111 * Math.cos((52.5 * Math.PI) / 180));
+    for (let i = 0; i < 10; i += 1) {
+      out.push({ ms: now - minutes * 60000 + i * 900, lat: 52.5 + ((i % 3) - 1) * 0.02, lon: lon + (Math.floor(i / 3) - 1) * 0.02 });
+    }
+  }
+  // And a burst two degrees away, all inside ninety seconds: one time bin, so
+  // nothing to fit a velocity through.
+  for (let i = 0; i < 40; i += 1) {
+    out.push({ ms: now - 90000 + i * 2000, lat: 54.6 + ((i % 6) - 3) * 0.012, lon: -1.4 + (Math.floor(i / 6) - 3) * 0.012 });
+  }
+  out.sort((a, b) => a.ms - b.ms);
+
+  resetRadarHints();
+  resetNowcastHistory();
+  return calculateNowcast(out, new Date(now))
+    .map((c) => ({
+      at: [+c.baseLat.toFixed(1), +c.baseLon.toFixed(1)],
+      size: c.clusterSize,
+      speed: Math.round(c.speedKmH),
+      dir: Math.round(c.directionDeg),
+      motion: c.motionSource,
+      projections: c.nowcastPolygons.length,
+    }));
+});
+console.log(`  ${JSON.stringify(stalled)}`);
+
+const burst = stalled.find((c) => c.at[0] > 54);
+ok('the burst is tracked as its own cell', !!burst, JSON.stringify(stalled));
+// It used to come out at a standstill, so the projected footprint landed exactly
+// on the current one and the storm had no direction at all.
+ok('and is given the motion of the field around it', burst && burst.speed > 3,
+   `${burst?.speed} km/h`);
+ok('which is named as such rather than passed off as a fit',
+   burst && /field/.test(burst.motion), String(burst?.motion));
+ok('so it has somewhere to project to', burst && burst.projections > 0,
+   String(burst?.projections));
+// A cell whose expected life is shorter than the projection steps used to keep
+// none of them, drawing its current footprint alone — which on the map reads as
+// a storm going nowhere, the same as having no motion at all.
+ok('and so does every other cell, whatever its expected life',
+   stalled.every((c) => c.projections > 0),
+   JSON.stringify(stalled.map((c) => [c.size, c.projections])));
+
+
 console.log('\n=== how long it has left ===');
 const life = await page.evaluate(() => {
   const { remainingLife } = window.__nowcast;
@@ -260,7 +314,10 @@ const severity = await page.evaluate(() => {
       // A severe UK afternoon as this composite actually renders one: a deep
       // core near the top of its range and a busy but not extraordinary flash
       // rate. The old scale scored this at nothing, which is the complaint.
-      severeUkDay: hailRisk({ flashesPerMinute: 25, peakDbz: 52, largeHailArea: 0.0005 }).label,
+      severeUkDay: hailRisk({ flashesPerMinute: 6.3, peakDbz: 61, largeHailArea: 0.0247 }).label,
+      supercell: hailRisk({ flashesPerMinute: 19, peakDbz: 63, largeHailArea: 0.0273 }).label,
+      strongModestCore: hailRisk({ flashesPerMinute: 25, peakDbz: 52, largeHailArea: 0.0005 }).label,
+      quietDeepEcho: hailRisk({ flashesPerMinute: 0.6, peakDbz: 64, largeHailArea: 0.056 }).label,
       strongNoHail: hailRisk({ flashesPerMinute: 10, peakDbz: 48 }).label,
       ordinary: hailRisk({ flashesPerMinute: 3, peakDbz: 45 }).label,
     },
@@ -290,12 +347,21 @@ ok('a strong echo with a high flash rate is hail', /likely/i.test(severity.hail.
    severity.hail.vigorous);
 ok('and a deeper one with a jump is large hail', /Large hail/i.test(severity.hail.severe),
    severity.hail.severe);
-// The reported failure: nothing ever showed hail, because the thresholds were
-// the textbook ones and this composite clips near 56 dBZ.
+// Measured on the 27 August supercell day: the cells that produced hail read 57
+// to 63 dBZ with a few percent of the intensity square above 60.
 ok('a severe day on this composite does report hail', /likely/i.test(severity.hail.severeUkDay),
    severity.hail.severeUkDay);
 ok('a strong storm without a deep core does not',
    /unlikely|possible/i.test(severity.hail.strongNoHail), severity.hail.strongNoHail);
+ok('the supercell itself is the one large-hail call',
+   /Large hail/i.test(severity.hail.supercell), severity.hail.supercell);
+// A strong storm with only a modest core is worth mentioning and not worth an
+// amber outline, which is drawn at "likely" and above.
+ok('a high flash rate over a modest core is possible, not likely',
+   /possible/i.test(severity.hail.strongModestCore), severity.hail.strongModestCore);
+// The one that used to come out "likely" on the strength of its echo alone.
+ok('a deep echo with almost no lightning is not called hail',
+   /unlikely|possible/i.test(severity.hail.quietDeepEcho), severity.hail.quietDeepEcho);
 ok('and an ordinary one does not', /unlikely|No hail/i.test(severity.hail.ordinary),
    severity.hail.ordinary);
 

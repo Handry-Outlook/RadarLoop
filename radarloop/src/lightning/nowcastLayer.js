@@ -83,7 +83,11 @@ function popupHtml(cluster, forecast, impact) {
         <div><dt>Heading</dt><dd>${cluster.directionDeg.toFixed(0)}° ${compassPoint(cluster.directionDeg)}</dd></div>
         <div><dt>Confidence</dt><dd>${(cluster.confidence * 100).toFixed(0)}%</dd></div>
         <div><dt>Strikes</dt><dd>${cluster.clusterSize}</dd></div>
-        <div><dt>Motion from</dt><dd>${cluster.motionSource === 'radar+lightning' ? 'radar and strikes' : 'strikes'}</dd></div>
+        <div><dt>Motion from</dt><dd>${escapeHtml({
+          'radar+lightning': 'radar and strikes',
+          'radar (field)': 'radar, across the field',
+          field: 'the field around it',
+        }[cluster.motionSource] || 'strikes')}</dd></div>
         <div><dt>Flash rate</dt><dd>${cluster.flashesPerMinute.toFixed(cluster.flashesPerMinute < 10 ? 1 : 0)}/min</dd></div>
         ${cluster.peakDbz === null ? '' : `
         <div><dt>Peak echo</dt><dd>${Math.round(cluster.peakDbz)} dBZ</dd></div>`}
@@ -120,9 +124,12 @@ export function drawNowcast(filtered, reference) {
 
     const impact = cluster.impact;
     const strongAlert = impact.level >= 4;
-    // Hail gets its own colour. Severity is already carried by the line weight,
-    // so the hue is free to say something the weight cannot.
-    const hailing = (cluster.hail?.level ?? 0) >= 1;
+    // Hail gets its own colour, but only once it is being asserted rather than
+    // entertained. Colouring "possible" amber took the hue away from high impact
+    // altogether — on a day with several deep echoes, every outline was amber
+    // and the white one did not exist. "Possible" is in the popup, where a
+    // qualified statement belongs; the outline carries the claims.
+    const hailing = (cluster.hail?.level ?? 0) >= 2;
     const edge = hailing ? HAIL_EDGE : (strongAlert ? SEVERE_EDGE : EDGE);
     const baseOpacity = Math.max(0.45, cluster.confidence * 0.8 + 0.2);
 
