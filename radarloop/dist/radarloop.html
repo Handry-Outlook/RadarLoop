@@ -13702,6 +13702,20 @@ const TILE = 256;
 const WINDOW = 160;
 
 /**
+ * Side of the square the intensity is read from, in pixels — about 65 km.
+ *
+ * Much smaller than the correlation window, and for a different reason. Finding
+ * a displacement wants context: a wide field, so the match is distinctive and a
+ * storm can move a long way inside it without leaving. Reading how intense a
+ * storm is wants the opposite. Taken over the whole window, every cluster within
+ * a hundred kilometres of a supercell reported the supercell's core — the same
+ * 67 dBZ turned up against a cell flashing twice a minute — and so everything on
+ * the map was called hail. The peak has to come from the storm being asked
+ * about, not from its neighbourhood.
+ */
+const INTENSITY_SPAN = 48;
+
+/**
  * Largest displacement searched, in pixels.
  *
  * Twenty-four pixels over fifteen minutes is about 135 km/h, which is beyond any
@@ -13955,6 +13969,17 @@ function coverage(field, threshold) {
   return wet / field.length;
 }
 
+/** The centred square the intensity is read from, as its own field. */
+function centre(field, size = WINDOW, span = INTENSITY_SPAN) {
+  const from = Math.max(0, Math.round((size - span) / 2));
+  const out = new Float32Array(span * span);
+  for (let y = 0; y < span; y += 1) {
+    const row = (from + y) * size + from;
+    for (let x = 0; x < span; x += 1) out[y * span + x] = field[row + x];
+  }
+  return out;
+}
+
 /**
  * A high percentile of the field, as the storm's peak reflectivity.
  *
@@ -14023,10 +14048,11 @@ async function measureMotion(lat, lon, referenceMs) {
   if (!b) return null;
 
   const wetLater = coverage(b, CONVECTIVE_DBZ);
+  const core = centre(b);
   const intensity = {
-    peakDbz: highPercentile(b, 0.998),
-    hailArea: coverage(b, HAIL_DBZ),
-    largeHailArea: coverage(b, LARGE_HAIL_DBZ),
+    peakDbz: highPercentile(core, 0.99),
+    hailArea: coverage(core, HAIL_DBZ),
+    largeHailArea: coverage(core, LARGE_HAIL_DBZ),
     coverage: wetLater,
     speedKmH: 0,
     directionDeg: 0,
@@ -14936,8 +14962,14 @@ function remainingLifeMinutes({ latest, previous }, windowMin, ageMin, silentMin
 const HAIL_FLOOR_DBZ = 42;
 const HAIL_FULL_DBZ = 58;
 
-/** Share of the window above 60 dBZ that counts as a full-sized hail core. */
-const HAIL_CORE_SHARE = 0.015;
+/**
+ * Share of the intensity square above 60 dBZ that counts as a full-sized core.
+ *
+ * Five percent of a 65 km box is a core about fifteen kilometres across. The
+ * figure was 1.5% when this was read from the 220 km correlation window, where
+ * the same storm occupied a tenth as much of the frame.
+ */
+const HAIL_CORE_SHARE = 0.05;
 
 const RADAR_MOTION_WEIGHT = 4;
 
@@ -15430,11 +15462,21 @@ function hailRisk({ flashesPerMinute = 0, peakDbz = null, largeHailArea = 0, jum
 
   const rate = Math.max(0.01, flashesPerMinute);
   const updraft = Math.max(0, Math.min(1, Math.log10(rate / 0.5) / Math.log10(100 / 0.5)));
-  // Extent matters: a single intense pixel is noise, a core of them is a storm.
   const extent = Math.max(0, Math.min(1, largeHailArea / HAIL_CORE_SHARE));
 
-  let risk = core * 0.55 + updraft * 0.28 + extent * 0.17;
+  // The two terms multiply rather than add, because hail needs both and adding
+  // them let either stand in for the other. A deep echo with almost no lightning
+  // scored as hail on the strength of the echo alone — and a 64 dBZ core over
+  // Normandy flashing twice in three minutes came out "likely", which is a
+  // description of heavy rain or a bright band, not of hail. Requiring an
+  // updraft as well is the whole reason flash rate is in here.
+  // Extent multiplies too, for the same reason. Added on, it was a tenth of the
+  // score a storm could earn without any lightning at all, which took a
+  // 66 dBZ Breton downpour flashing twice a minute over the line by itself. A
+  // large core makes a hail signal stronger; it cannot make one on its own.
+  let risk = (core ** 0.7) * (0.25 + 0.75 * updraft) * (1 + 0.15 * extent);
   if (jump) risk = Math.min(1, risk + 0.1);
+  risk = Math.min(1, risk);
 
   if (risk >= 0.75) return { risk, level: 3, label: 'Large hail likely' };
   if (risk >= 0.52) return { risk, level: 2, label: 'Hail likely' };

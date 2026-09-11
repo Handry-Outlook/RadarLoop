@@ -1647,6 +1647,39 @@ over the Chilterns it reads a 67 dBZ core, and the cells that produced the hail
 come out "Large hail likely" at nineteen flashes a minute and "Hail likely" at
 six.
 
+**Intensity is read from the storm, not its neighbourhood.** Finding a
+displacement and reading an intensity want opposite things from a window.
+Correlation wants context — a wide field, so the match is distinctive and a storm
+can travel inside it without leaving. The peak wants the cell itself. Taken over
+the whole 220 km correlation window, every cluster within a hundred kilometres of
+a supercell reported the supercell's core: the same 67 dBZ turned up against a
+cell flashing twice a minute, and so everything on the map was called hail. The
+peak and the core areas now come from a 65 km square at the centre, and the
+readings separate — 54 to 66 dBZ across one afternoon's cells rather than 67
+everywhere.
+
+**Core and updraft multiply.** Added together, either could stand in for the
+other, and a deep echo with almost no lightning scored as hail on the strength of
+the echo alone — a 64 dBZ core over Normandy flashing twice in three minutes came
+out "likely", which describes heavy rain or a bright band, not hail. Requiring an
+updraft as well is the entire reason flash rate is in the calculation. The extent
+of the core multiplies too, for the same reason: a large core makes a hail signal
+stronger but cannot make one by itself.
+
+On the supercell day of 27 August, measured per cell:
+
+| dBZ | flashes/min | ≥60 dBZ | verdict |
+|---|---|---|---|
+| 63 | 19.0 | 2.7% | Large hail likely |
+| 61 | 6.3 | 2.5% | Hail likely |
+| 57 | 5.7 | 0.9% | Hail likely |
+| 54 | 2.5 | 0.5% | Hail possible |
+| 66 | 1.9 | 8.0% | Hail possible |
+| 64 | 0.6 | 5.6% | Hail possible |
+| 45 | 8.0 | 0.1% | Hail unlikely |
+
+The storm that produced three to four centimetre hail is the one at the top.
+
 **The hail scale, from what the product reports.** The thresholds came from the
 single-polarisation textbook — 50 dBZ worth mentioning, 60 likely large — which
 assumes a native radar. Measured over the eight busiest lightning cells inside

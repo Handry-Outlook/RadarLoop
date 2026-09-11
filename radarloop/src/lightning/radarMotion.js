@@ -49,6 +49,20 @@ const TILE = 256;
 const WINDOW = 160;
 
 /**
+ * Side of the square the intensity is read from, in pixels — about 65 km.
+ *
+ * Much smaller than the correlation window, and for a different reason. Finding
+ * a displacement wants context: a wide field, so the match is distinctive and a
+ * storm can move a long way inside it without leaving. Reading how intense a
+ * storm is wants the opposite. Taken over the whole window, every cluster within
+ * a hundred kilometres of a supercell reported the supercell's core — the same
+ * 67 dBZ turned up against a cell flashing twice a minute — and so everything on
+ * the map was called hail. The peak has to come from the storm being asked
+ * about, not from its neighbourhood.
+ */
+const INTENSITY_SPAN = 48;
+
+/**
  * Largest displacement searched, in pixels.
  *
  * Twenty-four pixels over fifteen minutes is about 135 km/h, which is beyond any
@@ -302,6 +316,17 @@ function coverage(field, threshold) {
   return wet / field.length;
 }
 
+/** The centred square the intensity is read from, as its own field. */
+function centre(field, size = WINDOW, span = INTENSITY_SPAN) {
+  const from = Math.max(0, Math.round((size - span) / 2));
+  const out = new Float32Array(span * span);
+  for (let y = 0; y < span; y += 1) {
+    const row = (from + y) * size + from;
+    for (let x = 0; x < span; x += 1) out[y * span + x] = field[row + x];
+  }
+  return out;
+}
+
 /**
  * A high percentile of the field, as the storm's peak reflectivity.
  *
@@ -370,10 +395,11 @@ export async function measureMotion(lat, lon, referenceMs) {
   if (!b) return null;
 
   const wetLater = coverage(b, CONVECTIVE_DBZ);
+  const core = centre(b);
   const intensity = {
-    peakDbz: highPercentile(b, 0.998),
-    hailArea: coverage(b, HAIL_DBZ),
-    largeHailArea: coverage(b, LARGE_HAIL_DBZ),
+    peakDbz: highPercentile(core, 0.99),
+    hailArea: coverage(core, HAIL_DBZ),
+    largeHailArea: coverage(core, LARGE_HAIL_DBZ),
     coverage: wetLater,
     speedKmH: 0,
     directionDeg: 0,

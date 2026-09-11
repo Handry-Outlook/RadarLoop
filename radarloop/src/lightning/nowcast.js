@@ -867,8 +867,14 @@ export function remainingLifeMinutes({ latest, previous }, windowMin, ageMin, si
 const HAIL_FLOOR_DBZ = 42;
 const HAIL_FULL_DBZ = 58;
 
-/** Share of the window above 60 dBZ that counts as a full-sized hail core. */
-const HAIL_CORE_SHARE = 0.015;
+/**
+ * Share of the intensity square above 60 dBZ that counts as a full-sized core.
+ *
+ * Five percent of a 65 km box is a core about fifteen kilometres across. The
+ * figure was 1.5% when this was read from the 220 km correlation window, where
+ * the same storm occupied a tenth as much of the frame.
+ */
+const HAIL_CORE_SHARE = 0.05;
 
 const RADAR_MOTION_WEIGHT = 4;
 
@@ -1361,11 +1367,21 @@ export function hailRisk({ flashesPerMinute = 0, peakDbz = null, largeHailArea =
 
   const rate = Math.max(0.01, flashesPerMinute);
   const updraft = Math.max(0, Math.min(1, Math.log10(rate / 0.5) / Math.log10(100 / 0.5)));
-  // Extent matters: a single intense pixel is noise, a core of them is a storm.
   const extent = Math.max(0, Math.min(1, largeHailArea / HAIL_CORE_SHARE));
 
-  let risk = core * 0.55 + updraft * 0.28 + extent * 0.17;
+  // The two terms multiply rather than add, because hail needs both and adding
+  // them let either stand in for the other. A deep echo with almost no lightning
+  // scored as hail on the strength of the echo alone — and a 64 dBZ core over
+  // Normandy flashing twice in three minutes came out "likely", which is a
+  // description of heavy rain or a bright band, not of hail. Requiring an
+  // updraft as well is the whole reason flash rate is in here.
+  // Extent multiplies too, for the same reason. Added on, it was a tenth of the
+  // score a storm could earn without any lightning at all, which took a
+  // 66 dBZ Breton downpour flashing twice a minute over the line by itself. A
+  // large core makes a hail signal stronger; it cannot make one on its own.
+  let risk = (core ** 0.7) * (0.25 + 0.75 * updraft) * (1 + 0.15 * extent);
   if (jump) risk = Math.min(1, risk + 0.1);
+  risk = Math.min(1, risk);
 
   if (risk >= 0.75) return { risk, level: 3, label: 'Large hail likely' };
   if (risk >= 0.52) return { risk, level: 2, label: 'Hail likely' };
