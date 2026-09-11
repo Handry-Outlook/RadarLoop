@@ -1498,7 +1498,64 @@ or a correlation too weak to trust all resolve to the same thing: no hint, and t
 lightning-only estimate stands. Failures are cached too, so a region with no radar
 is not retried every pass.
 
-The popup says which sources are behind a projection, and names the trend.
+**Telling cells apart.** The clustering was a single-linkage flood fill: a strike
+joined if it was within range of *any* strike already in the cluster, and could
+then recruit further. That is the chaining failure single-linkage is known for —
+two storms thirty kilometres apart with a handful of flashes between them became
+one cluster with a meaningless average position and heading. Three changes:
+
+*Only dense strikes recruit.* A strike extends a cluster only if it has
+neighbours of its own, which is DBSCAN's core-point rule. Sparse strikes still
+join the cluster they touch; they cannot pass the join on, so a thin bridge no
+longer welds two cells together.
+
+*Distance is measured in the storm's frame.* A cell at 50 km/h covers 25 km in
+half an hour, so its own strikes spread across more ground than the gap to its
+neighbour and no fixed radius can separate those two cases. Given a radar motion
+estimate, every strike is first carried forward to the reference time as though
+it moved with the storm, which collapses one cell's half-hour of flashes onto
+roughly one spot and leaves two genuinely separate cells as far apart as they
+were. The join radius then drops to 45% of what it had to be. Without an estimate
+this is the identity.
+
+*Components are tested for being two things.* The core-point rule cannot stop a
+bridge that is itself dense enough to be core — four flashes between two storms
+is enough, which is how the check caught it. So each component is split by
+two-means on the storm-relative positions, and the split is taken only when the
+two halves are more than twice as far apart as they are wide. A single cell is
+one blob, and the best split of one blob separates its halves by about its own
+width; two cells separate them by much more. The ratio settles it without needing
+to know how large a storm is in kilometres.
+
+**Heading.** The correlation peak is refined below a pixel by fitting a parabola
+through its neighbours. Integer shifts quantise the answer badly: a storm moving
+nine pixels in a quarter of an hour is resolved to about 11% in speed, and near
+the axes a displacement of (9, 0) and one of (9, 1) are six degrees apart and
+otherwise indistinguishable. Synthetic tracks laid along 070, 180 and 315 at
+40 km/h now read back as exactly those, at exactly that speed.
+
+**How long a cell has left.** There was no estimate: every cluster was projected
+to the same horizon and an inactivity decay faded the confidence, which says a
+storm is ending only once it has stopped. The flash rate is treated as changing
+exponentially — a fair description of a cell over the half hour that matters —
+so measuring it over two windows gives a growth constant and the remaining life
+is the time for the rate to fall to nothing much. Radar's area trend is folded in
+where there is one, since it moves before the flash rate does. A growing cell
+instead gets what is left of a typical lifetime for its age, because
+extrapolating growth forward says a cell will last for ever. Nothing is projected
+past that horizon: a plus-sixty footprint for a cell with twenty minutes left is
+a drawing of something that will not be there, and the projection is the part
+people read.
+
+Two bugs turned up in the checking. A decaying cell could be given a *longer*
+life than a steady one — extrapolating a gentle decline from a high flash rate
+reached 98 minutes — so a decay is now capped by what a steady cell of that age
+would have had. And the memo key held counts and timestamps but not positions, so
+three synthetic tracks heading in three directions all returned the first one's
+answer; a sample of a dozen positions now goes into the key.
+
+The popup says which sources are behind a projection, names the trend, and
+gives the expected remaining life.
 
 ## Live global strikes
 

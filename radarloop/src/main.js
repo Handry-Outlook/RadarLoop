@@ -51,7 +51,9 @@ import { buildStationCard } from './ui/stationPopup.js';
 import { mercatorX, mercatorY } from './lightning/render.js';
 import { prune as strikeStorePrune, summary as strikeStoreSummary } from './layers/strikeStore.js';
 import { bestShift, measureMotion } from './lightning/radarMotion.js';
-import { calculateNowcast, radarHints, resetRadarHints } from './lightning/nowcast.js';
+import {
+  calculateNowcast, radarHints, remainingLifeMinutes, resetNowcastHistory, resetRadarHints,
+} from './lightning/nowcast.js';
 
 /* ------------------------------------------------------------------ *
  * Session restore
@@ -593,7 +595,10 @@ window.__paneFor = paneFor;
 window.__strikeStore = { summary: strikeStoreSummary, prune: strikeStorePrune };
 // The nowcast's radar machinery, so its checks can drive the correlation
 // directly rather than waiting for a storm to turn up.
-window.__nowcast = { bestShift, measureMotion, calculateNowcast, radarHints, resetRadarHints };
+window.__nowcast = {
+  bestShift, measureMotion, calculateNowcast, radarHints, resetRadarHints,
+  remainingLife: remainingLifeMinutes, resetNowcastHistory,
+};
 window.__windyLightning = {
   decodeFeed, decodeStrike, parseFrame, bufferStrikes, framesCovering, feedStats,
 };

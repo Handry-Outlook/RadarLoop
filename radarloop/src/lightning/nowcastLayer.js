@@ -4,8 +4,13 @@
  *
  * Fills and outlines are deliberately in different panes. The fill interleaves
  * with the weather tiles (above satellite, below radar) so radar echoes stay
- * readable through it, while the outline sits above everything so the boundary is
- * never lost. That separation is why there are two renderers rather than one.
+ * readable through it, while the outline sits above the whole weather stack so
+ * the boundary is never lost. That separation is why there are two renderers
+ * rather than one.
+ *
+ * The outline pane used to be declared inside `overlayPane` at z 145, under
+ * radar and everything above it, so the second half of that was not true: a
+ * projection's boundary was routinely buried by the echoes it was drawn around.
  */
 
 import { map, renderers, safeRemove } from '../core/map.js';
@@ -52,6 +57,8 @@ function popupHtml(cluster, forecast, impact) {
         <div><dt>Motion from</dt><dd>${cluster.motionSource === 'radar+lightning' ? 'radar and strikes' : 'strikes'}</dd></div>
         ${cluster.radarTrend === null || cluster.radarTrend === undefined ? '' : `
         <div><dt>Trend</dt><dd>${trendLabel(cluster.radarTrend)}</dd></div>`}
+        ${cluster.lifeMinutes === null || cluster.lifeMinutes === undefined ? '' : `
+        <div><dt>Expected to last</dt><dd>~${cluster.lifeMinutes} min</dd></div>`}
       </dl>
     </div>`;
 }

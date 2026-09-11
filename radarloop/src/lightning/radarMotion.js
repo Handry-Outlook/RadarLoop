@@ -56,7 +56,7 @@ const WINDOW = 160;
 const MAX_SHIFT = 24;
 
 /** Minutes between the two frames compared. */
-const SEPARATION_MIN = 15;
+export const SEPARATION_MIN = 15;
 
 /** Rain rate above which a pixel counts as convective, in mm/h. */
 const CONVECTIVE_MMH = 4;
@@ -190,6 +190,7 @@ export function bestShift(earlier, later, size = WINDOW, maxShift = MAX_SHIFT) {
   };
 
   const baseMean = mean(earlier, 0, 0);
+  const scores = new Map();
   let best = null;
   let total = 0;
   let considered = 0;
@@ -212,6 +213,7 @@ export function bestShift(earlier, later, size = WINDOW, maxShift = MAX_SHIFT) {
         }
       }
       const score = da > 0 && db > 0 ? num / Math.sqrt(da * db) : 0;
+      scores.set(`${dx}|${dy}`, score);
       total += score;
       considered += 1;
       if (!best || score > best.score) best = { dx, dy, score };
@@ -220,7 +222,38 @@ export function bestShift(earlier, later, size = WINDOW, maxShift = MAX_SHIFT) {
 
   if (!best || best.score <= 0) return null;
   const average = total / considered;
-  return { ...best, prominence: best.score - average };
+
+  /**
+   * The peak, refined below one pixel.
+   *
+   * Integer shifts quantise the answer badly at these distances. A storm moving
+   * nine pixels in fifteen minutes is resolved to about 11% in speed, and the
+   * bearing error near the axes is worse still — a displacement of (9, 0) and
+   * one of (9, 1) are six degrees apart and indistinguishable. Fitting a
+   * parabola through the peak and its two neighbours on each axis recovers the
+   * fraction between them, which is standard for correlation peaks and costs
+   * four extra lookups.
+   */
+  const at = (dx, dy) => scores.get(`${dx}|${dy}`) ?? -1;
+  const parabola = (left, centre, right) => {
+    const denominator = left - 2 * centre + right;
+    if (!Number.isFinite(denominator) || Math.abs(denominator) < 1e-9) return 0;
+    const offset = (0.5 * (left - right)) / denominator;
+    return Math.abs(offset) <= 1 ? offset : 0;
+  };
+
+  let subX = best.dx;
+  let subY = best.dy;
+  if (Math.abs(best.dx) < maxShift && Math.abs(best.dy) < maxShift) {
+    const west = at(best.dx - 1, best.dy);
+    const east = at(best.dx + 1, best.dy);
+    const north = at(best.dx, best.dy - 1);
+    const south = at(best.dx, best.dy + 1);
+    if (west >= 0 && east >= 0) subX += parabola(west, best.score, east);
+    if (north >= 0 && south >= 0) subY += parabola(north, best.score, south);
+  }
+
+  return { ...best, subX, subY, prominence: best.score - average };
 }
 
 /** Share of a field above a rain rate. */
@@ -272,8 +305,8 @@ export async function measureMotion(lat, lon, referenceMs) {
   const km = kmPerPixel(lat);
   const hours = SEPARATION_MIN / 60;
   // Screen y grows southwards.
-  const eastKmH = (match.dx * km) / hours;
-  const northKmH = (-match.dy * km) / hours;
+  const eastKmH = (match.subX * km) / hours;
+  const northKmH = (-match.subY * km) / hours;
 
   return {
     speedKmH: Math.hypot(eastKmH, northKmH),

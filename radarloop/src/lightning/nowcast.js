@@ -16,7 +16,7 @@
 import { haversineKm } from '../core/util.js';
 import { runtime } from '../core/state.js';
 import { emit, EVENTS } from '../core/bus.js';
-import { measureMotion, resetRadarMotion } from './radarMotion.js';
+import { measureMotion, resetRadarMotion, SEPARATION_MIN } from './radarMotion.js';
 
 /* ------------------------------------------------------------------ *
  * Performance envelope
@@ -122,50 +122,208 @@ function buildSpatialGrid(strikes, cellSizeKm) {
  * Clustering
  * ------------------------------------------------------------------ */
 
-/** Density-aware flood fill in space and time. */
-function clusterStrikes(strikes, { minClusterSize, maxDistance, maxTemporalSeparation }) {
+/** How much further apart than they are wide two halves must be to be two cells. */
+const SPLIT_RATIO = 2.1;
+
+/** And at least this far apart, so two blobs of noise are not called cells. */
+const SPLIT_MIN_KM = 18;
+
+/**
+ * Splits a cluster that is really two, and says so recursively.
+ *
+ * The core-point rule stops a handful of stray flashes chaining two cells
+ * together, but it cannot stop a bridge that is itself dense enough to be core —
+ * and four flashes strung between two storms is enough. Connected components are
+ * the wrong shape of question for that: two cells joined by a thread are one
+ * component however obviously they are two storms.
+ *
+ * So the components are tested afterwards for being two things. Two-means on the
+ * storm-relative positions gives the best split available; whether to take it is
+ * decided by comparing how far apart the two halves are against how spread out
+ * each half is on its own. A single cell is one blob, and the best split of one
+ * blob separates centres by about as much as the blob's own width. Two cells
+ * separate them by much more. The ratio is what distinguishes them, and it does
+ * not need to know how big a storm is in kilometres.
+ *
+ * @param {Array} members    strikes in the cluster
+ * @param {Function} at      strike to its storm-relative position
+ * @param {number} minSize   smallest half worth calling a cell
+ * @param {number} depth     guard against splitting for ever
+ */
+function splitIfTwoCells(members, at, minSize, depth = 0) {
+  if (depth >= 3 || members.length < minSize * 2) return [members];
+
+  const points = members.map(at);
+
+  // Seed on the two furthest-apart points, which is the split worth testing.
+  let seedA = 0;
+  let seedB = 0;
+  let furthest = -1;
+  const step = Math.max(1, Math.floor(points.length / 40));
+  for (let i = 0; i < points.length; i += step) {
+    for (let j = i + step; j < points.length; j += step) {
+      const d = haversineKm(points[i][0], points[i][1], points[j][0], points[j][1]);
+      if (d > furthest) { furthest = d; seedA = i; seedB = j; }
+    }
+  }
+  if (furthest <= 0) return [members];
+
+  let centreA = points[seedA];
+  let centreB = points[seedB];
+  let groupA = [];
+  let groupB = [];
+
+  for (let pass = 0; pass < 8; pass += 1) {
+    groupA = [];
+    groupB = [];
+    for (let i = 0; i < points.length; i += 1) {
+      const dA = haversineKm(points[i][0], points[i][1], centreA[0], centreA[1]);
+      const dB = haversineKm(points[i][0], points[i][1], centreB[0], centreB[1]);
+      (dA <= dB ? groupA : groupB).push(i);
+    }
+    if (!groupA.length || !groupB.length) return [members];
+    const mean = (group) => {
+      let lat = 0;
+      let lon = 0;
+      for (const i of group) { lat += points[i][0]; lon += points[i][1]; }
+      return [lat / group.length, lon / group.length];
+    };
+    const nextA = mean(groupA);
+    const nextB = mean(groupB);
+    const settled = haversineKm(nextA[0], nextA[1], centreA[0], centreA[1]) < 0.2
+      && haversineKm(nextB[0], nextB[1], centreB[0], centreB[1]) < 0.2;
+    centreA = nextA;
+    centreB = nextB;
+    if (settled) break;
+  }
+
+  if (groupA.length < minSize || groupB.length < minSize) return [members];
+
+  const spread = (group, centre) => {
+    let total = 0;
+    for (const i of group) total += haversineKm(points[i][0], points[i][1], centre[0], centre[1]);
+    return total / group.length;
+  };
+  const separation = haversineKm(centreA[0], centreA[1], centreB[0], centreB[1]);
+  const width = (spread(groupA, centreA) + spread(groupB, centreB)) / 2;
+
+  // Below this the split is just cutting one blob in half.
+  if (!(separation > Math.max(SPLIT_MIN_KM, width * SPLIT_RATIO))) return [members];
+
+  const pick = (group) => group.map((i) => members[i]);
+  return [
+    ...splitIfTwoCells(pick(groupA), at, minSize, depth + 1),
+    ...splitIfTwoCells(pick(groupB), at, minSize, depth + 1),
+  ];
+}
+
+/**
+ * Separates strikes into storm cells.
+ *
+ * Two things decide whether distinct cells stay distinct.
+ *
+ * **Only dense points may recruit.** The old flood fill was single-linkage: a
+ * strike joined if it was within range of *any* strike already in the cluster,
+ * and that strike could then recruit further. Two cells thirty kilometres apart
+ * with a handful of flashes between them therefore merged into one, which is the
+ * chaining failure single-linkage is known for. Here a strike only extends a
+ * cluster if it has neighbours of its own — DBSCAN's core-point rule. Sparse
+ * strikes still join the cluster they touch, they just cannot pass the join on,
+ * so a thin bridge between two cells no longer welds them together.
+ *
+ * **Distance is measured in the storm's frame, not the ground's.** A cell moving
+ * at 50 km/h covers 25 km in half an hour, so its own strikes spread across more
+ * ground than the gap to its neighbour — no fixed radius can separate those two
+ * situations. Given a motion estimate, every strike is first carried forward to
+ * the reference time as if it moved with the storm, which collapses one cell's
+ * half-hour of flashes onto roughly one spot while leaving two genuinely separate
+ * cells as far apart as they always were. The join radius can then be tight.
+ * Without an estimate this is the identity and the behaviour is as before.
+ *
+ * @param {Array} strikes
+ * @param {object} options
+ * @param {(lat:number, lon:number, ms:number) => [number, number]} [options.advect]
+ */
+function clusterStrikes(strikes, {
+  minClusterSize, maxDistance, maxTemporalSeparation, advect = null, minNeighbours = 3,
+}) {
+  if (!strikes.length) return [];
+
+  // Positions in the storm-relative frame, computed once.
+  const lat = new Float64Array(strikes.length);
+  const lon = new Float64Array(strikes.length);
+  for (let i = 0; i < strikes.length; i += 1) {
+    if (advect) {
+      const [la, lo] = advect(strikes[i].lat, strikes[i].lon, strikes[i].ms);
+      lat[i] = la;
+      lon[i] = lo;
+    } else {
+      lat[i] = strikes[i].lat;
+      lon[i] = strikes[i].lon;
+    }
+  }
+
+  const index = buildSpatialGrid(
+    Array.from(strikes, (s, i) => ({ lat: lat[i], lon: lon[i] })),
+    Math.max(maxDistance, 40),
+  );
+
+  /** Indices within reach of `i`, in space and in time. */
+  const neighboursOf = (i) => {
+    const out = [];
+    for (const j of index.queryNearby(lat[i], lon[i])) {
+      if (j === i) continue;
+      if (Math.abs(strikes[i].ms - strikes[j].ms) > maxTemporalSeparation) continue;
+      if (haversineKm(lat[i], lon[i], lat[j], lon[j]) > maxDistance) continue;
+      out.push(j);
+    }
+    return out;
+  };
+
+  // Density is a property of a strike, so it is settled before any recruiting
+  // starts. Deciding it mid-expansion made membership depend on visit order.
+  const dense = new Uint8Array(strikes.length);
+  const cached = new Array(strikes.length);
+  for (let i = 0; i < strikes.length; i += 1) {
+    cached[i] = neighboursOf(i);
+    dense[i] = cached[i].length >= minNeighbours ? 1 : 0;
+  }
+
   const clusters = [];
-  const used = new Set();
-  const index = buildSpatialGrid(strikes, Math.max(maxDistance, 40));
-  const densityWindowMs = 15 * 60 * 1000;
-  const densityDistanceKm = 20;
+  const assigned = new Int32Array(strikes.length).fill(-1);
+  const positionOf = new Map();
+  for (let i = 0; i < strikes.length; i += 1) positionOf.set(strikes[i], i);
 
   for (let i = 0; i < strikes.length; i += 1) {
-    if (used.has(i)) continue;
-    used.add(i);
+    if (assigned[i] !== -1 || !dense[i]) continue;
+    const id = clusters.length;
+    const members = [];
     const queue = [i];
-    const cluster = [];
+    assigned[i] = id;
 
     while (queue.length) {
       const current = queue.pop();
-      const strike = strikes[current];
-      cluster.push(strike);
-
-      const nearby = index.queryNearby(strike.lat, strike.lon);
-
-      // Dense areas get a tighter join radius so separate cells do not merge.
-      let localDensity = 0;
-      for (const j of nearby) {
-        const other = strikes[j];
-        if (strike.ms - other.ms <= densityWindowMs &&
-            haversineKm(strike.lat, strike.lon, other.lat, other.lon) <= densityDistanceKm) {
-          localDensity += 1;
-        }
-      }
-      const dynamicMaxDistance = maxDistance * Math.max(0.5, 1 - (localDensity / 50) * 0.5);
-
-      for (const j of nearby) {
-        if (used.has(j)) continue;
-        const neighbour = strikes[j];
-        if (haversineKm(strike.lat, strike.lon, neighbour.lat, neighbour.lon) <= dynamicMaxDistance &&
-            Math.abs(strike.ms - neighbour.ms) <= maxTemporalSeparation) {
-          used.add(j);
-          queue.push(j);
-        }
+      members.push(strikes[current]);
+      // A sparse strike is carried along but does not recruit: that is the whole
+      // difference between this and the chaining it replaces.
+      if (!dense[current]) continue;
+      for (const j of cached[current]) {
+        if (assigned[j] !== -1) continue;
+        assigned[j] = id;
+        queue.push(j);
       }
     }
 
-    if (cluster.length >= minClusterSize) clusters.push(cluster);
+    if (members.length < minClusterSize) continue;
+    // A component can still be two storms joined by a thread; this is where that
+    // is caught.
+    const at = (strike) => {
+      const i = positionOf.get(strike);
+      return i === undefined ? [strike.lat, strike.lon] : [lat[i], lon[i]];
+    };
+    for (const part of splitIfTwoCells(members, at, minClusterSize)) {
+      if (part.length >= minClusterSize) clusters.push(part);
+    }
   }
   return clusters;
 }
@@ -345,6 +503,76 @@ export function resetRadarHints() {
 /** What the nowcast knows from radar right now. For diagnostics and checks. */
 export const radarHints = () => [...hints.entries()].map(([key, value]) => ({ key, ...value }));
 
+
+/* ------------------------------------------------------------------ *
+ * How long a cell has left
+ * ------------------------------------------------------------------ */
+
+/** Flash rate below which a cell is no longer worth projecting, per minute. */
+const SPENT_RATE = 0.5;
+
+/** Bounds on the answer. Nothing useful is said outside them. */
+const MIN_LIFE_MIN = 5;
+const MAX_LIFE_MIN = 120;
+
+/**
+ * Minutes of useful life left in a cell.
+ *
+ * The old code had no estimate at all. It projected every cluster to the same
+ * horizon and let an inactivity decay fade the confidence, which says a storm is
+ * ending only once it has already stopped — too late to be a forecast.
+ *
+ * The rate of flashes is treated as changing exponentially, which is a fair
+ * description of a convective cell over the half hour that matters here.
+ * Measuring that rate of change over two windows gives a growth constant, and
+ * the remaining life is the time for the rate to fall to nothing much. A growing
+ * cell instead gets what is left of a typical lifetime for its age, because
+ * extrapolating growth forward says a cell will last for ever.
+ *
+ * Radar's area trend is folded in where there is one: it is a direct measurement
+ * of the same thing, and it moves before the flash rate does.
+ *
+ * @param {object} counts  flashes in the last window and the one before it
+ * @param {number} windowMin  length of each window, in minutes
+ * @param {number} ageMin  how long the cell has been producing strikes
+ * @param {number} silentMin  minutes since its last strike
+ * @param {number|null} radarTrend  ratio of convective area between radar frames
+ */
+export function remainingLifeMinutes({ latest, previous }, windowMin, ageMin, silentMin, radarTrend) {
+  const rateNow = latest / windowMin;
+  const ratePrev = previous / windowMin;
+
+  // Growth constants, per minute. Both are logs of a ratio over a known span.
+  const fromFlashes = rateNow > 0 && ratePrev > 0 ? Math.log(rateNow / ratePrev) / windowMin : null;
+  const fromRadar = radarTrend > 0 ? Math.log(radarTrend) / SEPARATION_MIN : null;
+
+  let k;
+  if (fromFlashes !== null && fromRadar !== null) k = fromFlashes * 0.45 + fromRadar * 0.55;
+  else k = fromFlashes ?? fromRadar ?? 0;
+
+  // Already quiet: what is left is what is left of the silence allowance.
+  if (rateNow <= 0) return Math.max(0, Math.round(MIN_LIFE_MIN - silentMin));
+
+  // What a steady cell of this age would have left. It is also the ceiling on a
+  // decaying one: extrapolating a gentle decline from a high flash rate gave a
+  // collapsing storm a longer life than a healthy one, which cannot be right.
+  const typical = ageMin > 60 ? 45 : 55;
+  const steadyCeiling = Math.max(MIN_LIFE_MIN, typical - ageMin * 0.35);
+
+  let minutes;
+  if (k < -0.005) {
+    minutes = Math.min(steadyCeiling, Math.log(SPENT_RATE / rateNow) / k);
+  } else {
+    // Steady or growing. An ordinary cell runs about an hour; a cluster that has
+    // already lasted longer than that is a multicell system and gets more, but
+    // not without limit.
+    minutes = steadyCeiling * (k > 0.01 ? 1.35 : 1);
+  }
+
+  if (!Number.isFinite(minutes)) minutes = MIN_LIFE_MIN;
+  return Math.round(Math.max(MIN_LIFE_MIN, Math.min(MAX_LIFE_MIN, minutes)));
+}
+
 const MAX_SPEED_KMH = 80;
 let previousNowcasts = [];
 
@@ -360,10 +588,22 @@ export function calculateNowcast(strikes, reference = new Date()) {
   if (!strikes?.length) return [];
 
   const p = profile();
+  // Positions belong in the key as well as times. Two sets with the same count
+  // and the same first and last timestamps were treated as the same input, which
+  // is wrong however unlikely — and not unlikely at all for anything generated,
+  // where three tracks heading in three directions all came back as the first
+  // one. Sampling a dozen strikes is enough to tell them apart without hashing
+  // the lot on every draw.
+  let shape = 0;
+  const stride = Math.max(1, Math.floor(strikes.length / 12));
+  for (let i = 0; i < strikes.length; i += stride) {
+    shape = (shape * 31 + Math.round(strikes[i].lat * 1000) + Math.round(strikes[i].lon * 1000) * 7) % 2147483647;
+  }
   const key = [
     strikes.length,
     strikes[0].ms,
     strikes[strikes.length - 1].ms,
+    shape,
     Math.floor(reference.getTime() / 60000),
     p.maxInput, p.maxClusters, p.ransacMax, p.steps.join('-'),
   ].join('|');
@@ -398,7 +638,51 @@ export function calculateNowcast(strikes, reference = new Date()) {
   let input = recent.filter((s) => referenceMs - s.ms <= maxTimeRange);
   if (input.length > p.maxInput) input = input.slice(-p.maxInput);
 
-  const clusters = clusterStrikes(input, { minClusterSize, maxDistance, maxTemporalSeparation })
+  /* ---- the storm's frame ---- */
+
+  // One steering measurement for the whole field, taken at the middle of it.
+  // Cells inside a single convective episode are carried by the same flow, and a
+  // measurement per cluster would be both slower and circular — the clusters are
+  // what this is about to help decide.
+  let sumLat = 0;
+  let sumLon = 0;
+  for (const s of input) {
+    sumLat += s.lat;
+    sumLon += s.lon;
+  }
+  const centreLat = input.length ? sumLat / input.length : null;
+  const centreLon = input.length ? sumLon / input.length : null;
+  const steering = centreLat === null ? null : radarHintFor(centreLat, centreLon, referenceMs);
+  if (centreLat !== null) refreshRadarHints([[centreLat, centreLon]], referenceMs);
+
+  /**
+   * Carries a strike to where the storm that made it would be now.
+   *
+   * Clustering then measures the gap between cells rather than the ground each
+   * has covered, which is the difference between separating two cells and
+   * merging a single moving one.
+   */
+  const advect = steering && steering.quality > 0 && steering.speedKmH > 3
+    ? (lat, lon, ms) => {
+      const hours = (referenceMs - ms) / 3600000;
+      const km = steering.speedKmH * hours;
+      const rad = (steering.directionDeg * Math.PI) / 180;
+      return [
+        lat + (km * Math.cos(rad)) / KM_PER_DEG_LAT,
+        lon + (km * Math.sin(rad)) / (KM_PER_DEG_LAT * Math.max(0.1, Math.cos((lat * Math.PI) / 180))),
+      ];
+    }
+    : null;
+
+  // In the storm's frame a cell's own strikes sit on top of one another, so the
+  // radius that separates neighbours can be much tighter than the one that had
+  // to tolerate half an hour of travel.
+  const joinKm = advect ? Math.max(8, maxDistance * 0.45) : maxDistance;
+  const minNeighbours = Math.max(2, Math.round(3 + densityRatio * 3));
+
+  const clusters = clusterStrikes(input, {
+    minClusterSize, maxDistance: joinKm, maxTemporalSeparation, advect, minNeighbours,
+  })
     .sort((a, b) => b.length - a.length)
     .slice(0, p.maxClusters);
 
@@ -496,6 +780,14 @@ export function calculateNowcast(strikes, reference = new Date()) {
 
     // Whether the convective area is growing is a thing radar measures directly.
     // The flash-rate jump stays as the fallback, and as corroboration.
+    const lifeMinutes = remainingLifeMinutes(
+      { latest, previous: middle },
+      jumpWindow / 60000,
+      (maxTime - minTime) / 60000,
+      sinceLast / 60000,
+      radar?.trend ?? null,
+    );
+
     const growing = radar && radar.trend !== undefined
       ? radar.trend > 1.15 || (jump && radar.trend > 0.95)
       : jump;
@@ -524,7 +816,7 @@ export function calculateNowcast(strikes, reference = new Date()) {
       baseLon,
       speedKmH, directionDeg, regressionScore, consistency, residualKm,
       confidence, clusterSize: cluster.length,
-      jump, growing,
+      jump, growing, lifeMinutes,
       decaying: shrinking === null ? decayFactor < 0.5 : shrinking || decayFactor < 0.5,
       radar,
     });
@@ -590,7 +882,11 @@ function smoothAndProject(entry, referenceMs, minClusterSize, steps) {
   const polygons = [];
   const ring = hull?.geometry?.coordinates?.[0];
   if (ring) {
-    for (const minutes of steps) {
+    // Nothing is projected past the point the cell is expected to be finished.
+    // A plus-sixty footprint for a cell with twenty minutes left is a drawing of
+    // something that will not be there, and it is the projection people read.
+    const horizon = entry.lifeMinutes ?? Infinity;
+    for (const minutes of steps.filter((m) => m <= horizon * 1.1)) {
       const moved = translatePolygon(ring, directionDeg, speedKmH * (minutes / 60));
       // Growing storms expand, decaying ones shrink.
       let scale = 1;
@@ -622,6 +918,7 @@ function smoothAndProject(entry, referenceMs, minClusterSize, steps) {
     clusterSize: entry.clusterSize,
     motionSource: entry.radar?.quality > 0 ? 'radar+lightning' : 'lightning',
     radarTrend: entry.radar?.trend ?? null,
+    lifeMinutes: entry.lifeMinutes ?? null,
     hullGeometry: hull,
     nowcastPolygons: polygons,
     uncertainty: {

@@ -168,7 +168,6 @@ export const PANES = [
   // Outlook fills interleave here so radar echoes stay readable through them:
   // satellite (140) < fill (145) < radar (150).
   { name: 'nowcastFillPane', z: 144, parent: 'overlayPane', clickThrough: true },
-  { name: 'nowcastOutlinePane', z: 145, parent: 'overlayPane' },
   // Automated outlook above satellite, below radar; the manual one above it.
   // Both are ordinary orderable layers now, so their outlines live with their
   // fills rather than being pinned to the top of the whole map.
@@ -208,6 +207,12 @@ export const PANES = [
   { name: 'synopticPane', z: 196, parent: 'overlayPane', clickThrough: true },
 
   // --- top-level: above the whole weather stack ---
+  // The storm outline, above the weather rather than inside it. It was declared
+  // inside `overlayPane` at 145, which is under radar, observations and every
+  // other product — so the boundary of a projection was routinely buried by the
+  // echoes it was drawn around. A z-index only orders against its siblings, so
+  // being above the stack means being a sibling of it.
+  { name: 'nowcastOutlinePane', z: 545 },
   { name: 'warningPane', z: 550 },
   { name: 'labelsPane', z: 600, clickThrough: true },
   { name: 'lightningPane', z: 1000 },
