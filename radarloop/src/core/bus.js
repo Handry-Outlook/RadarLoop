@@ -59,6 +59,8 @@ export const EVENTS = {
   OBSERVATIONS_UPDATED: 'observations:updated',
   LIGHTNING_DATA: 'lightning:data',
   LIGHTNING_FILTERED: 'lightning:filtered',
+  /** A radar measurement the nowcast was waiting on has arrived. */
+  NOWCAST_RADAR: 'nowcast:radar',
   /** A lightning option changed programmatically; controls should re-sync. */
   LIGHTNING_OPTIONS: 'lightning:options',
   LEGEND_INVALIDATED: 'legend:invalidated',

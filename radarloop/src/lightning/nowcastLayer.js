@@ -45,6 +45,10 @@ const HAIL_EDGE = '#fbbf24';
 const HALO = 'rgba(2, 6, 23, 0.85)';
 
 let group = null;
+let lastDrawn = [];
+
+/** The projections as last drawn. For the legend, and for the checks. */
+export const lastNowcastClusters = () => lastDrawn;
 
 function ensureGroup() {
   if (!group) group = L.layerGroup();
@@ -194,6 +198,7 @@ export function drawNowcast(filtered, reference) {
 
   // 3D mirrors these panes as a still, so it has to be told they changed.
   refreshOverlayMirror();
+  lastDrawn = drawn;
   return drawn;
 }
 

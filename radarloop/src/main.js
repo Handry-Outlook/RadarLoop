@@ -57,6 +57,7 @@ import {
   calculateNowcast, hailRisk, impactLevel, nowcastInternals, radarHints, remainingLifeMinutes,
   resetNowcastHistory, resetRadarHints, seedRadarHint,
 } from './lightning/nowcast.js';
+import { lastNowcastClusters } from './lightning/nowcastLayer.js';
 
 /* ------------------------------------------------------------------ *
  * Session restore
@@ -594,6 +595,8 @@ window.__mirror3d = { tileScheme, usesFlippedY };
 window.__strikeRender = { mercatorX, mercatorY, colourForAge, ageStops };
 // Group-to-pane mapping, so the stacking checks can ask rather than guess.
 window.__paneFor = paneFor;
+// The projections as last drawn, so the hail checks can read what the map shows.
+window.__nowcastClusters = () => lastNowcastClusters();
 // The strike canvas, so the mark checks can ask what it last drew and how.
 window.__strikeLayer = () => getStrikeLayer();
 // The rainfall ladder and its conversions, for checking what part of the scale

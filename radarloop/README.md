@@ -1619,6 +1619,20 @@ field-wide vector, so it does not need every strike to find it.
 | no radar (two passes) | 2602 ms | 106 ms |
 | radar available (one pass) | 1250 ms | 81 ms |
 
+**Why it was never hail.** The thresholds were not the whole story. The first
+nowcast pass never has radar: a measurement for a cluster is only requested once
+that cluster exists, so it lands afterwards. It announced its arrival on the
+filtered-strikes event — which only the timeline footer listens to. So the
+measurement sat in the cache, the memo cleared, and nothing recomputed. A storm
+with an obvious hail core stayed drawn as an ordinary tracked cell until some
+unrelated redraw happened by, which on a quiet map can be a long time.
+
+Measured, on a live storm with a 59 dBZ core flashing ten times a minute: the
+projection picks the radar up in 0 ms with the listener and 16,086 ms without.
+
+That is also the answer to why lowering the thresholds kept not working — the
+term being compared against them was null, not small.
+
 **The hail scale, from what the product reports.** The thresholds came from the
 single-polarisation textbook — 50 dBZ worth mentioning, 60 likely large — which
 assumes a native radar. Measured over the eight busiest lightning cells inside

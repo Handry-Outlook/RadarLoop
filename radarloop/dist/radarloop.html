@@ -2436,6 +2436,8 @@ const EVENTS = {
   OBSERVATIONS_UPDATED: 'observations:updated',
   LIGHTNING_DATA: 'lightning:data',
   LIGHTNING_FILTERED: 'lightning:filtered',
+  /** A radar measurement the nowcast was waiting on has arrived. */
+  NOWCAST_RADAR: 'nowcast:radar',
   /** A lightning option changed programmatically; controls should re-sync. */
   LIGHTNING_OPTIONS: 'lightning:options',
   LEGEND_INVALIDATED: 'legend:invalidated',
@@ -14695,7 +14697,14 @@ function refreshRadarHints(positions, referenceMs) {
           // changed; without this the next call would hand back the answer that
           // was computed before the radar arrived.
           memoKey = '';
-          emit(EVENTS.LIGHTNING_FILTERED, { reason: 'radar-motion' });
+          // And something has to ask again. This used to announce itself on the
+          // filtered-strikes event, which only the timeline footer listens to,
+          // so the measurement landed, the memo cleared, and nothing recomputed
+          // — the first pass has no radar by construction, because the hints for
+          // a cluster are requested only once that cluster exists. A storm with
+          // an obvious hail core stayed drawn as an ordinary tracked cell until
+          // some unrelated redraw happened by.
+          emit(EVENTS.NOWCAST_RADAR, { reason: 'radar-motion' });
         }
       })
       .catch(() => { hints.set(key, { at: referenceMs, quality: 0 }); })
@@ -15496,6 +15505,10 @@ const HAIL_EDGE = '#fbbf24';
 const HALO = 'rgba(2, 6, 23, 0.85)';
 
 let group = null;
+let lastDrawn = [];
+
+/** The projections as last drawn. For the legend, and for the checks. */
+const lastNowcastClusters = () => lastDrawn;
 
 function ensureGroup() {
   if (!group) group = L.layerGroup();
@@ -15645,6 +15658,7 @@ function drawNowcast(filtered, reference) {
 
   // 3D mirrors these panes as a still, so it has to be told they changed.
   refreshOverlayMirror();
+  lastDrawn = drawn;
   return drawn;
 }
 
@@ -15654,6 +15668,7 @@ function clearNowcast() {
   refreshOverlayMirror();
 }
 
+__exports.lastNowcastClusters = lastNowcastClusters;
 __exports.drawNowcast = drawNowcast;
 __exports.clearNowcast = clearNowcast;
 });
@@ -15812,6 +15827,14 @@ const refresh = throttle((options = {}) => {
 }, 90);
 
 /** Redraws colours only — no refiltering. Used by the age-colour toggle. */
+// A radar measurement the nowcast asked for has arrived, so the projection is
+// recomputed with it. The first pass never has radar — the hints for a cluster
+// are only requested once that cluster exists — so without this a storm with an
+// obvious hail core stayed drawn as an ordinary tracked cell until some
+// unrelated redraw happened by. The loop terminates on its own: a pass whose
+// hints are all fresh asks for nothing and so emits nothing.
+on(EVENTS.NOWCAST_RADAR, () => refresh({ force: true }));
+
 function recolour() {
   refreshColours();
   emit(EVENTS.LEGEND_INVALIDATED);
@@ -22557,6 +22580,7 @@ const { MMH_INTERVALS } = __mod('data/palettes.js');
 const { dbzToMmh, encodedToDbz, encodedToMmh } = __mod('layers/radarScale.js');
 const { bestShift, measureMotion } = __mod('lightning/radarMotion.js');
 const { calculateNowcast, hailRisk, impactLevel, nowcastInternals, radarHints, remainingLifeMinutes, resetNowcastHistory, resetRadarHints, seedRadarHint } = __mod('lightning/nowcast.js');
+const { lastNowcastClusters } = __mod('lightning/nowcastLayer.js');
 /* ------------------------------------------------------------------ *
  * Session restore
  * ------------------------------------------------------------------ */
@@ -23093,6 +23117,8 @@ window.__mirror3d = { tileScheme, usesFlippedY };
 window.__strikeRender = { mercatorX, mercatorY, colourForAge, ageStops };
 // Group-to-pane mapping, so the stacking checks can ask rather than guess.
 window.__paneFor = paneFor;
+// The projections as last drawn, so the hail checks can read what the map shows.
+window.__nowcastClusters = () => lastNowcastClusters();
 // The strike canvas, so the mark checks can ask what it last drew and how.
 window.__strikeLayer = () => getStrikeLayer();
 // The rainfall ladder and its conversions, for checking what part of the scale

@@ -644,7 +644,14 @@ function refreshRadarHints(positions, referenceMs) {
           // changed; without this the next call would hand back the answer that
           // was computed before the radar arrived.
           memoKey = '';
-          emit(EVENTS.LIGHTNING_FILTERED, { reason: 'radar-motion' });
+          // And something has to ask again. This used to announce itself on the
+          // filtered-strikes event, which only the timeline footer listens to,
+          // so the measurement landed, the memo cleared, and nothing recomputed
+          // — the first pass has no radar by construction, because the hints for
+          // a cluster are requested only once that cluster exists. A storm with
+          // an obvious hail core stayed drawn as an ordinary tracked cell until
+          // some unrelated redraw happened by.
+          emit(EVENTS.NOWCAST_RADAR, { reason: 'radar-motion' });
         }
       })
       .catch(() => { hints.set(key, { at: referenceMs, quality: 0 }); })

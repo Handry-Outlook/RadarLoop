@@ -153,6 +153,14 @@ export const refresh = throttle((options = {}) => {
 }, 90);
 
 /** Redraws colours only — no refiltering. Used by the age-colour toggle. */
+// A radar measurement the nowcast asked for has arrived, so the projection is
+// recomputed with it. The first pass never has radar — the hints for a cluster
+// are only requested once that cluster exists — so without this a storm with an
+// obvious hail core stayed drawn as an ordinary tracked cell until some
+// unrelated redraw happened by. The loop terminates on its own: a pass whose
+// hints are all fresh asks for nothing and so emits nothing.
+on(EVENTS.NOWCAST_RADAR, () => refresh({ force: true }));
+
 export function recolour() {
   refreshColours();
   emit(EVENTS.LEGEND_INVALIDATED);
