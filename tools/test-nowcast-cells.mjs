@@ -56,6 +56,13 @@ const cells = await page.evaluate(() => {
     return out;
   };
 
+  // One cell must stay one cell. Splitting is the cure for chaining and the
+  // opposite failure is just as wrong: a single storm cut in half gets two
+  // projections pointing two ways.
+  resetRadarHints();
+  resetNowcastHistory();
+  const single = calculateNowcast(build({ lat0: 52.2, lon0: -2.4 }).sort((x, y) => x.ms - y.ms), new Date(now));
+
   const a = { lat0: 52.2, lon0: -2.4 };
   const b = { lat0: 52.35, lon0: -1.6 };
   resetRadarHints();
@@ -68,6 +75,7 @@ const cells = await page.evaluate(() => {
     new Date(now),
   );
   return {
+    single: single.length,
     apart: apart.length,
     bridged: bridged.length,
     positions: apart.map((c) => [+c.baseLat.toFixed(2), +c.baseLon.toFixed(2)]),
@@ -75,6 +83,7 @@ const cells = await page.evaluate(() => {
   };
 });
 console.log(`  ${JSON.stringify(cells)}`);
+ok('one cell stays one cell', cells.single === 1, `${cells.single}`);
 ok('two cells forty kilometres apart are two cells', cells.apart === 2, `${cells.apart}`);
 // The chaining failure: a handful of flashes between them used to merge both
 // into a single cluster with a meaningless average position and heading.

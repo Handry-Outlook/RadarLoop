@@ -16,8 +16,26 @@
 import { map, renderers, safeRemove } from '../core/map.js';
 import { escapeHtml } from '../core/util.js';
 import { lightning } from '../core/state.js';
-import { calculateNowcast, compassPoint, confidenceColour, impactLevel } from './nowcast.js';
+import { calculateNowcast, compassPoint, impactLevel } from './nowcast.js';
 import { refreshOverlayMirror } from '../layers/mirrorBridge.js';
+
+/**
+ * The nowcast's own colours.
+ *
+ * Cyan, and nothing warm. The strike age ramp runs yellow, magenta, pink,
+ * purple, indigo — it owns every warm and violet hue on the map — and the
+ * outline used to be drawn in red with a fill that ramped to violet at high
+ * confidence, which is the colour of the oldest strikes. A projection drawn
+ * around a dense field was therefore drawn in the field's own colours and
+ * disappeared into it. Cyan is the part of the wheel nothing else is using.
+ *
+ * Every line is drawn twice, a dark halo first and the colour over it, so the
+ * boundary holds against bright strikes and dark sea alike without needing a
+ * colour that works on both.
+ */
+const EDGE = '#22d3ee';
+const SEVERE_EDGE = '#f8fafc';
+const HALO = 'rgba(2, 6, 23, 0.85)';
 
 let group = null;
 
@@ -46,7 +64,7 @@ function popupHtml(cluster, forecast, impact) {
     <div class="wx-popup wx-popup--nowcast">
       <header class="wx-popup__head" style="--accent:${impact.colour}">
         <span class="wx-popup__eyebrow">Storm projection</span>
-        <strong>+${forecast.timeMinutes} minutes</strong>
+        <strong>${forecast.timeMinutes ? `+${forecast.timeMinutes} minutes` : 'now'}</strong>
       </header>
       <div class="wx-popup__impact" style="--accent:${impact.colour}">${escapeHtml(impact.label)}</div>
       <dl class="wx-popup__rows wx-popup__rows--grid">
@@ -84,55 +102,78 @@ export function drawNowcast(filtered, reference) {
     if (cluster.confidence < minConfidence) continue;
     drawn.push(cluster);
 
-    const colour = confidenceColour(cluster.confidence);
-    const baseOpacity = Math.max(0.2, cluster.confidence * 0.8 + 0.2);
     const impact = impactLevel(cluster.clusterSize, cluster.confidence);
     const strongAlert = impact.level >= 4;
-    const outlineWeight = strongAlert ? 9 : 3;
-    const forecastWeight = strongAlert ? 5 : 2.5;
-    const outlineColour = strongAlert ? impact.colour : '#ef4444';
+    const edge = strongAlert ? SEVERE_EDGE : EDGE;
+    const baseOpacity = Math.max(0.45, cluster.confidence * 0.8 + 0.2);
+
+    /** A line with a dark halo under it, so it reads on any background. */
+    const stroke = (latLngs, { weight, dash, opacity, close }) => {
+      const shared = {
+        pane: 'nowcastOutlinePane',
+        renderer: renderers.nowcastOutline,
+        fill: false,
+        interactive: false,
+      };
+      const shape = close ? L.polygon : L.polyline;
+      shape(latLngs, { ...shared, color: HALO, weight: weight + 4, opacity: opacity * 0.8, dashArray: dash })
+        .addTo(layers);
+      return shape(latLngs, { ...shared, color: edge, weight, opacity, dashArray: dash, interactive: true });
+    };
 
     // Furthest projection first so nearer ones draw on top.
     const projections = [...cluster.nowcastPolygons].sort((a, b) => b.timeMinutes - a.timeMinutes);
     for (const forecast of projections) {
       const latLngs = forecast.polygon.map(([lon, lat]) => [lat, lon]);
-      const decay = 1 - forecast.timeMinutes / 80;
+      const decay = 1 - forecast.timeMinutes / 120;
 
       L.polygon(latLngs, {
         pane: 'nowcastFillPane',
         renderer: renderers.nowcastFill,
         stroke: false,
-        fillColor: colour,
-        fillOpacity: baseOpacity * decay * 0.3,
+        fillColor: edge,
+        fillOpacity: 0.1 * decay,
         interactive: false,
       }).addTo(layers);
 
-      L.polygon(latLngs, {
-        pane: 'nowcastOutlinePane',
-        renderer: renderers.nowcastOutline,
-        color: outlineColour,
-        weight: forecastWeight,
-        opacity: Math.max(0.58, baseOpacity * Math.max(0.72, decay)),
-        fill: false,
-        dashArray: '5, 5',
+      stroke(latLngs, {
+        weight: strongAlert ? 3.5 : 2.5,
+        dash: '6, 6',
+        opacity: Math.max(0.65, baseOpacity * decay),
+        close: true,
       })
         .bindPopup(popupHtml(cluster, forecast, impact), { className: 'wx-popup-shell', closeButton: false })
         .addTo(layers);
+
+      // A leader from the storm to where it is going, which is the one thing a
+      // reader wants from a projection and the hardest to see in a pile of
+      // overlapping outlines.
+      const centre = forecast.polygon.reduce((acc, [lon, lat]) => [acc[0] + lon, acc[1] + lat], [0, 0])
+        .map((v) => v / forecast.polygon.length);
+      stroke([[cluster.baseLat, cluster.baseLon], [centre[1], centre[0]]], {
+        weight: strongAlert ? 3 : 2,
+        dash: null,
+        opacity: 0.85 * decay,
+        close: false,
+      }).addTo(layers);
     }
 
     if (cluster.hullGeometry) {
-      L.geoJSON(cluster.hullGeometry, {
+      const ring = cluster.hullGeometry.geometry.coordinates[0].map(([lon, lat]) => [lat, lon]);
+      L.polygon(ring, {
         pane: 'nowcastFillPane',
         renderer: renderers.nowcastFill,
+        stroke: false,
+        fillColor: edge,
+        fillOpacity: 0.2,
         interactive: false,
-        style: { fillColor: colour, fillOpacity: Math.min(baseOpacity, 0.7), stroke: false },
       }).addTo(layers);
 
-      L.geoJSON(cluster.hullGeometry, {
-        pane: 'nowcastOutlinePane',
-        renderer: renderers.nowcastOutline,
-        style: { color: outlineColour, weight: outlineWeight, opacity: 0.9, fill: false },
-      }).addTo(layers);
+      // The current footprint: solid and heaviest, since it is the one thing
+      // here that is observed rather than projected.
+      stroke(ring, { weight: strongAlert ? 6 : 4, dash: null, opacity: 0.95, close: true })
+        .bindPopup(popupHtml(cluster, { timeMinutes: 0 }, impact), { className: 'wx-popup-shell', closeButton: false })
+        .addTo(layers);
     }
   }
 

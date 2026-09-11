@@ -1554,6 +1554,50 @@ would have had. And the memo key held counts and timestamps but not positions, s
 three synthetic tracks heading in three directions all returned the first one's
 answer; a sample of a dozen positions now goes into the key.
 
+**What the synthetic checks missed.** They all passed while the thing was badly
+broken on real data, which is worth recording. Driving the archive instead — the
+busiest hour in eighteen months, 26 June, 42,000 strikes — showed every cluster
+reporting a heading of zero and a speed of zero.
+
+The cause was the input budget. It was applied by taking the *most recent* 700
+strikes, and on that day the most recent 700 span about one minute. Every cluster
+was a one-minute snapshot: one time bin, nothing to fit a velocity through, no
+heading, and no track for the cell separation to follow either. Sampling at a
+stride across the window instead keeps the whole history and gives up some of the
+flashes, which is the right way round — the clustering needs points, the fit needs
+time. With that fixed the same hour gives tracks spanning one to three hours and
+fits at r² 0.92 to 0.99.
+
+**Steering without radar.** Cell separation depends on knowing the flow, and radar
+only reaches back a day, so an archived afternoon has none. A first clustering
+pass with nothing to advect by produces blobs rather than cells — useless as an
+answer and perfectly good for measuring the flow. The second pass uses that to put
+every strike in the storm's frame. Radar is still preferred where it exists.
+
+**The footprint is drawn in the storm's frame too.** It was the convex hull of
+half an hour of ground positions, which for a cell at 75 km/h is a 37 km smear
+before the storm has any size at all — every cell on a fast day came out the same
+elongated shape pointing the same way. Carrying each strike forward to now undoes
+exactly that. Largest footprint on the test day went from 118 km to 65.
+
+**The hull no longer needs turf.** It was `turf.convex`, and turf is fetched on
+demand only when the nowcast checkbox is ticked — so switching the nowcast on any
+other way, or any run where that fetch failed, produced clusters with no footprint
+and drew nothing at all, silently. Andrew's monotone chain is twenty lines.
+
+**Colour.** The strike age ramp runs yellow, magenta, pink, purple, indigo: it
+owns every warm and violet hue on the map. The nowcast outline was red and its
+fill ramped to violet at high confidence, so a projection drawn around a dense
+field was drawn in that field's own colours and disappeared into it. It is cyan
+now, white for severe, with a dark halo under every line so the boundary holds
+against bright strikes and dark sea alike. Each projection also gets a leader from
+the storm to where it is going, which is the one thing a reader wants and the
+hardest to pick out of overlapping outlines.
+
+Still coarse: the largest footprints on a big day are 60–80 km, which is a
+multicell cluster rather than a single cell. Splitting further needs the radar
+cores, not more lightning.
+
 The popup says which sources are behind a projection, names the trend, and
 gives the expected remaining life.
 

@@ -22,12 +22,43 @@ import { measureMotion, resetRadarMotion, SEPARATION_MIN } from './radarMotion.j
  * Performance envelope
  * ------------------------------------------------------------------ */
 
+/**
+ * Work allowed per run.
+ *
+ * `maxInput` was 700 when it was a truncation, where a bigger number only bought
+ * a longer tail of the same minute. Now that it is a stride across the window it
+ * decides how finely the field is sampled, and the clustering is linear in it
+ * against a spatial grid, so it can afford to be an order larger.
+ */
 export const PROFILES = {
-  low: { maxInput: 260, maxClusters: 4, ransacMax: 24, steps: [60] },
-  high: { maxInput: 700, maxClusters: 8, ransacMax: 60, steps: [30, 60] },
+  low: { maxInput: 1200, maxClusters: 6, ransacMax: 24, steps: [60] },
+  high: { maxInput: 6000, maxClusters: 12, ransacMax: 60, steps: [30, 60] },
 };
 
 export const profile = () => (runtime.lowEnd ? PROFILES.low : PROFILES.high);
+
+/**
+ * Reduces a strike set to a budget without shortening it.
+ *
+ * The budget used to be applied by taking the most recent N, which is the single
+ * worst thing that could be done to a nowcast. On a busy day — 42,000 strikes in
+ * an hour is an ordinary June afternoon here — the most recent 700 strikes span
+ * about one minute. Every cluster was therefore a one-minute snapshot: one time
+ * bin, nothing to fit a velocity to, and so a heading of zero and a speed of zero
+ * on every cell. It also meant cells were never followed, because there was no
+ * track to follow.
+ *
+ * Sampling at a stride keeps the whole window instead. A cell loses some of its
+ * flashes and keeps all of its history, which is the right way round: the
+ * clustering needs enough points to find a cell, and the fit needs time.
+ */
+export function thinAcrossTime(strikes, budget) {
+  if (strikes.length <= budget) return strikes;
+  const stride = strikes.length / budget;
+  const out = [];
+  for (let i = 0; i < strikes.length; i += stride) out.push(strikes[Math.floor(i)]);
+  return out;
+}
 
 /* ------------------------------------------------------------------ *
  * Geometry helpers
@@ -66,6 +97,41 @@ function translatePolygon(coords, bearing, distanceKm) {
     const dLon = (distanceKm * Math.sin(rad)) / (KM_PER_DEG_LAT * Math.max(0.1, Math.cos(lat * Math.PI / 180)));
     return [lon + dLon, lat + dLat];
   });
+}
+
+
+/**
+ * Convex hull of a set of strikes, as a closed ring of [lon, lat].
+ *
+ * Andrew's monotone chain. This used to call turf, which is loaded on demand and
+ * only when the nowcast checkbox is ticked — so anything that switched the
+ * nowcast on another way, or any run where that fetch failed, produced clusters
+ * with no footprint and drew nothing at all, silently. A convex hull is not worth
+ * a network dependency and a failure mode.
+ *
+ * Degenerate input — fewer than three points, or all of them collinear — has no
+ * hull, and returns null rather than a sliver.
+ */
+export function convexHull(points) {
+  if (points.length < 3) return null;
+  const sorted = [...points].sort((a, b) => (a[0] - b[0]) || (a[1] - b[1]));
+
+  // Cross product of OA and OB. Positive means a left turn.
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+
+  const half = (input) => {
+    const out = [];
+    for (const point of input) {
+      while (out.length >= 2 && cross(out[out.length - 2], out[out.length - 1], point) <= 0) out.pop();
+      out.push(point);
+    }
+    out.pop();
+    return out;
+  };
+
+  const ring = [...half(sorted), ...half([...sorted].reverse())];
+  if (ring.length < 3) return null;
+  return [...ring, ring[0]];
 }
 
 function polygonCentroid(coords) {
@@ -123,10 +189,13 @@ function buildSpatialGrid(strikes, cellSizeKm) {
  * ------------------------------------------------------------------ */
 
 /** How much further apart than they are wide two halves must be to be two cells. */
-const SPLIT_RATIO = 2.1;
+/** How much of a cell's recent history the drawn footprint covers. */
+const HULL_WINDOW_MS = 20 * 60 * 1000;
+
+const SPLIT_RATIO = 1.7;
 
 /** And at least this far apart, so two blobs of noise are not called cells. */
-const SPLIT_MIN_KM = 18;
+const SPLIT_MIN_KM = 15;
 
 /**
  * Splits a cluster that is really two, and says so recursively.
@@ -504,6 +573,95 @@ export function resetRadarHints() {
 export const radarHints = () => [...hints.entries()].map(([key, value]) => ({ key, ...value }));
 
 
+
+/**
+ * Time-binned centroids for a cluster, and the motion fitted through them.
+ *
+ * Pulled out of the main loop so the clustering can use it too. Separating cells
+ * needs to know how fast they are travelling, and knowing that needs a fit, so
+ * the first pass fits coarse clusters only to work out the flow, and the second
+ * uses that flow to cluster properly.
+ */
+function fitCluster(cluster, { binSize, decayConstant, ransacIterations }) {
+  let minTime = Infinity;
+  let maxTime = -Infinity;
+  for (const s of cluster) {
+    if (s.ms < minTime) minTime = s.ms;
+    if (s.ms > maxTime) maxTime = s.ms;
+  }
+
+  const bins = [];
+  for (let t = minTime; t < maxTime; t += binSize) {
+    let sumLat = 0;
+    let sumLon = 0;
+    let sumW = 0;
+    let count = 0;
+    for (const s of cluster) {
+      if (s.ms < t || s.ms >= t + binSize) continue;
+      const ageRatio = maxTime > minTime ? (maxTime - s.ms) / (maxTime - minTime) : 0;
+      const w = 1 - ageRatio * decayConstant;
+      sumLat += s.lat * w;
+      sumLon += s.lon * w;
+      sumW += w;
+      count += 1;
+    }
+    if (count) bins.push({ time: t + binSize / 2, lat: sumLat / sumW, lon: sumLon / sumW, count });
+  }
+
+  const result = {
+    bins, minTime, maxTime, speedKmH: 0, directionDeg: 0, regressionScore: 0.1, residualKm: 100,
+  };
+  if (bins.length < 2) return result;
+
+  const spanHours = (maxTime - minTime) / 3600000;
+  const threshold = Math.max(0.03, Math.min(0.1, 0.05 + spanHours * 0.02));
+  const model = ransacRegression(bins, ransacIterations, threshold, decayConstant);
+  const latFactor = Math.cos((bins[0].lat * Math.PI) / 180);
+  const vLat = model.slopeLat * 111 * 3600;
+  const vLon = model.slopeLon * 111 * latFactor * 3600;
+
+  result.regressionScore = model.r2;
+  result.residualKm = model.residualKm;
+  result.speedKmH = Math.min(Math.hypot(vLat, vLon), MAX_SPEED_KMH);
+  result.directionDeg = (Math.atan2(vLon, vLat) * 180) / Math.PI % 360;
+  if (result.directionDeg < 0) result.directionDeg += 360;
+  return result;
+}
+
+/**
+ * The flow the whole field is travelling in, fitted from the lightning alone.
+ *
+ * A first clustering pass with no motion to work from produces blobs: a cell's
+ * three-hour track spreads across more ground than the gap to its neighbours, so
+ * neighbouring cells chain into one. Those blobs are useless as cells and
+ * perfectly good for measuring the flow, which is all this asks of them. The
+ * second pass uses the answer to put every strike in the storm's frame, where
+ * cells actually separate.
+ *
+ * Weighted by cluster size and by how well each fit held, so one small erratic
+ * cluster cannot steer the field.
+ */
+function steeringFromLightning(clusters, fitOptions) {
+  let u = 0;
+  let v = 0;
+  let weight = 0;
+  for (const cluster of clusters) {
+    const fit = fitCluster(cluster, fitOptions);
+    if (fit.bins.length < 3 || fit.speedKmH < 5) continue;
+    const w = cluster.length * Math.max(0.1, fit.regressionScore);
+    const rad = (fit.directionDeg * Math.PI) / 180;
+    u += Math.sin(rad) * fit.speedKmH * w;
+    v += Math.cos(rad) * fit.speedKmH * w;
+    weight += w;
+  }
+  if (!weight) return null;
+  u /= weight;
+  v /= weight;
+  const speedKmH = Math.hypot(u, v);
+  if (speedKmH < 5) return null;
+  return { speedKmH, directionDeg: (Math.atan2(u, v) * 180 / Math.PI + 360) % 360, quality: 0.4 };
+}
+
 /* ------------------------------------------------------------------ *
  * How long a cell has left
  * ------------------------------------------------------------------ */
@@ -575,6 +733,10 @@ export function remainingLifeMinutes({ latest, previous }, windowMin, ageMin, si
 
 const MAX_SPEED_KMH = 80;
 let previousNowcasts = [];
+let lastRaw = [];
+
+/** The fitted vectors from the last run, before smoothing. Diagnostics only. */
+export const nowcastInternals = () => lastRaw;
 
 let memoKey = '';
 let memoResult = [];
@@ -615,7 +777,7 @@ export function calculateNowcast(strikes, reference = new Date()) {
   // clusters; quiet days want a longer memory so a slow cell is not dropped.
   let recent = strikes.filter((s) => referenceMs - s.ms <= 7 * 3600 * 1000);
   const rawCount = recent.length;
-  if (recent.length > p.maxInput) recent = recent.slice(-p.maxInput);
+  recent = thinAcrossTime(recent, p.maxInput);
 
   const densityRatio = Math.min(1, rawCount / 2000);
   const baseMaxHours = 6 - 2 * densityRatio;
@@ -635,15 +797,16 @@ export function calculateNowcast(strikes, reference = new Date()) {
   const binSize = 5 * 60 * 1000;
   const jumpWindow = 10 * 60 * 1000;
 
-  let input = recent.filter((s) => referenceMs - s.ms <= maxTimeRange);
-  if (input.length > p.maxInput) input = input.slice(-p.maxInput);
+  const input = thinAcrossTime(recent.filter((s) => referenceMs - s.ms <= maxTimeRange), p.maxInput);
+
+  const fitOptions = { binSize, decayConstant, ransacIterations };
 
   /* ---- the storm's frame ---- */
 
-  // One steering measurement for the whole field, taken at the middle of it.
-  // Cells inside a single convective episode are carried by the same flow, and a
-  // measurement per cluster would be both slower and circular — the clusters are
-  // what this is about to help decide.
+  // One steering estimate for the whole field. Radar first, because it measures
+  // the flow directly; the lightning's own first-pass fit otherwise, which needs
+  // no radar coverage and is what makes cell separation work at all on an
+  // archived day.
   let sumLat = 0;
   let sumLon = 0;
   for (const s of input) {
@@ -652,8 +815,18 @@ export function calculateNowcast(strikes, reference = new Date()) {
   }
   const centreLat = input.length ? sumLat / input.length : null;
   const centreLon = input.length ? sumLon / input.length : null;
-  const steering = centreLat === null ? null : radarHintFor(centreLat, centreLon, referenceMs);
+  const fromRadar = centreLat === null ? null : radarHintFor(centreLat, centreLon, referenceMs);
   if (centreLat !== null) refreshRadarHints([[centreLat, centreLon]], referenceMs);
+
+  let steering = fromRadar && fromRadar.quality > 0 ? fromRadar : null;
+  if (!steering) {
+    // A pass with nothing to advect by produces blobs rather than cells, which
+    // is useless as an answer and perfectly good for measuring the flow.
+    const coarse = clusterStrikes(input, {
+      minClusterSize, maxDistance, maxTemporalSeparation, minNeighbours: 3,
+    }).sort((a, b) => b.length - a.length).slice(0, 6);
+    steering = steeringFromLightning(coarse, fitOptions);
+  }
 
   /**
    * Carries a strike to where the storm that made it would be now.
@@ -662,7 +835,7 @@ export function calculateNowcast(strikes, reference = new Date()) {
    * has covered, which is the difference between separating two cells and
    * merging a single moving one.
    */
-  const advect = steering && steering.quality > 0 && steering.speedKmH > 3
+  const advect = steering && steering.speedKmH > 3
     ? (lat, lon, ms) => {
       const hours = (referenceMs - ms) / 3600000;
       const km = steering.speedKmH * hours;
@@ -676,8 +849,8 @@ export function calculateNowcast(strikes, reference = new Date()) {
 
   // In the storm's frame a cell's own strikes sit on top of one another, so the
   // radius that separates neighbours can be much tighter than the one that had
-  // to tolerate half an hour of travel.
-  const joinKm = advect ? Math.max(8, maxDistance * 0.45) : maxDistance;
+  // to tolerate hours of travel.
+  const joinKm = advect ? Math.max(8, maxDistance * 0.4) : maxDistance;
   const minNeighbours = Math.max(2, Math.round(3 + densityRatio * 3));
 
   const clusters = clusterStrikes(input, {
@@ -690,47 +863,16 @@ export function calculateNowcast(strikes, reference = new Date()) {
   const MIN_BINS_FOR_CONFIDENCE = 5;
 
   for (const cluster of clusters) {
-    let minTime = Infinity;
-    let maxTime = -Infinity;
-    for (const s of cluster) {
-      if (s.ms < minTime) minTime = s.ms;
-      if (s.ms > maxTime) maxTime = s.ms;
-    }
+    const fit = fitCluster(cluster, fitOptions);
+    const { bins, minTime, maxTime } = fit;
     const sinceLast = referenceMs - maxTime;
     if (sinceLast > maxInactivityMs) continue;
-
-    // Age-weighted centroid per time bin — the track the fit runs against.
-    const bins = [];
-    for (let t = minTime; t < maxTime; t += binSize) {
-      let sumLat = 0, sumLon = 0, sumW = 0, count = 0;
-      for (const s of cluster) {
-        if (s.ms < t || s.ms >= t + binSize) continue;
-        const ageRatio = maxTime > minTime ? (maxTime - s.ms) / (maxTime - minTime) : 0;
-        const w = 1 - ageRatio * decayConstant;
-        sumLat += s.lat * w; sumLon += s.lon * w; sumW += w; count += 1;
-      }
-      if (count) bins.push({ time: t + binSize / 2, lat: sumLat / sumW, lon: sumLon / sumW, count });
-    }
     if (!bins.length) continue;
 
-    const spanHours = (maxTime - minTime) / 3600000;
-    const threshold = Math.max(0.03, Math.min(0.1, 0.05 + spanHours * 0.02));
-
-    let speedKmH = 0;
-    let directionDeg = 0;
-    let regressionScore = 0.1;
-    let residualKm = 100;
-
-    if (bins.length >= 2) {
-      const model = ransacRegression(bins, ransacIterations, threshold, decayConstant);
-      regressionScore = model.r2;
-      residualKm = model.residualKm;
-      const latFactor = Math.cos(bins[0].lat * Math.PI / 180);
-      const vLat = model.slopeLat * 111 * 3600;
-      const vLon = model.slopeLon * 111 * latFactor * 3600;
-      speedKmH = Math.min(Math.hypot(vLat, vLon), MAX_SPEED_KMH);
-      directionDeg = (Math.atan2(vLon, vLat) * 180 / Math.PI + 360) % 360;
-    }
+    let speedKmH = fit.speedKmH;
+    let directionDeg = fit.directionDeg;
+    const regressionScore = fit.regressionScore;
+    const residualKm = fit.residualKm;
 
     const bearings = [];
     for (let i = 1; i < bins.length; i += 1) {
@@ -815,12 +957,24 @@ export function calculateNowcast(strikes, reference = new Date()) {
       baseLat,
       baseLon,
       speedKmH, directionDeg, regressionScore, consistency, residualKm,
-      confidence, clusterSize: cluster.length,
+      confidence, clusterSize: cluster.length, bins: bins.length,
       jump, growing, lifeMinutes,
       decaying: shrinking === null ? decayFactor < 0.5 : shrinking || decayFactor < 0.5,
       radar,
     });
   }
+
+  // Kept for diagnostics: the fitted vectors before smoothing and projection,
+  // which is where a velocity that comes out as zero has to be looked for.
+  lastRaw = raw.map((entry) => ({
+    size: entry.cluster.length,
+    spanMin: +((Math.max(...entry.cluster.map((s) => s.ms)) - Math.min(...entry.cluster.map((s) => s.ms))) / 60000).toFixed(1),
+    bins: entry.bins,
+    speed: +entry.speedKmH.toFixed(1),
+    dir: +entry.directionDeg.toFixed(0),
+    r2: +entry.regressionScore.toFixed(2),
+    consistency: +entry.consistency.toFixed(2),
+  }));
 
   // Anything without a fresh measurement is queued now, so the next pass has it.
   refreshRadarHints(raw.map((entry) => [entry.baseLat, entry.baseLon]), referenceMs);
@@ -865,18 +1019,34 @@ function smoothAndProject(entry, referenceMs, minClusterSize, steps) {
   }
 
   // Current footprint: the convex hull of the last 30 minutes of strikes.
+  /**
+   * The current footprint: the last twenty minutes of strikes, in the storm's
+   * own frame.
+   *
+   * Drawn from ground positions it was not a footprint at all but a smear. A
+   * cell travelling at 75 km/h covers 37 km in half an hour, so the hull of its
+   * last half hour is forty-odd kilometres long however small the storm is, and
+   * every cell on a fast-moving day came out the same elongated shape pointing
+   * the same way. Carrying each strike forward to now by the storm motion undoes
+   * exactly that, leaving the extent the cell actually has.
+   */
   let hull = null;
-  if (typeof turf !== 'undefined' && entry.cluster.length >= 3) {
+  if (entry.cluster.length >= 3) {
     const sorted = [...entry.cluster].sort((a, b) => a.ms - b.ms);
-    let recent = sorted.filter((s) => referenceMs - s.ms <= 30 * 60 * 1000);
+    let recent = sorted.filter((s) => referenceMs - s.ms <= HULL_WINDOW_MS);
     if (recent.length < 3) recent = sorted.slice(-3);
-    if (recent.length >= 3) {
-      try {
-        hull = turf.convex(turf.featureCollection(recent.map((s) => turf.point([s.lon, s.lat]))));
-      } catch {
-        hull = null; // collinear points — turf returns null, which is handled below
-      }
-    }
+    const toRad = Math.PI / 180;
+    const points = recent.map((s) => {
+      const hours = (referenceMs - s.ms) / 3600000;
+      const km = speedKmH * hours;
+      const rad = directionDeg * toRad;
+      const lat = s.lat + (km * Math.cos(rad)) / KM_PER_DEG_LAT;
+      const lon = s.lon + (km * Math.sin(rad)) / (KM_PER_DEG_LAT * Math.max(0.1, Math.cos(s.lat * toRad)));
+      return [lon, lat];
+    });
+    const ring = convexHull(points);
+    // Kept in the shape the drawing code already expects.
+    if (ring) hull = { type: 'Feature', geometry: { type: 'Polygon', coordinates: [ring] } };
   }
 
   const polygons = [];
