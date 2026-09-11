@@ -155,12 +155,13 @@ const bulk = await page.evaluate(async () => {
   }
 
   window.RadarLoop.lightning.lifespanHours = 12;
+  window.RadarLoop.playback.setTime(window.RadarLoop.time.current, { immediate: true });
   map.setView([15, 15], 3);
   const layer = window.RadarLoop.slots.get('lightning').front;
   for (let i = 0; i < 90; i += 1) {
     await new Promise((r) => setTimeout(r, 1000));
     const s = window.__windyLightning.feedStats;
-    if (s.framesLoaded >= s.framesWanted - 1) break;
+    if (s.framesWanted > 100 && s.framesLoaded >= s.framesWanted - 1) break;
   }
   const at = performance.now();
   layer._render();
