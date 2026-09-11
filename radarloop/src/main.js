@@ -48,7 +48,7 @@ import {
 import { prefetchIdle } from './core/deps.js';
 import * as synoptic from './layers/synoptic.js';
 import { buildStationCard } from './ui/stationPopup.js';
-import { mercatorX, mercatorY } from './lightning/render.js';
+import { getStrikeLayer, mercatorX, mercatorY } from './lightning/render.js';
 import { prune as strikeStorePrune, summary as strikeStoreSummary } from './layers/strikeStore.js';
 import { MMH_INTERVALS } from './data/palettes.js';
 import { dbzToMmh, encodedToDbz, encodedToMmh } from './layers/radarScale.js';
@@ -594,6 +594,8 @@ window.__mirror3d = { tileScheme, usesFlippedY };
 window.__strikeRender = { mercatorX, mercatorY };
 // Group-to-pane mapping, so the stacking checks can ask rather than guess.
 window.__paneFor = paneFor;
+// The strike canvas, so the mark checks can ask what it last drew and how.
+window.__strikeLayer = () => getStrikeLayer();
 // The rainfall ladder and its conversions, for checking what part of the scale
 // real reflectivity actually reaches.
 window.__palettes = { MMH_INTERVALS };

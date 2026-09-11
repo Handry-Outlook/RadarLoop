@@ -62,6 +62,9 @@ function lightningGroup() {
       el('span', { class: 'legend-swatch', style: { background: colourForAge(band.fraction) } }),
       el('span', { class: 'dim' }, band.label),
     ])),
+    // Shape says the same thing as colour for the band that matters most, so
+    // the newest strikes are findable without reading the colours off.
+    el('p', { class: 'tiny dim' }, 'Newest are bolts, older are squares.'),
   ]);
 }
 

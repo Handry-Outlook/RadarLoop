@@ -1708,6 +1708,28 @@ the lightest rain there is.
 The legend's tick labels now come from the ladder rather than being written out,
 so a rescale cannot leave them describing a scale that no longer exists.
 
+**Shape carries age, not only colour.** The in-house strikes are drawn as a bolt
+in the newest age band and a small open square in every band above it. Five
+identical crosses tinted five ways make you read the legend to find out what has
+just happened; a bolt among squares is legible at a glance, and it survives being
+screenshotted, printed, or looked at by someone who cannot separate the hues. The
+newest band is drawn last so a fresh strike is never buried under an older one.
+
+That change also moved the in-house feed onto the typed-buffer path the global
+one uses, which was necessary — the marks live there — and which dropped its
+render ceiling on the way: it used to decimate above a threshold, so on a busy
+day you were looking at a stride-thinned sample of the field with nothing saying
+so.
+
+Two faults surfaced doing it. The choice between drawing shapes and splatting
+pixels was made from the *previous* frame's visible count, so the first frame
+after a zoom drew the old decision — pixels where there was now room for shapes,
+which is exactly what the first screenshot showed. It counts for real now
+whenever there are fewer than 250,000 strikes held, which is every view that
+could still be drawing shapes. And clicking a strike searched the object list,
+which had become empty; the hit test reads the buffers, in the same projected
+space the drawing uses rather than a Leaflet call per strike.
+
 ## Live global strikes
 
 `layers/windyLightning.js`. The catalog has carried this product since the

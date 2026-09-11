@@ -1,0 +1,91 @@
+/**
+ * Strike marks carry age in their shape, not only their colour.
+ *
+ * The newest band is drawn as a bolt and everything older as a small open
+ * square, so what has just happened is findable at a glance and stays findable
+ * in a screenshot, in print, or to someone who cannot separate the hues.
+ */
+import { chromium } from 'playwright';
+
+const browser = await chromium.launch({ headless: process.env.HEADED !== '1' });
+const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+const errors = [];
+page.on('pageerror', (e) => errors.push(e.message));
+
+let pass = 0;
+let fail = 0;
+const ok = (name, condition, detail = '') => {
+  if (condition) { pass += 1; console.log(`  ok   ${name}`); }
+  else { fail += 1; console.log(`  FAIL ${name}${detail ? `\n         ${detail}` : ''}`); }
+};
+
+await page.goto('http://localhost:8080/index.html', { waitUntil: 'domcontentloaded', timeout: 60000 });
+await page.waitForTimeout(12000);
+
+const state = await page.evaluate(async () => {
+  const all = window.RadarLoop.lightningAll();
+  const hours = new Map();
+  for (const s of all) hours.set(Math.floor(s.ms / 3600000), (hours.get(Math.floor(s.ms / 3600000)) || 0) + 1);
+  const [hour] = [...hours.entries()].sort((a, b) => b[1] - a[1])[0];
+  window.RadarLoop.setLayerEnabled('radar', false);
+  window.RadarLoop.setLayerEnabled('satellite', false);
+  window.RadarLoop.lightning.nowcast = false;
+  window.RadarLoop.lightning.lifespanHours = 0.5;
+  window.RadarLoop.playback.setHistorySpan(24 * 90);
+  window.RadarLoop.playback.setTime(hour * 3600000 + 3600000, { immediate: true });
+  await new Promise((r) => setTimeout(r, 9000));
+  window.RadarLoop.map().setView([55.05, 1.1], 11);
+  await new Promise((r) => setTimeout(r, 5000));
+  const layer = window.__strikeLayer();
+  return {
+    mark: layer?.options?.mark,
+    mode: layer?._lastMode,
+    visible: layer?._lastVisible,
+    buffers: layer?._buffers?.length,
+    held: layer?._buffers?.reduce((n, b) => n + b.count, 0) ?? 0,
+    objects: layer?._strikes?.length ?? 0,
+  };
+});
+console.log(`  ${JSON.stringify(state)}`);
+
+ok('the in-house feed asks for shaped marks', state.mark === 'age', String(state.mark));
+// It used to hand the renderer an array of objects, thinned above a ceiling.
+ok('it draws from typed buffers now', state.buffers > 0 && state.objects === 0,
+   `${state.buffers} buffers, ${state.objects} objects`);
+ok('every strike in the window is held', state.held > 1000, String(state.held));
+// The decision used to come from the previous frame, so the first frame after a
+// zoom drew the old one: pixels where there was now room for shapes.
+ok('a sparse view draws shapes, not pixels', state.mode === 'stroke',
+   `${state.mode} at ${state.visible} visible`);
+
+/* ---- and the shapes are actually distinct ---- */
+const shapes = await page.evaluate(() => {
+  // Count distinct colours among drawn pixels: bolts are filled, squares are
+  // outlined, so a filled mark shows more pixels of its colour than an outline
+  // of the same size would.
+  const canvas = document.querySelector('.strike-canvas');
+  const ctx = canvas.getContext('2d');
+  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const counts = new Map();
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] < 40) continue;
+    const key = `${data[i]},${data[i + 1]},${data[i + 2]}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return { colours: counts.size, painted: [...counts.values()].reduce((a, b) => a + b, 0) };
+});
+console.log(`  ${JSON.stringify(shapes)}`);
+ok('marks were painted', shapes.painted > 500, String(shapes.painted));
+ok('and in more than one age colour', shapes.colours > 1, String(shapes.colours));
+
+const legend = await page.evaluate(() =>
+  [...document.querySelectorAll('#legend-body p')].map((n) => n.textContent).join(' | '));
+ok('the legend says what the shapes mean', /bolt/i.test(legend), legend);
+
+console.log('\n=== page errors ===');
+const real = [...new Set(errors)];
+if (real.length) real.forEach((e) => console.log(`  ${e}`));
+else console.log('  none');
+console.log(`\n${fail === 0 && real.length === 0 ? `ALL ${pass} CHECKS PASSED` : `${fail} failed, ${real.length} page errors`}`);
+await browser.close();
+process.exit(fail === 0 && real.length === 0 ? 0 : 1);

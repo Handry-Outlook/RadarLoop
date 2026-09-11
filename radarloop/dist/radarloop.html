@@ -8266,6 +8266,26 @@ function colourForAge(fraction) {
 
 const TWO_PI = Math.PI * 2;
 
+/**
+ * A lightning bolt, as offsets from the mark's centre in units of its half-size.
+ *
+ * Hand-placed rather than generated: at five pixels tall a bolt is a handful of
+ * vertices and the difference between one that reads and one that looks like a
+ * smudge is where they sit, not how many there are.
+ */
+const BOLT = [
+  [0.18, -1], [-0.62, 0.1], [-0.1, 0.1], [-0.28, 1], [0.62, -0.2], [0.1, -0.2],
+];
+
+/** Adds a closed polygon to the current path, scaled and centred. */
+function tracePath(ctx, points, x, y, size) {
+  ctx.moveTo(x + points[0][0] * size, y + points[0][1] * size);
+  for (let i = 1; i < points.length; i += 1) {
+    ctx.lineTo(x + points[i][0] * size, y + points[i][1] * size);
+  }
+  ctx.closePath();
+}
+
 /** Colour used when age colouring is switched off. */
 const STATIC_COLOUR = '#111111';
 
@@ -8318,6 +8338,13 @@ function latFromMercatorY(y) {
  * than asking the canvas to stroke two million line segments.
  */
 const DENSE_THRESHOLD = 24000;
+
+/**
+ * Above this many held strikes, the visible count is taken from the last frame
+ * rather than recounted. A quarter of a million is a couple of milliseconds to
+ * count and far more than any view that could still be drawing shapes.
+ */
+const COUNT_EXACTLY_BELOW = 250000;
 
 /** Age ramp as packed pixels, for the dense path. */
 const AGE_PIXELS = AGE_STOPS.map(([, colour]) => packColour(colour));
@@ -8442,15 +8469,43 @@ const StrikeCanvasLayer = L.Layer.extend({
     // a pixel. Anything else would put a tangent and a logarithm in this loop.
     const scale = this._map.getPixelWorldBounds().getSize().x;
     const origin = this._map.getPixelBounds().min;
-    const dense = (this._lastVisible || 0) > DENSE_THRESHOLD;
+    // How many are on screen decides which path draws them, and the honest way
+    // to know is to count. That is two multiplies and two comparisons a strike,
+    // so it is only worth avoiding when there are a great many; below that the
+    // previous frame's figure is a worse answer than the real one. Using it
+    // unconditionally left the first frame after a zoom drawing the old
+    // decision — pixels where there was now room for shapes.
+    let total = 0;
+    for (const buffer of this._buffers) total += buffer.count;
+    const dense = total > COUNT_EXACTLY_BELOW
+      ? (this._lastVisible || 0) > DENSE_THRESHOLD
+      : this._countVisible(scale, origin.x, origin.y, size) > DENSE_THRESHOLD;
     const view = {
       scale, originX: origin.x, originY: origin.y, pad: 8, w: size.x, h: size.y, dpr,
     };
 
     const runs = this._ageRuns();
+    this._lastMode = dense ? 'splat' : 'stroke';
     const drawn = dense ? this._splatRuns(ctx, view, runs) : this._strokeRuns(ctx, view, runs);
     this._lastVisible = drawn;
     return drawn;
+  },
+
+  /** How many buffered strikes fall inside the view. */
+  _countVisible(scale, originX, originY, size) {
+    const pad = 8;
+    let visible = 0;
+    for (const buffer of this._buffers) {
+      const { mx, my, count } = buffer;
+      for (let i = 0; i < count; i += 1) {
+        const x = mx[i] * scale - originX;
+        if (x < -pad || x > size.x + pad) continue;
+        const y = my[i] * scale - originY;
+        if (y < -pad || y > size.y + pad) continue;
+        visible += 1;
+      }
+    }
+    return visible;
   },
 
   /**
@@ -8488,24 +8543,43 @@ const StrikeCanvasLayer = L.Layer.extend({
   /**
    * The sparse mode.
    *
-   * A cross by default, matching the in-house strikes. Dots are the other
-   * option: a global field an order of magnitude denser reads better as points,
-   * where crosses at four arms each start to look like texture rather than
-   * individual strikes. Set per layer, so the two sources can differ.
+   * Three mark styles, chosen per layer because the sources differ in what they
+   * need to say.
+   *
+   * `age` is the in-house feed: a bolt for strikes in the newest age band and a
+   * small open square for everything older. Shape carries the same information
+   * as colour, which is the point — a field of identical crosses tinted five
+   * ways makes you read the legend to find out what just happened, whereas a
+   * bolt among squares is legible at a glance and survives being printed,
+   * screenshotted or looked at by someone who cannot separate the hues.
+   *
+   * `dot` is the global feed, an order of magnitude denser, where anything with
+   * structure turns to texture.
+   *
+   * `cross` is the plain fallback.
    */
   _strokeRuns(ctx, view, runs) {
     const { scale, originX, originY, pad, w, h } = view;
-    const dots = this.options.mark === 'dot';
-    const size = dots
-      ? (runtime.lowEnd ? 1.6 : 2.1)
-      : (runtime.lowEnd ? 3.5 : 4.5);
+    const style = this.options.mark || 'cross';
+    const small = runtime.lowEnd;
+    const arm = small ? 3.5 : 4.5;
+    const dot = small ? 1.6 : 2.1;
+    const box = small ? 1.9 : 2.4;
+    const bolt = small ? 4 : 5;
     let drawn = 0;
 
-    for (const [buffer, from, to, band] of runs) {
+    // Newest last, so a fresh strike is never buried under an older one.
+    const ordered = style === 'age' ? [...runs].sort((a, b) => b[3] - a[3]) : runs;
+
+    for (const [buffer, from, to, band] of ordered) {
       const { mx, my } = buffer;
       const colour = band < 0 ? STATIC_COLOUR : AGE_STOPS[band][1];
-      if (dots) ctx.fillStyle = colour;
+      const fresh = style === 'age' && band === 0;
+      const filled = style === 'dot' || fresh;
+      if (filled) ctx.fillStyle = colour;
       else ctx.strokeStyle = colour;
+      ctx.lineWidth = style === 'age' ? (small ? 1.2 : 1.5) : (small ? 1.4 : 1.8);
+
       ctx.beginPath();
       let any = false;
       for (let i = from; i < to; i += 1) {
@@ -8513,21 +8587,27 @@ const StrikeCanvasLayer = L.Layer.extend({
         if (x < -pad || x > w + pad) continue;
         const y = my[i] * scale - originY;
         if (y < -pad || y > h + pad) continue;
-        if (dots) {
+
+        if (style === 'dot') {
           // moveTo before arc, or each dot is joined to the last by a chord.
-          ctx.moveTo(x + size, y);
-          ctx.arc(x, y, size, 0, TWO_PI);
+          ctx.moveTo(x + dot, y);
+          ctx.arc(x, y, dot, 0, TWO_PI);
+        } else if (fresh) {
+          tracePath(ctx, BOLT, x, y, bolt);
+        } else if (style === 'age') {
+          // `rect` opens its own subpath, so these batch without a moveTo.
+          ctx.rect(x - box, y - box, box * 2, box * 2);
         } else {
-          ctx.moveTo(x - size, y - size);
-          ctx.lineTo(x + size, y + size);
-          ctx.moveTo(x + size, y - size);
-          ctx.lineTo(x - size, y + size);
+          ctx.moveTo(x - arm, y - arm);
+          ctx.lineTo(x + arm, y + arm);
+          ctx.moveTo(x + arm, y - arm);
+          ctx.lineTo(x - arm, y + arm);
         }
         any = true;
         drawn += 1;
       }
       if (!any) continue;
-      if (dots) ctx.fill();
+      if (filled) ctx.fill();
       else ctx.stroke();
     }
     return drawn;
@@ -8583,6 +8663,20 @@ const StrikeCanvasLayer = L.Layer.extend({
     ctx.putImageData(this._image, 0, 0);
     ctx.restore();
     return drawn;
+  },
+
+  /** Rings on the strikes that arrived since the last draw. */
+  flashArrivals(strikes, newKeys) {
+    const now = performance.now();
+    let budget = DEVICE.mobile ? 6 : 14;
+    for (const strike of strikes) {
+      if (budget <= 0) break;
+      if (!newKeys.has(strike.ms)) continue;
+      this._flashes.push({ lat: strike.lat, lon: strike.lon, start: now });
+      budget -= 1;
+    }
+    this._schedule();
+    return this;
   },
 
   setOpacity(value) {
@@ -8698,7 +8792,6 @@ const StrikeCanvasLayer = L.Layer.extend({
 
   /** Finds the nearest strike to a click and shows its time. */
   _onClick(event) {
-    if (!this._strikes.length) return;
     const clickPoint = this._map.latLngToContainerPoint(event.latlng);
     let best = null;
     let bestDistance = 12 * 12; // squared pixels
@@ -8711,6 +8804,27 @@ const StrikeCanvasLayer = L.Layer.extend({
       if (distance < bestDistance) {
         bestDistance = distance;
         best = s;
+      }
+    }
+
+    // The buffers hold the same thing in projected form, so the search is the
+    // same two multiplies the drawing uses rather than a Leaflet call per strike.
+    if (this._buffers.length) {
+      const scale = this._map.getPixelWorldBounds().getSize().x;
+      const origin = this._map.getPixelBounds().min;
+      for (const buffer of this._buffers) {
+        const { mx, my, t, base, count } = buffer;
+        for (let i = 0; i < count; i += 1) {
+          const dx = (mx[i] * scale - origin.x) - clickPoint.x;
+          if (dx > 12 || dx < -12) continue;
+          const dy = (my[i] * scale - origin.y) - clickPoint.y;
+          if (dy > 12 || dy < -12) continue;
+          const distance = dx * dx + dy * dy;
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            best = { ms: base + t[i], lat: latFromMercatorY(my[i]), lon: mx[i] * 360 - 180 };
+          }
+        }
       }
     }
     if (!best) return;
@@ -8737,7 +8851,7 @@ let layer = null;
 let previousKeys = new Set();
 
 function ensureStrikeLayer() {
-  if (!layer) layer = new StrikeCanvasLayer({ pane: 'lightningPane' });
+  if (!layer) layer = new StrikeCanvasLayer({ pane: 'lightningPane', mark: 'age' });
   if (!map.hasLayer(layer)) layer.addTo(map);
   return layer;
 }
@@ -8747,8 +8861,13 @@ function removeStrikeLayer() {
 }
 
 /**
- * Draws a filtered set. Strikes are decimated above the render ceiling so a
- * multi-day archive selection cannot stall the frame.
+ * Draws a filtered set.
+ *
+ * The strikes are packed into a typed buffer and handed to the same path the
+ * global feed uses. That does two things at once: the shaped marks live there,
+ * and so does the drawing of every strike. This used to decimate above a render
+ * ceiling — on a busy day you were looking at a sample of the field, thinned by
+ * a stride, with no indication that anything was missing.
  */
 function drawStrikes(filtered, { end, lifespanHours }) {
   if (!lightning.showLayer) {
@@ -8756,21 +8875,45 @@ function drawStrikes(filtered, { end, lifespanHours }) {
     return { drawn: 0, fresh: 0 };
   }
 
-  const ceiling = runtime.lowEnd ? 4000 : TUNING.maxRenderedStrikes;
-  let visible = filtered;
-  if (filtered.length > ceiling) {
-    const stride = Math.ceil(filtered.length / ceiling);
-    visible = [];
-    for (let i = 0; i < filtered.length; i += stride) visible.push(filtered[i]);
-  }
-
-  const keys = new Set(visible.map((s) => s.ms));
+  const keys = new Set();
   const fresh = new Set();
-  for (const key of keys) if (!previousKeys.has(key)) fresh.add(key);
+  for (const s of filtered) {
+    keys.add(s.ms);
+    if (!previousKeys.has(s.ms)) fresh.add(s.ms);
+  }
   previousKeys = keys;
 
-  ensureStrikeLayer().setStrikes(visible, { end, lifespanHours, newKeys: fresh });
-  return { drawn: visible.length, fresh: fresh.size, decimated: visible.length < filtered.length };
+  const layerRef = ensureStrikeLayer();
+  layerRef.setStrikeBuffers(filtered.length ? [packStrikes(filtered)] : [], { end, lifespanHours });
+
+  // The arrival flash still works from the objects: it is a handful of rings,
+  // and it needs positions rather than a scan of the whole field.
+  if (fresh.size) layerRef.flashArrivals(filtered, fresh);
+
+  return { drawn: filtered.length, fresh: fresh.size, decimated: false };
+}
+
+/**
+ * Packs strikes into the typed form the renderer draws from.
+ *
+ * Positions are projected here, once, rather than per frame — Web Mercator costs
+ * a logarithm and a tangent each, and a frame should not be paying for those.
+ */
+function packStrikes(strikes) {
+  const sorted = strikes[0] && strikes[strikes.length - 1].ms >= strikes[0].ms
+    ? strikes
+    : [...strikes].sort((a, b) => a.ms - b.ms);
+  const base = sorted[0].ms;
+  const count = sorted.length;
+  const mx = new Float32Array(count);
+  const my = new Float32Array(count);
+  const t = new Uint32Array(count);
+  for (let i = 0; i < count; i += 1) {
+    mx[i] = mercatorX(sorted[i].lon);
+    my[i] = mercatorY(sorted[i].lat);
+    t[i] = Math.max(0, sorted[i].ms - base);
+  }
+  return { mx, my, t, base, count };
 }
 
 /** Forces a redraw after a colour-mode change, without refiltering. */
@@ -8788,6 +8931,7 @@ __exports.StrikeCanvasLayer = StrikeCanvasLayer;
 __exports.ensureStrikeLayer = ensureStrikeLayer;
 __exports.removeStrikeLayer = removeStrikeLayer;
 __exports.drawStrikes = drawStrikes;
+__exports.packStrikes = packStrikes;
 __exports.refreshColours = refreshColours;
 __exports.getStrikeLayer = getStrikeLayer;
 });
@@ -20984,6 +21128,9 @@ function lightningGroup() {
       el('span', { class: 'legend-swatch', style: { background: colourForAge(band.fraction) } }),
       el('span', { class: 'dim' }, band.label),
     ])),
+    // Shape says the same thing as colour for the band that matters most, so
+    // the newest strikes are findable without reading the colours off.
+    el('p', { class: 'tiny dim' }, 'Newest are bolts, older are squares.'),
   ]);
 }
 
@@ -22052,7 +22199,7 @@ const { archiveFrameTime, composeChannels, daylightGrid, deinvertBlocks, frameTi
 const { prefetchIdle } = __mod('core/deps.js');
 const synoptic = __mod('layers/synoptic.js');
 const { buildStationCard } = __mod('ui/stationPopup.js');
-const { mercatorX, mercatorY } = __mod('lightning/render.js');
+const { getStrikeLayer, mercatorX, mercatorY } = __mod('lightning/render.js');
 const { prune: strikeStorePrune, summary: strikeStoreSummary } = __mod('layers/strikeStore.js');
 const { MMH_INTERVALS } = __mod('data/palettes.js');
 const { dbzToMmh, encodedToDbz, encodedToMmh } = __mod('layers/radarScale.js');
@@ -22594,6 +22741,8 @@ window.__mirror3d = { tileScheme, usesFlippedY };
 window.__strikeRender = { mercatorX, mercatorY };
 // Group-to-pane mapping, so the stacking checks can ask rather than guess.
 window.__paneFor = paneFor;
+// The strike canvas, so the mark checks can ask what it last drew and how.
+window.__strikeLayer = () => getStrikeLayer();
 // The rainfall ladder and its conversions, for checking what part of the scale
 // real reflectivity actually reaches.
 window.__palettes = { MMH_INTERVALS };
