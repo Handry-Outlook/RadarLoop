@@ -2263,9 +2263,22 @@ const PANES = [
   { name: 'isobarPane', z: 170, parent: 'overlayPane' },
   { name: 'frontPane', z: 180, parent: 'overlayPane' },
   { name: 'warningFillPane', z: 190, parent: 'overlayPane', clickThrough: true },
+  // Five groups had no pane of their own and fell through to `overlayPane`.
+  // That is Leaflet's own container for every child pane, so they all drew into
+  // one another and, worse, restacking any of them set a z-index on the
+  // container — moving the entire weather stack rather than the one layer. Each
+  // gets its own now, which is what makes the layer list able to order them.
+  { name: 'windPane', z: 182, parent: 'overlayPane' },
+  { name: 'nowcastLayerPane', z: 184, parent: 'overlayPane' },
+  { name: 'tropicalPane', z: 186, parent: 'overlayPane' },
+  { name: 'rotationPane', z: 188, parent: 'overlayPane' },
+
   // Hand-drawn shapes start above the weather; like the outlooks they can be
   // restacked from the layer list.
   { name: 'drawPane', z: 192, parent: 'overlayPane' },
+  // Strikes from a catalog product, as opposed to the in-house feed above the
+  // whole stack in `lightningPane`.
+  { name: 'strikePane', z: 194, parent: 'overlayPane' },
   // Station models are read, not looked at, so they start at the top of the
   // stack. Inside overlayPane rather than beside it: the layer list orders by
   // z-index, and a z-index only orders against its own siblings. As a top-level
@@ -8200,6 +8213,8 @@ function colourForAge(fraction) {
   return AGE_STOPS[AGE_STOPS.length - 1][1];
 }
 
+const TWO_PI = Math.PI * 2;
+
 /** Colour used when age colouring is switched off. */
 const STATIC_COLOUR = '#111111';
 
@@ -8419,15 +8434,27 @@ const StrikeCanvasLayer = L.Layer.extend({
     return runs;
   },
 
-  /** The sparse mode: the same crosses the object path draws. */
+  /**
+   * The sparse mode.
+   *
+   * A cross by default, matching the in-house strikes. Dots are the other
+   * option: a global field an order of magnitude denser reads better as points,
+   * where crosses at four arms each start to look like texture rather than
+   * individual strikes. Set per layer, so the two sources can differ.
+   */
   _strokeRuns(ctx, view, runs) {
     const { scale, originX, originY, pad, w, h } = view;
-    const arm = runtime.lowEnd ? 3.5 : 4.5;
+    const dots = this.options.mark === 'dot';
+    const size = dots
+      ? (runtime.lowEnd ? 1.6 : 2.1)
+      : (runtime.lowEnd ? 3.5 : 4.5);
     let drawn = 0;
 
     for (const [buffer, from, to, band] of runs) {
       const { mx, my } = buffer;
-      ctx.strokeStyle = band < 0 ? STATIC_COLOUR : AGE_STOPS[band][1];
+      const colour = band < 0 ? STATIC_COLOUR : AGE_STOPS[band][1];
+      if (dots) ctx.fillStyle = colour;
+      else ctx.strokeStyle = colour;
       ctx.beginPath();
       let any = false;
       for (let i = from; i < to; i += 1) {
@@ -8435,14 +8462,22 @@ const StrikeCanvasLayer = L.Layer.extend({
         if (x < -pad || x > w + pad) continue;
         const y = my[i] * scale - originY;
         if (y < -pad || y > h + pad) continue;
-        ctx.moveTo(x - arm, y - arm);
-        ctx.lineTo(x + arm, y + arm);
-        ctx.moveTo(x + arm, y - arm);
-        ctx.lineTo(x - arm, y + arm);
+        if (dots) {
+          // moveTo before arc, or each dot is joined to the last by a chord.
+          ctx.moveTo(x + size, y);
+          ctx.arc(x, y, size, 0, TWO_PI);
+        } else {
+          ctx.moveTo(x - size, y - size);
+          ctx.lineTo(x + size, y + size);
+          ctx.moveTo(x + size, y - size);
+          ctx.lineTo(x - size, y + size);
+        }
         any = true;
         drawn += 1;
       }
-      if (any) ctx.stroke();
+      if (!any) continue;
+      if (dots) ctx.fill();
+      else ctx.stroke();
     }
     return drawn;
   },
@@ -8706,6 +8741,195 @@ __exports.refreshColours = refreshColours;
 __exports.getStrikeLayer = getStrikeLayer;
 });
 
+__define('layers/strikeStore.js', (__exports, __mod) => {
+/**
+ * A local store of lightning frames, so history can outlive the provider's.
+ *
+ * The provider keeps exactly 24 hours: a frame 24 hours old is served in full,
+ * one 25 hours old returns 204, and every hour beyond that stays empty. That is
+ * retention, not a gap — their own client has no other endpoint, and it skips
+ * lightning entirely in archive mode. So there is nowhere to ask for more.
+ *
+ * What there is instead is everything already fetched. Frames are immutable
+ * once published, so each one that passes through is kept here, and the layer
+ * asks this store before it asks the network. History therefore reaches back 24
+ * hours on a first run and grows from there, for as long as the browser keeps
+ * the database.
+ *
+ * The raw bytes are stored rather than the parsed arrays: 40 KB against 80 KB a
+ * frame, and re-parsing one costs about a millisecond.
+ *
+ * Everything here degrades to a no-op when IndexedDB is unavailable — a private
+ * window, or a browser with storage switched off — leaving the layer with the
+ * provider's 24 hours and no error.
+ */
+
+const DB_NAME = 'radarloop-lightning';
+const DB_VERSION = 1;
+const STORE = 'frames';
+
+/** How long frames are kept. Beyond the provider's 24 hours, this is the limit. */
+const RETENTION_DAYS = 7;
+
+/**
+ * Ceiling on what the store may hold.
+ *
+ * A frame is around 40 KB and there are 288 a day, so a week is roughly 80 MB.
+ * The cap is what stops an unusually stormy fortnight filling the disk; the
+ * oldest frames go first.
+ */
+const MAX_BYTES = 200 * 1024 * 1024;
+
+let dbPromise = null;
+let unavailable = false;
+
+function openDb() {
+  if (unavailable) return Promise.resolve(null);
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise((resolve) => {
+    let request;
+    try {
+      request = indexedDB.open(DB_NAME, DB_VERSION);
+    } catch {
+      unavailable = true;
+      resolve(null);
+      return;
+    }
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'ts' });
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => { unavailable = true; resolve(null); };
+    request.onblocked = () => resolve(null);
+  });
+  return dbPromise;
+}
+
+/** Wraps one transaction as a promise. Resolves null on any failure. */
+function run(mode, work) {
+  return openDb().then((db) => {
+    if (!db) return null;
+    return new Promise((resolve) => {
+      let result = null;
+      let tx;
+      try {
+        tx = db.transaction(STORE, mode);
+      } catch {
+        resolve(null);
+        return;
+      }
+      tx.oncomplete = () => resolve(result);
+      tx.onerror = () => resolve(null);
+      tx.onabort = () => resolve(null);
+      try {
+        work(tx.objectStore(STORE), (value) => { result = value; });
+      } catch {
+        resolve(null);
+      }
+    });
+  });
+}
+
+/** The bytes of a stored frame, or null. */
+function readFrame(ts) {
+  return run('readonly', (store, done) => {
+    const request = store.get(ts);
+    request.onsuccess = () => done(request.result ? request.result.bytes : null);
+  });
+}
+
+/** Keeps a frame. Empty frames are stored too — they are an answer, not a gap. */
+function writeFrame(ts, bytes) {
+  return run('readwrite', (store) => {
+    store.put({ ts, bytes, size: bytes.byteLength, at: Date.now() });
+  });
+}
+
+/** Which frame timestamps in a list are already held. */
+function storedKeys(from, to) {
+  return run('readonly', (store, done) => {
+    const keys = [];
+    const request = store.getAllKeys(IDBKeyRange.bound(from, to));
+    request.onsuccess = () => {
+      for (const key of request.result) keys.push(key);
+      done(keys);
+    };
+  }).then((keys) => keys || []);
+}
+
+/** Oldest and newest frame held, with a count and a total size. */
+function summary() {
+  return run('readonly', (store, done) => {
+    let oldest = null;
+    let newest = null;
+    let count = 0;
+    let bytes = 0;
+    const request = store.openCursor();
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) {
+        done({ oldest, newest, count, bytes });
+        return;
+      }
+      if (oldest === null) oldest = cursor.value.ts;
+      newest = cursor.value.ts;
+      count += 1;
+      bytes += cursor.value.size || 0;
+      cursor.continue();
+    };
+  }).then((value) => value || { oldest: null, newest: null, count: 0, bytes: 0 });
+}
+
+/**
+ * Drops what is past the retention window, then the oldest until under the cap.
+ *
+ * Run once at startup rather than per write: the cost is one cursor walk, and a
+ * frame or two over the limit for a few minutes is not worth paying it more
+ * often.
+ */
+function prune({ retentionDays = RETENTION_DAYS, maxBytes = MAX_BYTES } = {}) {
+  const horizon = Date.now() - retentionDays * 24 * 3600 * 1000;
+  return run('readwrite', (store, done) => {
+    let removed = 0;
+    let bytes = 0;
+    const sizes = [];
+    const request = store.openCursor();
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (cursor) {
+        if (cursor.value.ts < horizon) {
+          cursor.delete();
+          removed += 1;
+        } else {
+          bytes += cursor.value.size || 0;
+          sizes.push([cursor.value.ts, cursor.value.size || 0]);
+        }
+        cursor.continue();
+        return;
+      }
+      // Oldest first until the total is under the cap.
+      sizes.sort((a, b) => a[0] - b[0]);
+      for (const [ts, size] of sizes) {
+        if (bytes <= maxBytes) break;
+        store.delete(ts);
+        bytes -= size;
+        removed += 1;
+      }
+      done({ removed, bytes });
+    };
+  }).then((value) => value || { removed: 0, bytes: 0 });
+}
+
+__exports.RETENTION_DAYS = RETENTION_DAYS;
+__exports.MAX_BYTES = MAX_BYTES;
+__exports.readFrame = readFrame;
+__exports.writeFrame = writeFrame;
+__exports.storedKeys = storedKeys;
+__exports.summary = summary;
+__exports.prune = prune;
+});
+
 __define('layers/windyLightning.js', (__exports, __mod) => {
 /**
  * Live global strikes.
@@ -8746,6 +8970,7 @@ const { ENDPOINTS } = __mod('config.js');
 const { EVENTS, on } = __mod('core/bus.js');
 const { lightning, time } = __mod('core/state.js');
 const { latFromMercatorY, mercatorY, StrikeCanvasLayer } = __mod('lightning/render.js');
+const { prune, readFrame, summary, writeFrame } = __mod('layers/strikeStore.js');
 /** The grid the provider quantises positions onto: 18 bits per axis. */
 const GRID = 1 << 18;
 
@@ -8937,17 +9162,23 @@ const frameStart = (ms) => Math.floor(ms / FRAME_MS) * FRAME_MS;
 /**
  * Every frame timestamp covering a window, oldest first.
  *
- * Clamped to the archive horizon: asking for older frames returns 204 for each
- * one, which is a request per five minutes of nothing.
+ * Clamped to whichever reaches further back: the provider's 24 hours, or the
+ * oldest frame the local store has kept from an earlier session. Without a
+ * clamp, scrubbing to last week would be one request per five minutes of
+ * nothing.
  */
-function framesCovering(startMs, endMs, now = Date.now()) {
-  const horizon = frameStart(now - ARCHIVE_HOURS * 3600 * 1000);
+function framesCovering(startMs, endMs, now = Date.now(), oldestStored = null) {
+  const live = frameStart(now - ARCHIVE_HOURS * 3600 * 1000);
+  const horizon = oldestStored === null ? live : Math.min(live, frameStart(oldestStored));
   const from = Math.max(frameStart(startMs), horizon);
   const to = frameStart(endMs);
   const out = [];
   for (let at = from; at <= to; at += FRAME_MS) out.push(at);
   return out;
 }
+
+/** True when the provider will still serve a frame of this age. */
+const servedLive = (ts, now = Date.now()) => ts >= now - ARCHIVE_HOURS * 3600 * 1000;
 
 /* ------------------------------------------------------------------ *
  * The layer
@@ -8957,6 +9188,7 @@ function framesCovering(startMs, endMs, now = Date.now()) {
 const feedStats = {
   polls: 0, failed: 0, received: 0, held: 0, drawn: 0, lastAt: 0,
   framesWanted: 0, framesLoaded: 0, framesHeld: 0, available: 0,
+  framesFromStore: 0, storedFrames: 0, storedBytes: 0, storedOldest: null,
 };
 
 /**
@@ -8988,6 +9220,7 @@ const WindyLightningLayer = StrikeCanvasLayer.extend({
       this._paint();
       this._ensureFrames();
     });
+    this._openStore();
     this._ensureFrames();
     return this;
   },
@@ -9013,9 +9246,32 @@ const WindyLightningLayer = StrikeCanvasLayer.extend({
    * out of the window. A few are fetched at a time: a full day is 288 of them,
    * and firing that many at once starves everything else on the page.
    */
+  /**
+   * Learns how far back the store reaches, and tidies it.
+   *
+   * Both are one-off and neither blocks drawing: until the summary lands the
+   * layer simply behaves as it did before there was a store.
+   */
+  async _openStore() {
+    const held = await summary();
+    this._oldestStored = held.oldest;
+    feedStats.storedFrames = held.count;
+    feedStats.storedBytes = held.bytes;
+    feedStats.storedOldest = held.oldest;
+    if (held.count) this._ensureFrames();
+    const cleaned = await prune();
+    if (cleaned.removed) {
+      const after = await summary();
+      this._oldestStored = after.oldest;
+      feedStats.storedFrames = after.count;
+      feedStats.storedBytes = after.bytes;
+      feedStats.storedOldest = after.oldest;
+    }
+  },
+
   async _ensureFrames() {
     const { start, end } = this._window();
-    const wanted = framesCovering(start, end);
+    const wanted = framesCovering(start, end, Date.now(), this._oldestStored);
     const missing = wanted.filter((at) => !this._frames.has(at) && !this._loading.has(at));
     feedStats.framesWanted = wanted.length;
 
@@ -9038,6 +9294,24 @@ const WindyLightningLayer = StrikeCanvasLayer.extend({
   async _loadFrame(at) {
     this._loading.add(at);
     try {
+      // The store first. A frame is immutable once published, so a hit is as
+      // good as a fetch and is the only way to reach past the provider's 24
+      // hours.
+      const kept = await readFrame(at);
+      if (kept) {
+        const frame = parseFrame(kept, at);
+        this._frames.set(at, frame);
+        feedStats.framesLoaded += 1;
+        feedStats.framesFromStore += 1;
+        feedStats.received += frame.count;
+        return;
+      }
+      // Older than the provider keeps, and not in the store: it is simply gone.
+      if (!servedLive(at)) {
+        this._frames.set(at, { mx: EMPTY_F, my: EMPTY_F, t: EMPTY_U, base: at, count: 0 });
+        return;
+      }
+
       const response = await fetch(`${ENDPOINTS.windyLightningFrame}/${at}?version=3`, {
         credentials: 'omit',
       });
@@ -9047,10 +9321,13 @@ const WindyLightningLayer = StrikeCanvasLayer.extend({
         return;
       }
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const frame = parseFrame(await response.arrayBuffer(), at);
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      const frame = parseFrame(bytes, at);
       this._frames.set(at, frame);
       feedStats.framesLoaded += 1;
       feedStats.received += frame.count;
+      // Kept for later sessions. Not awaited: the frame is already usable.
+      writeFrame(at, bytes);
     } catch (error) {
       feedStats.failed += 1;
       console.warn('[lightning] archive frame:', error?.message || error);
@@ -9175,7 +9452,10 @@ const WindyLightningLayer = StrikeCanvasLayer.extend({
 const isWindyLightning = (kind) => kind === 'windy-lightning';
 
 function createWindyLightningLayer(options = {}) {
-  return new WindyLightningLayer({ pane: 'lightningPane', ...options });
+  // Dots rather than crosses: this field is an order of magnitude denser than
+  // the in-house one, and crosses at that density read as texture rather than as
+  // individual strikes.
+  return new WindyLightningLayer({ pane: 'strikePane', mark: 'dot', ...options });
 }
 
 __exports.decodeStrike = decodeStrike;
@@ -9188,6 +9468,7 @@ __exports.FRAME_MS = FRAME_MS;
 __exports.ARCHIVE_HOURS = ARCHIVE_HOURS;
 __exports.frameStart = frameStart;
 __exports.framesCovering = framesCovering;
+__exports.servedLive = servedLive;
 __exports.feedStats = feedStats;
 __exports.isWindyLightning = isWindyLightning;
 __exports.createWindyLightningLayer = createWindyLightningLayer;
@@ -11499,6 +11780,11 @@ function paneFor(group) {
     case 'isobar': return 'isobarPane';
     case 'surfaceFront': return 'frontPane';
     case 'warning': return 'warningPane';
+    case 'wind': return 'windPane';
+    case 'nowcast': return 'nowcastLayerPane';
+    case 'tropicalStorms': return 'tropicalPane';
+    case 'rotation': return 'rotationPane';
+    case 'lightning': return 'strikePane';
     default: return 'overlayPane';
   }
 }
@@ -14165,6 +14451,11 @@ function paneFor(group) {
     case 'isobar': return 'isobarPane';
     case 'surfaceFront': return 'frontPane';
     case 'warning': return 'warningPane';
+    case 'wind': return 'windPane';
+    case 'nowcast': return 'nowcastLayerPane';
+    case 'tropicalStorms': return 'tropicalPane';
+    case 'rotation': return 'rotationPane';
+    case 'lightning': return 'strikePane';
     default: return 'overlayPane';
   }
 }
@@ -20480,7 +20771,7 @@ const { applyIcon } = __mod('ui/icons.js');
 const { initOutlookFocus, focusOutlook } = __mod('hoco/focus.js');
 const { exit3D, getGl, is3D, mirrorKind, mirroredGroups, mirrorMagnification, refresh3DTheme, toggle3D } = __mod('core/map3d.js');
 const { tileScheme, usesFlippedY } = __mod('core/mirror3d.js');
-const { activeInOrder, applyOrder, bindMap: bindLayerControl, selectProduct, setLayerEnabled, setLayerOpacity, moveLayer } = __mod('layers/control.js');
+const { activeInOrder, applyOrder, bindMap: bindLayerControl, paneFor, selectProduct, setLayerEnabled, setLayerOpacity, moveLayer } = __mod('layers/control.js');
 const { initLayerManager } = __mod('ui/layerManager.js');
 const { registerOverlayLayers } = __mod('layers/registerOverlays.js');
 const { trackDockedChrome } = __mod('ui/layout.js');
@@ -20492,6 +20783,7 @@ const { prefetchIdle } = __mod('core/deps.js');
 const synoptic = __mod('layers/synoptic.js');
 const { buildStationCard } = __mod('ui/stationPopup.js');
 const { mercatorX, mercatorY } = __mod('lightning/render.js');
+const { prune: strikeStorePrune, summary: strikeStoreSummary } = __mod('layers/strikeStore.js');
 /* ------------------------------------------------------------------ *
  * Session restore
  * ------------------------------------------------------------------ */
@@ -21026,6 +21318,10 @@ window.__mirror3d = { tileScheme, usesFlippedY };
 // The projection the bulk renderer inlines, so a check can hold it against
 // Leaflet's own — every strike lands in the wrong place if these disagree.
 window.__strikeRender = { mercatorX, mercatorY };
+// Group-to-pane mapping, so the stacking checks can ask rather than guess.
+window.__paneFor = paneFor;
+// The local frame store, so its checks can read what was kept.
+window.__strikeStore = { summary: strikeStoreSummary, prune: strikeStorePrune };
 window.__windyLightning = {
   decodeFeed, decodeStrike, parseFrame, bufferStrikes, framesCovering, feedStats,
 };

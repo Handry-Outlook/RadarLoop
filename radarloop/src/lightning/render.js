@@ -32,6 +32,8 @@ export function colourForAge(fraction) {
   return AGE_STOPS[AGE_STOPS.length - 1][1];
 }
 
+const TWO_PI = Math.PI * 2;
+
 /** Colour used when age colouring is switched off. */
 const STATIC_COLOUR = '#111111';
 
@@ -251,15 +253,27 @@ export const StrikeCanvasLayer = L.Layer.extend({
     return runs;
   },
 
-  /** The sparse mode: the same crosses the object path draws. */
+  /**
+   * The sparse mode.
+   *
+   * A cross by default, matching the in-house strikes. Dots are the other
+   * option: a global field an order of magnitude denser reads better as points,
+   * where crosses at four arms each start to look like texture rather than
+   * individual strikes. Set per layer, so the two sources can differ.
+   */
   _strokeRuns(ctx, view, runs) {
     const { scale, originX, originY, pad, w, h } = view;
-    const arm = runtime.lowEnd ? 3.5 : 4.5;
+    const dots = this.options.mark === 'dot';
+    const size = dots
+      ? (runtime.lowEnd ? 1.6 : 2.1)
+      : (runtime.lowEnd ? 3.5 : 4.5);
     let drawn = 0;
 
     for (const [buffer, from, to, band] of runs) {
       const { mx, my } = buffer;
-      ctx.strokeStyle = band < 0 ? STATIC_COLOUR : AGE_STOPS[band][1];
+      const colour = band < 0 ? STATIC_COLOUR : AGE_STOPS[band][1];
+      if (dots) ctx.fillStyle = colour;
+      else ctx.strokeStyle = colour;
       ctx.beginPath();
       let any = false;
       for (let i = from; i < to; i += 1) {
@@ -267,14 +281,22 @@ export const StrikeCanvasLayer = L.Layer.extend({
         if (x < -pad || x > w + pad) continue;
         const y = my[i] * scale - originY;
         if (y < -pad || y > h + pad) continue;
-        ctx.moveTo(x - arm, y - arm);
-        ctx.lineTo(x + arm, y + arm);
-        ctx.moveTo(x + arm, y - arm);
-        ctx.lineTo(x - arm, y + arm);
+        if (dots) {
+          // moveTo before arc, or each dot is joined to the last by a chord.
+          ctx.moveTo(x + size, y);
+          ctx.arc(x, y, size, 0, TWO_PI);
+        } else {
+          ctx.moveTo(x - size, y - size);
+          ctx.lineTo(x + size, y + size);
+          ctx.moveTo(x + size, y - size);
+          ctx.lineTo(x - size, y + size);
+        }
         any = true;
         drawn += 1;
       }
-      if (any) ctx.stroke();
+      if (!any) continue;
+      if (dots) ctx.fill();
+      else ctx.stroke();
     }
     return drawn;
   },

@@ -32,7 +32,7 @@ import { applyIcon } from './ui/icons.js';
 import { initOutlookFocus, focusOutlook } from './hoco/focus.js';
 import { exit3D, getGl, is3D, mirrorKind, mirroredGroups, mirrorMagnification, refresh3DTheme, toggle3D } from './core/map3d.js';
 import { tileScheme, usesFlippedY } from './core/mirror3d.js';
-import { activeInOrder, applyOrder, bindMap as bindLayerControl, selectProduct, setLayerEnabled, setLayerOpacity, moveLayer } from './layers/control.js';
+import { activeInOrder, applyOrder, bindMap as bindLayerControl, paneFor, selectProduct, setLayerEnabled, setLayerOpacity, moveLayer } from './layers/control.js';
 import { initLayerManager } from './ui/layerManager.js';
 import { registerOverlayLayers } from './layers/registerOverlays.js';
 import { trackDockedChrome } from './ui/layout.js';
@@ -49,6 +49,7 @@ import { prefetchIdle } from './core/deps.js';
 import * as synoptic from './layers/synoptic.js';
 import { buildStationCard } from './ui/stationPopup.js';
 import { mercatorX, mercatorY } from './lightning/render.js';
+import { prune as strikeStorePrune, summary as strikeStoreSummary } from './layers/strikeStore.js';
 
 /* ------------------------------------------------------------------ *
  * Session restore
@@ -584,6 +585,10 @@ window.__mirror3d = { tileScheme, usesFlippedY };
 // The projection the bulk renderer inlines, so a check can hold it against
 // Leaflet's own — every strike lands in the wrong place if these disagree.
 window.__strikeRender = { mercatorX, mercatorY };
+// Group-to-pane mapping, so the stacking checks can ask rather than guess.
+window.__paneFor = paneFor;
+// The local frame store, so its checks can read what was kept.
+window.__strikeStore = { summary: strikeStoreSummary, prune: strikeStorePrune };
 window.__windyLightning = {
   decodeFeed, decodeStrike, parseFrame, bufferStrikes, framesCovering, feedStats,
 };

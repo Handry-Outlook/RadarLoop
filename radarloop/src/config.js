@@ -183,9 +183,22 @@ export const PANES = [
   { name: 'isobarPane', z: 170, parent: 'overlayPane' },
   { name: 'frontPane', z: 180, parent: 'overlayPane' },
   { name: 'warningFillPane', z: 190, parent: 'overlayPane', clickThrough: true },
+  // Five groups had no pane of their own and fell through to `overlayPane`.
+  // That is Leaflet's own container for every child pane, so they all drew into
+  // one another and, worse, restacking any of them set a z-index on the
+  // container — moving the entire weather stack rather than the one layer. Each
+  // gets its own now, which is what makes the layer list able to order them.
+  { name: 'windPane', z: 182, parent: 'overlayPane' },
+  { name: 'nowcastLayerPane', z: 184, parent: 'overlayPane' },
+  { name: 'tropicalPane', z: 186, parent: 'overlayPane' },
+  { name: 'rotationPane', z: 188, parent: 'overlayPane' },
+
   // Hand-drawn shapes start above the weather; like the outlooks they can be
   // restacked from the layer list.
   { name: 'drawPane', z: 192, parent: 'overlayPane' },
+  // Strikes from a catalog product, as opposed to the in-house feed above the
+  // whole stack in `lightningPane`.
+  { name: 'strikePane', z: 194, parent: 'overlayPane' },
   // Station models are read, not looked at, so they start at the top of the
   // stack. Inside overlayPane rather than beside it: the layer list orders by
   // z-index, and a z-index only orders against its own siblings. As a top-level

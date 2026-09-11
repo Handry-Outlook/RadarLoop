@@ -68,6 +68,11 @@ function paneFor(group) {
     case 'isobar': return 'isobarPane';
     case 'surfaceFront': return 'frontPane';
     case 'warning': return 'warningPane';
+    case 'wind': return 'windPane';
+    case 'nowcast': return 'nowcastLayerPane';
+    case 'tropicalStorms': return 'tropicalPane';
+    case 'rotation': return 'rotationPane';
+    case 'lightning': return 'strikePane';
     default: return 'overlayPane';
   }
 }

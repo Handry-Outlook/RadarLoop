@@ -1551,6 +1551,30 @@ would fix that if it ever matters. Idle, the layer renders zero times in four
 seconds — there is no redraw loop.
 
 
+**Past the provider's 24 hours.** There is nowhere to ask for more: a frame 24
+hours old is served in full, one 25 hours old returns 204, and every hour beyond
+stays empty. Their client has no other endpoint and skips lightning entirely in
+archive mode. What there is instead is everything already fetched — frames are
+immutable once published, so `layers/strikeStore.js` keeps each one that passes
+through in IndexedDB and the layer asks the store before the network. History
+reaches back 24 hours on a first run and grows from there, up to seven days or
+200 MB, oldest dropped first. The raw bytes are stored rather than the parsed
+arrays: 40 KB against 80 KB a frame, and re-parsing costs about a millisecond.
+Where IndexedDB is unavailable — a private window, storage switched off — every
+call is a no-op and the layer simply has the provider's day.
+
+**Dots, not crosses.** The global field is an order of magnitude denser than the
+in-house one, and crosses at that density read as texture rather than as
+individual strikes. Set per layer, so the two sources differ.
+
+**Each group has a pane of its own.** Five of them — wind, nowcast, tropical
+storms, rotation and lightning — had none and fell through to `overlayPane`.
+That is Leaflet's own container for every other pane, so they drew into one
+another and could not be ordered against each other at all. Worse, restacking
+one set a z-index on the container, which moves the entire weather stack rather
+than the one layer. `tools/test-lightning-stack.mjs` holds both ends of that: the
+layer's own pane changes, and the container's does not.
+
 **Drawn through the existing strike canvas.** Reusing `StrikeCanvasLayer` rather
 than writing a second renderer is what makes these look like strikes: the same
 age colouring, lifespan, decimation ceiling and arrival flash. 3D takes the

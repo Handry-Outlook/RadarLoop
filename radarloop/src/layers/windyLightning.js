@@ -38,6 +38,7 @@ import { ENDPOINTS } from '../config.js';
 import { EVENTS, on } from '../core/bus.js';
 import { lightning, time } from '../core/state.js';
 import { latFromMercatorY, mercatorY, StrikeCanvasLayer } from '../lightning/render.js';
+import { prune, readFrame, summary, writeFrame } from './strikeStore.js';
 
 /** The grid the provider quantises positions onto: 18 bits per axis. */
 const GRID = 1 << 18;
@@ -230,17 +231,23 @@ export const frameStart = (ms) => Math.floor(ms / FRAME_MS) * FRAME_MS;
 /**
  * Every frame timestamp covering a window, oldest first.
  *
- * Clamped to the archive horizon: asking for older frames returns 204 for each
- * one, which is a request per five minutes of nothing.
+ * Clamped to whichever reaches further back: the provider's 24 hours, or the
+ * oldest frame the local store has kept from an earlier session. Without a
+ * clamp, scrubbing to last week would be one request per five minutes of
+ * nothing.
  */
-export function framesCovering(startMs, endMs, now = Date.now()) {
-  const horizon = frameStart(now - ARCHIVE_HOURS * 3600 * 1000);
+export function framesCovering(startMs, endMs, now = Date.now(), oldestStored = null) {
+  const live = frameStart(now - ARCHIVE_HOURS * 3600 * 1000);
+  const horizon = oldestStored === null ? live : Math.min(live, frameStart(oldestStored));
   const from = Math.max(frameStart(startMs), horizon);
   const to = frameStart(endMs);
   const out = [];
   for (let at = from; at <= to; at += FRAME_MS) out.push(at);
   return out;
 }
+
+/** True when the provider will still serve a frame of this age. */
+export const servedLive = (ts, now = Date.now()) => ts >= now - ARCHIVE_HOURS * 3600 * 1000;
 
 /* ------------------------------------------------------------------ *
  * The layer
@@ -250,6 +257,7 @@ export function framesCovering(startMs, endMs, now = Date.now()) {
 export const feedStats = {
   polls: 0, failed: 0, received: 0, held: 0, drawn: 0, lastAt: 0,
   framesWanted: 0, framesLoaded: 0, framesHeld: 0, available: 0,
+  framesFromStore: 0, storedFrames: 0, storedBytes: 0, storedOldest: null,
 };
 
 /**
@@ -281,6 +289,7 @@ const WindyLightningLayer = StrikeCanvasLayer.extend({
       this._paint();
       this._ensureFrames();
     });
+    this._openStore();
     this._ensureFrames();
     return this;
   },
@@ -306,9 +315,32 @@ const WindyLightningLayer = StrikeCanvasLayer.extend({
    * out of the window. A few are fetched at a time: a full day is 288 of them,
    * and firing that many at once starves everything else on the page.
    */
+  /**
+   * Learns how far back the store reaches, and tidies it.
+   *
+   * Both are one-off and neither blocks drawing: until the summary lands the
+   * layer simply behaves as it did before there was a store.
+   */
+  async _openStore() {
+    const held = await summary();
+    this._oldestStored = held.oldest;
+    feedStats.storedFrames = held.count;
+    feedStats.storedBytes = held.bytes;
+    feedStats.storedOldest = held.oldest;
+    if (held.count) this._ensureFrames();
+    const cleaned = await prune();
+    if (cleaned.removed) {
+      const after = await summary();
+      this._oldestStored = after.oldest;
+      feedStats.storedFrames = after.count;
+      feedStats.storedBytes = after.bytes;
+      feedStats.storedOldest = after.oldest;
+    }
+  },
+
   async _ensureFrames() {
     const { start, end } = this._window();
-    const wanted = framesCovering(start, end);
+    const wanted = framesCovering(start, end, Date.now(), this._oldestStored);
     const missing = wanted.filter((at) => !this._frames.has(at) && !this._loading.has(at));
     feedStats.framesWanted = wanted.length;
 
@@ -331,6 +363,24 @@ const WindyLightningLayer = StrikeCanvasLayer.extend({
   async _loadFrame(at) {
     this._loading.add(at);
     try {
+      // The store first. A frame is immutable once published, so a hit is as
+      // good as a fetch and is the only way to reach past the provider's 24
+      // hours.
+      const kept = await readFrame(at);
+      if (kept) {
+        const frame = parseFrame(kept, at);
+        this._frames.set(at, frame);
+        feedStats.framesLoaded += 1;
+        feedStats.framesFromStore += 1;
+        feedStats.received += frame.count;
+        return;
+      }
+      // Older than the provider keeps, and not in the store: it is simply gone.
+      if (!servedLive(at)) {
+        this._frames.set(at, { mx: EMPTY_F, my: EMPTY_F, t: EMPTY_U, base: at, count: 0 });
+        return;
+      }
+
       const response = await fetch(`${ENDPOINTS.windyLightningFrame}/${at}?version=3`, {
         credentials: 'omit',
       });
@@ -340,10 +390,13 @@ const WindyLightningLayer = StrikeCanvasLayer.extend({
         return;
       }
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const frame = parseFrame(await response.arrayBuffer(), at);
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      const frame = parseFrame(bytes, at);
       this._frames.set(at, frame);
       feedStats.framesLoaded += 1;
       feedStats.received += frame.count;
+      // Kept for later sessions. Not awaited: the frame is already usable.
+      writeFrame(at, bytes);
     } catch (error) {
       feedStats.failed += 1;
       console.warn('[lightning] archive frame:', error?.message || error);
@@ -468,5 +521,8 @@ const WindyLightningLayer = StrikeCanvasLayer.extend({
 export const isWindyLightning = (kind) => kind === 'windy-lightning';
 
 export function createWindyLightningLayer(options = {}) {
-  return new WindyLightningLayer({ pane: 'lightningPane', ...options });
+  // Dots rather than crosses: this field is an order of magnitude denser than
+  // the in-house one, and crosses at that density read as texture rather than as
+  // individual strikes.
+  return new WindyLightningLayer({ pane: 'strikePane', mark: 'dot', ...options });
 }
