@@ -1633,6 +1633,20 @@ projection picks the radar up in 0 ms with the listener and 16,086 ms without.
 That is also the answer to why lowering the thresholds kept not working — the
 term being compared against them was null, not small.
 
+**And why a scrubbed storm was never hail either.** The radar sampler built the
+live URL and only the live URL. That endpoint serves about two hours; everything
+older is on an `archive` path, which the radar *layer* has always known about and
+the sampler did not. So scrubbing to a storm from a fortnight ago measured
+nothing at all — no reflectivity, no motion, "Motion from strikes" in the popup,
+and no hail estimate — while the layer went on drawing the echoes perfectly. That
+combination is what made the thresholds look guilty: the evidence was on screen
+and the number derived from it was null.
+
+The sampler uses the same routing as the layer now. On the supercell of 27 August
+over the Chilterns it reads a 67 dBZ core, and the cells that produced the hail
+come out "Large hail likely" at nineteen flashes a minute and "Hail likely" at
+six.
+
 **The hail scale, from what the product reports.** The thresholds came from the
 single-polarisation textbook — 50 dBZ worth mentioning, 60 likely large — which
 assumes a native radar. Measured over the eight busiest lightning cells inside

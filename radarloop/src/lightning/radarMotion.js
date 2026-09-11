@@ -30,7 +30,9 @@
 
 import { LAYER_CATALOG } from '../data/layers.js';
 import { expandUrl } from '../layers/urlTemplate.js';
-import { encodedFromPixel } from '../layers/windy.js';
+import {
+  encodedFromPixel, isArchiveOnly, toArchiveUrl, toLiveUrl,
+} from '../layers/windy.js';
 import { encodedToDbz } from '../layers/radarScale.js';
 
 /**
@@ -117,12 +119,28 @@ async function loadTile(template, frameMs, x, y) {
   if (tiles.has(key)) return tiles.get(key);
 
   const promise = (async () => {
-    const url = expandUrl(template, new Date(frameMs))
+    const live = toLiveUrl(expandUrl(template, new Date(frameMs)))
       .replace('{z}', String(ZOOM))
       .replace('{x}', String(x))
       .replace('{y}', String(y));
-    const response = await fetch(url, { credentials: 'omit' });
-    if (!response.ok) return null;
+
+    // The same live-or-archive routing the radar layer uses. Without it this
+    // asked the live endpoint for everything, which serves about two hours —
+    // so scrubbing to a storm from last week measured nothing, reported no
+    // motion and no reflectivity, and the projection fell back to the strike
+    // track with no hail estimate at all. The layer drew the echoes the whole
+    // time, which is what made it look like the thresholds were at fault.
+    const candidates = isArchiveOnly(live)
+      ? [toArchiveUrl(live), live]
+      : [live, toArchiveUrl(live)];
+
+    let response = null;
+    for (const candidate of candidates) {
+      // eslint-disable-next-line no-await-in-loop
+      const attempt = await fetch(candidate, { credentials: 'omit' }).catch(() => null);
+      if (attempt?.ok) { response = attempt; break; }
+    }
+    if (!response) return null;
     const bitmap = await createImageBitmap(await response.blob());
     const canvas = new OffscreenCanvas(TILE, TILE);
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
