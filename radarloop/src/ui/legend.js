@@ -17,11 +17,12 @@ import { colourForAge } from '../lightning/render.js';
 import { isPlotted as accumulationPlotted, legendStops as accumulationStops } from '../tools/accumulation.js';
 
 const AGE_BANDS = [
-  { label: '0–5%', fraction: 0.02 },
-  { label: '5–20%', fraction: 0.1 },
-  { label: '20–50%', fraction: 0.35 },
-  { label: '50–80%', fraction: 0.65 },
-  { label: '80–100%', fraction: 0.9 },
+  { label: 'Newest sixth', fraction: 0.08 },
+  { label: '2nd', fraction: 0.25 },
+  { label: '3rd', fraction: 0.42 },
+  { label: '4th', fraction: 0.58 },
+  { label: '5th', fraction: 0.75 },
+  { label: 'Oldest', fraction: 0.92 },
 ];
 
 /** A rate as few characters as it can be read in. */
@@ -64,7 +65,11 @@ function lightningGroup() {
     ])),
     // Shape says the same thing as colour for the band that matters most, so
     // the newest strikes are findable without reading the colours off.
-    el('p', { class: 'tiny dim' }, 'Newest are bolts, older are squares.'),
+    el('div', { class: 'legend-item' }, [
+      el('span', { class: 'legend-swatch', style: { background: '#38bdf8' } }),
+      el('span', { class: 'dim' }, 'Just arrived'),
+    ]),
+    el('p', { class: 'tiny dim' }, 'Arrivals are bolts, the rest squares.'),
   ]);
 }
 

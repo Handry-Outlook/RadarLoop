@@ -1708,6 +1708,27 @@ the lightest rain there is.
 The legend's tick labels now come from the ladder rather than being written out,
 so a rescale cannot leave them describing a scale that no longer exists.
 
+**The age ramp.** Six even bands: white, red, deep red, maroon, then blue and
+navy. The two ends are opposite in both hue and temperature, so a white mark
+never reads as an old one — which the previous ramp could not manage, running
+gold to violet through two pinks that are neighbours at a glance. Bands are
+fractions of the lifespan rather than the fixed ten-minute steps of a
+sixty-minute display, because the lifespan here is the user's to set.
+
+White is the newest band because that is what the operational scale does, and
+that scale is read on a dark grey map. This one might have any base map under it,
+so every mark is drawn twice — a dark outline first, then the mark — without
+which a white square on light terrain is simply not there.
+
+**Arrivals are their own thing.** Strikes that came in on the last refresh are a
+light blue bolt, larger than the squares and drawn last so nothing covers them.
+That is a different question from age — "this just came in" rather than "this is
+the youngest of what is shown" — so it gets a band of its own rather than a place
+on the scale. Arrivals are found by timestamp rather than by a set of keys: the
+renderer works in buffers where a run is a pair of indices, so a set would mean a
+lookup per strike where a binary search does. Scrubbing an archive produces none,
+which is correct — nothing arrived.
+
 **Shape carries age, not only colour.** The in-house strikes are drawn as a bolt
 in the newest age band and a small open square in every band above it. Five
 identical crosses tinted five ways make you read the legend to find out what has

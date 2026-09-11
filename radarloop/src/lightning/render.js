@@ -19,13 +19,45 @@ import { map } from '../core/map.js';
 import { lightning, runtime } from '../core/state.js';
 
 /** Age ramp, newest to oldest. Thresholds are fractions of the lifespan. */
+/**
+ * Age ramp, newest to oldest, as fractions of the lifespan.
+ *
+ * Six even bands: white, then red deepening to maroon, then blue. It is the
+ * scale operational displays use, and it works because the two ends are
+ * opposite in both hue and temperature — there is no reading a white mark as an
+ * old one. The previous ramp ran gold to violet through two pinks, which are
+ * neighbours at a glance, so the middle of an hour was hard to place.
+ *
+ * Even bands rather than the absolute ten-minute steps of a sixty-minute
+ * display: the lifespan here is the user's to set, so the bands follow it.
+ */
 const AGE_STOPS = [
-  [0.05, '#ffd700'],
-  [0.2, '#ff00ff'],
-  [0.5, '#ff69b4'],
-  [0.8, '#800080'],
-  [Infinity, '#4b0082'],
+  [1 / 6, '#ffffff'],
+  [2 / 6, '#ff4d4d'],
+  [3 / 6, '#e00000'],
+  [4 / 6, '#8f0000'],
+  [5 / 6, '#3a6de0'],
+  [Infinity, '#1b2f7a'],
 ];
+
+/**
+ * Strikes that arrived since the last refresh, drawn apart from the ramp.
+ *
+ * A blue bolt, larger than the squares. It is a different question from age —
+ * "this just came in" rather than "this is the youngest of what is shown" — so
+ * it gets a band of its own rather than a place on the scale.
+ */
+const FRESH_BAND = -2;
+const FRESH_COLOUR = '#38bdf8';
+
+/**
+ * Drawn under every mark, so a white one is visible on a light basemap.
+ *
+ * The ramp's newest band is white because that is what the operational scale
+ * does, and that scale is read on a dark grey map. Here the base map might be
+ * anything, and an unhaloed white square on light terrain is not there at all.
+ */
+const MARK_HALO = 'rgba(2,6,23,0.55)';
 
 export function colourForAge(fraction) {
   for (const [limit, colour] of AGE_STOPS) if (fraction < limit) return colour;
@@ -117,6 +149,7 @@ const COUNT_EXACTLY_BELOW = 250000;
 /** Age ramp as packed pixels, for the dense path. */
 const AGE_PIXELS = AGE_STOPS.map(([, colour]) => packColour(colour));
 const STATIC_PIXEL = packColour(STATIC_COLOUR);
+const FRESH_PIXEL = packColour(FRESH_COLOUR);
 
 /** `#rrggbb` to the little-endian ABGR word an ImageData buffer wants. */
 function packColour(hex) {
@@ -150,6 +183,7 @@ export const StrikeCanvasLayer = L.Layer.extend({
     L.setOptions(this, options);
     this._strikes = [];
     this._buffers = [];
+    this._freshSince = 0;
     this._image = null;
     this._pixels = null;
     this._windowEnd = Date.now();
@@ -205,8 +239,9 @@ export const StrikeCanvasLayer = L.Layer.extend({
    * Used for the bulk sources. `setStrikes` stays for the ones small enough that
    * an object each is no trouble, and the two can be shown at once.
    */
-  setStrikeBuffers(buffers, { end, lifespanHours } = {}) {
+  setStrikeBuffers(buffers, { end, lifespanHours, freshSince } = {}) {
     this._buffers = buffers || [];
+    if (freshSince !== undefined) this._freshSince = freshSince;
     if (end) this._windowEnd = end instanceof Date ? end.getTime() : end;
     if (lifespanHours) this._lifespanMs = Math.max(1, lifespanHours * 3600 * 1000);
     this._schedule();
@@ -285,22 +320,36 @@ export const StrikeCanvasLayer = L.Layer.extend({
   _ageRuns() {
     const end = this._windowEnd;
     const lifespan = this._lifespanMs;
+    const fresh = this._freshSince;
     const runs = [];
 
     for (const buffer of this._buffers) {
       if (!buffer.count) continue;
+
+      // Arrivals sit at the end of a time-ordered buffer, so they cut off with
+      // one search and the bands are worked out over what is left.
+      let top = buffer.count;
+      if (fresh) {
+        const from = firstAtOrAfter(buffer, fresh);
+        if (from < top) {
+          runs.push([buffer, from, top, FRESH_BAND]);
+          top = from;
+        }
+      }
+      if (!top) continue;
+
       if (!lightning.colorByAge) {
-        runs.push([buffer, 0, buffer.count, -1]);
+        runs.push([buffer, 0, top, -1]);
         continue;
       }
       // Age rises with time-before-`end`, so the youngest band is the newest
       // strikes: walk the stops from the newest boundary backwards.
-      let to = buffer.count;
+      let to = top;
       for (let band = 0; band < AGE_STOPS.length && to > 0; band += 1) {
         const limit = AGE_STOPS[band][0];
         const from = limit === Infinity
           ? 0
-          : firstAtOrAfter(buffer, end - limit * lifespan);
+          : Math.min(top, firstAtOrAfter(buffer, end - limit * lifespan));
         if (from < to) runs.push([buffer, from, to, band]);
         to = from;
       }
@@ -332,21 +381,20 @@ export const StrikeCanvasLayer = L.Layer.extend({
     const small = runtime.lowEnd;
     const arm = small ? 3.5 : 4.5;
     const dot = small ? 1.6 : 2.1;
-    const box = small ? 1.9 : 2.4;
-    const bolt = small ? 4 : 5;
+    const box = small ? 1.8 : 2.2;
+    const bolt = small ? 4.2 : 5.2;
     let drawn = 0;
 
-    // Newest last, so a fresh strike is never buried under an older one.
+    // Newest last, so a fresh strike is never buried under an older one. The
+    // arrivals band sorts below every age band, which puts it on top.
     const ordered = style === 'age' ? [...runs].sort((a, b) => b[3] - a[3]) : runs;
 
     for (const [buffer, from, to, band] of ordered) {
       const { mx, my } = buffer;
-      const colour = band < 0 ? STATIC_COLOUR : AGE_STOPS[band][1];
-      const fresh = style === 'age' && band === 0;
-      const filled = style === 'dot' || fresh;
-      if (filled) ctx.fillStyle = colour;
-      else ctx.strokeStyle = colour;
-      ctx.lineWidth = style === 'age' ? (small ? 1.2 : 1.5) : (small ? 1.4 : 1.8);
+      const arrival = band === FRESH_BAND;
+      const colour = arrival ? FRESH_COLOUR : (band < 0 ? STATIC_COLOUR : AGE_STOPS[band][1]);
+      const filled = style === 'dot' || arrival;
+      const width = style === 'age' ? (small ? 1 : 1.2) : (small ? 1.4 : 1.8);
 
       ctx.beginPath();
       let any = false;
@@ -360,7 +408,7 @@ export const StrikeCanvasLayer = L.Layer.extend({
           // moveTo before arc, or each dot is joined to the last by a chord.
           ctx.moveTo(x + dot, y);
           ctx.arc(x, y, dot, 0, TWO_PI);
-        } else if (fresh) {
+        } else if (arrival) {
           tracePath(ctx, BOLT, x, y, bolt);
         } else if (style === 'age') {
           // `rect` opens its own subpath, so these batch without a moveTo.
@@ -375,8 +423,23 @@ export const StrikeCanvasLayer = L.Layer.extend({
         drawn += 1;
       }
       if (!any) continue;
-      if (filled) ctx.fill();
-      else ctx.stroke();
+
+      // The path is built once and drawn twice: a dark outline underneath, then
+      // the mark itself. Without it the newest band, which is white, disappears
+      // on a light base map.
+      if (style === 'age') {
+        ctx.strokeStyle = MARK_HALO;
+        ctx.lineWidth = width + 1.1;
+        ctx.stroke();
+      }
+      ctx.lineWidth = width;
+      if (filled) {
+        ctx.fillStyle = colour;
+        ctx.fill();
+      } else {
+        ctx.strokeStyle = colour;
+        ctx.stroke();
+      }
     }
     return drawn;
   },
@@ -406,7 +469,7 @@ export const StrikeCanvasLayer = L.Layer.extend({
 
     for (const [buffer, from, to, band] of runs) {
       const { mx, my } = buffer;
-      const colour = band < 0 ? STATIC_PIXEL : AGE_PIXELS[band];
+      const colour = band === FRESH_BAND ? FRESH_PIXEL : (band < 0 ? STATIC_PIXEL : AGE_PIXELS[band]);
       for (let i = from; i < to; i += 1) {
         const px = (mx[i] * scale - originX) * dpr;
         if (px < 0 || px >= w) continue;
@@ -617,6 +680,8 @@ export const StrikeCanvasLayer = L.Layer.extend({
 
 let layer = null;
 let previousKeys = new Set();
+/** Newest strike time at the last draw, so arrivals can be told apart. */
+let previousNewest = 0;
 
 export function ensureStrikeLayer() {
   if (!layer) layer = new StrikeCanvasLayer({ pane: 'lightningPane', mark: 'age' });
@@ -651,8 +716,16 @@ export function drawStrikes(filtered, { end, lifespanHours }) {
   }
   previousKeys = keys;
 
+  // Everything after the newest strike we had last time is an arrival. A
+  // timestamp rather than the key set, because the renderer works in buffers
+  // where a run is a pair of indices and a set would be a lookup per strike.
+  const freshSince = previousNewest && fresh.size ? previousNewest + 1 : 0;
+  previousNewest = filtered.length ? filtered[filtered.length - 1].ms : previousNewest;
+
   const layerRef = ensureStrikeLayer();
-  layerRef.setStrikeBuffers(filtered.length ? [packStrikes(filtered)] : [], { end, lifespanHours });
+  layerRef.setStrikeBuffers(filtered.length ? [packStrikes(filtered)] : [], {
+    end, lifespanHours, freshSince,
+  });
 
   // The arrival flash still works from the objects: it is a handful of rings,
   // and it needs positions rather than a scan of the whole field.

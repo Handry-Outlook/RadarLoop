@@ -34,6 +34,18 @@ const at = await page.evaluate(() => {
 });
 await page.waitForTimeout(9000);
 await page.evaluate(() => window.RadarLoop.map().setView([55.05, 1.1], 11));
+await page.waitForTimeout(5000);
+// Scrubbing an archive has no arrivals, so the last few minutes are marked as
+// though they had just come in — otherwise the bolt never appears in a still.
+await page.evaluate(() => {
+  const layer = window.__strikeLayer();
+  const buffer = layer._buffers[0];
+  layer.setStrikeBuffers(layer._buffers, {
+    end: layer._windowEnd,
+    lifespanHours: layer._lifespanMs / 3600000,
+    freshSince: buffer.base + buffer.t[buffer.count - 1] - 4 * 60000,
+  });
+});
 await page.waitForTimeout(6000);
 console.log(JSON.stringify({ at, state: await page.evaluate(() => {
     const l = window.__strikeLayer();

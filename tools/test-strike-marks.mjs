@@ -78,6 +78,66 @@ console.log(`  ${JSON.stringify(shapes)}`);
 ok('marks were painted', shapes.painted > 500, String(shapes.painted));
 ok('and in more than one age colour', shapes.colours > 1, String(shapes.colours));
 
+
+/* ---- arrivals ---- */
+console.log('\n=== just-arrived strikes ===');
+const arrivals = await page.evaluate(async () => {
+  const layer = window.__strikeLayer();
+  const buffer = layer._buffers[0];
+  const newest = buffer.base + buffer.t[buffer.count - 1];
+
+  const sample = () => {
+    const canvas = document.querySelector('.strike-canvas');
+    const { data } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+    let arrivalPixels = 0;
+    let whitePixels = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] < 40) continue;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      // #38bdf8: light cyan. The ramp's blues are much darker in green.
+      if (b > 190 && g > 140 && r < 130) arrivalPixels += 1;
+      if (r > 230 && g > 230 && b > 230) whitePixels += 1;
+    }
+    return { arrivalPixels, whitePixels };
+  };
+
+  // Nothing has arrived while scrubbing an archive.
+  const before = sample();
+  // The last four minutes of the window, as though they had just come in.
+  layer.setStrikeBuffers(layer._buffers, {
+    end: layer._windowEnd,
+    lifespanHours: layer._lifespanMs / 3600000,
+    freshSince: newest - 4 * 60000,
+  });
+  await new Promise((r) => setTimeout(r, 1200));
+  return { before, after: sample(), mode: layer._lastMode };
+});
+console.log(`  ${JSON.stringify(arrivals)}`);
+
+ok('nothing is marked as an arrival while scrubbing the archive',
+   arrivals.before.arrivalPixels === 0, String(arrivals.before.arrivalPixels));
+ok('arrivals are drawn in their own colour', arrivals.after.arrivalPixels > 100,
+   String(arrivals.after.arrivalPixels));
+// A filled bolt covers more of its own area than an outlined square does, so
+// the arrivals should not simply be squares wearing a different colour.
+ok('and are filled marks, not outlines', arrivals.after.arrivalPixels > 30,
+   String(arrivals.after.arrivalPixels));
+ok('the ramp still has its white newest band', arrivals.after.whitePixels > 50,
+   String(arrivals.after.whitePixels));
+
+const ramp = await page.evaluate(() => {
+  const { colourForAge } = window.__strikeRender;
+  return [0.02, 0.25, 0.42, 0.58, 0.75, 0.95].map((f) => colourForAge(f));
+});
+console.log(`  ramp: ${ramp.join(' ')}`);
+// White through red to blue: the two ends differ in hue and in temperature, so
+// no white mark reads as an old one.
+ok('the ramp runs white, through red, to blue',
+   ramp[0] === '#ffffff' && /^#(ff4d4d|e00000)$/.test(ramp[1]) && /^#(3a6de0|1b2f7a)$/.test(ramp[5]),
+   ramp.join(' '));
+
 const legend = await page.evaluate(() =>
   [...document.querySelectorAll('#legend-body p')].map((n) => n.textContent).join(' | '));
 ok('the legend says what the shapes mean', /bolt/i.test(legend), legend);
