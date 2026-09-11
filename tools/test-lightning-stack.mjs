@@ -84,6 +84,31 @@ ok('the global strikes are drawn as dots', mark.mark === 'dot', String(mark.mark
 ok('and something was drawn to show it', mark.drawn > 0, String(mark.drawn));
 await page.screenshot({ path: 'shots/lightning-dots.png' });
 
+console.log('\n=== popups are not buried ===');
+const popups = await page.evaluate(() => {
+  const map = window.RadarLoop.map();
+  const z = (name) => Number(map.getPane(name)?.style.zIndex || getComputedStyle(map.getPane(name)).zIndex || 0);
+  return {
+    strikes: z('lightningPane'),
+    nowcastOutline: z('nowcastOutlinePane'),
+    popup: z('popupPane'),
+    tooltip: z('tooltipPane'),
+    nowcastOnAtBoot: window.RadarLoop.lightning.nowcast,
+  };
+});
+console.log(`  ${JSON.stringify(popups)}`);
+// The strike canvas was at 1000, above Leaflet's own popup pane at 700, so any
+// popup opened under it was covered — the nowcast's included.
+ok('popups draw above the strike canvas', popups.popup > popups.strikes,
+   `popup ${popups.popup} vs strikes ${popups.strikes}`);
+ok('and above the projection outline', popups.popup > popups.nowcastOutline,
+   `popup ${popups.popup} vs outline ${popups.nowcastOutline}`);
+ok('the outline still sits above the strikes', popups.nowcastOutline > popups.strikes,
+   `${popups.nowcastOutline} vs ${popups.strikes}`);
+ok('storm projections are on from the start', popups.nowcastOnAtBoot === true,
+   String(popups.nowcastOnAtBoot));
+
+
 console.log('\n=== page errors ===');
 const real = [...new Set(errors)];
 if (real.length) real.forEach((e) => console.log(`  ${e}`));

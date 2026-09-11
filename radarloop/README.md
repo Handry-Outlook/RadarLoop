@@ -1623,6 +1623,33 @@ Without radar this returns null rather than a guess. Lightning alone cannot tell
 a hailstorm from a vigorous rain storm, and saying so is more useful than a
 number that looks like it knows.
 
+**The hail thresholds had to come from the product, not the textbook.** They were
+the conventional single-polarisation figures — 50 dBZ for hail, 60 for large —
+and nothing ever reached them, so no hail was ever reported. Sampling twelve
+convective regions at once (Florida, the Amazon, the Sahel, the US plains, India,
+northern Australia) the highest reflectivity anywhere was **55 dBZ**, and the area
+above 60 was **zero at every one of them**. This is a global mosaic, smoothed and
+resampled from many radars, and it evidently clips near 56. A threshold nothing
+can reach is not a strict threshold, it is an off switch.
+
+So the scale is set to what this composite does: a core starts counting at 44 dBZ
+and saturates at 55, deep-core extent is measured above 52 rather than 60, and
+the area divisor came down by a factor of ten from something nothing had ever
+measured. A severe afternoon as this product renders one — a 52 dBZ core at 25
+flashes a minute — now reads "hail likely", where it previously scored nothing.
+
+**Intensity no longer depends on the motion succeeding.** The whole measurement
+was discarded whenever the correlation was too weak to trust, which took the
+reflectivity with it — so a storm sitting still over a featureless surround, or
+one whose earlier frame was missing, reported no hail at all. Motion nulls out on
+its own now, leaving its quality at zero, and everything the field says survives.
+
+**Panes.** The strike canvas sat at z-index 1000, above Leaflet's own popup pane
+at 700 and its tooltips at 650, so any popup opened underneath it was covered —
+including the nowcast's, which is the one people open deliberately. Strikes are
+at 560 now and the projection outline at 565, both under the popups and both
+still above the weather.
+
 Storms with a hail signal are outlined in amber, high-impact ones in white, and
 everything else in cyan; the legend says so while the nowcast is on. Peak echo,
 flash rate and the hail wording are all in the popup, so the call can be argued

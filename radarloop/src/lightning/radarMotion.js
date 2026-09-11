@@ -62,15 +62,22 @@ export const SEPARATION_MIN = 15;
 const CONVECTIVE_DBZ = 40;
 
 /**
- * Reflectivity thresholds for hail, in dBZ.
+ * Reflectivity thresholds for hail, in dBZ, set from what this product does.
  *
- * Fifty is where hail becomes worth mentioning in a storm this deep, fifty-five
- * where it is likely and sixty where it is likely to be large. These are the
- * conventional single-polarisation figures; without dual-pol there is nothing
- * better to go on, and the flash rate is what is added to them.
+ * The conventional single-polarisation figures are 50 for hail and 60 for large
+ * hail, and they are what these were. They cannot be used here. Sampling twelve
+ * convective regions at once — Florida, the Amazon, the Sahel, the US plains,
+ * India, northern Australia — the highest reflectivity anywhere was 55 dBZ, and
+ * the area above 60 was zero at every one of them. This is a global mosaic,
+ * smoothed and resampled from many radars, and it evidently clips near 56. A
+ * threshold nothing can reach is not a strict threshold, it is an off switch,
+ * which is why no hail was ever reported.
+ *
+ * These are therefore the deep-core figures *for this composite*: 47 is a strong
+ * core in it, 52 is about as deep as it shows.
  */
-const HAIL_DBZ = 50;
-const LARGE_HAIL_DBZ = 60;
+const HAIL_DBZ = 47;
+const LARGE_HAIL_DBZ = 52;
 
 /** Below this share of wet pixels there is nothing to correlate. */
 const MIN_COVERAGE = 0.01;
@@ -314,7 +321,15 @@ const template = () => LAYER_CATALOG.radar?.['windy-radar']?.url || null;
 const frameAt = (ms) => Math.floor(ms / 300000) * 300000;
 
 /**
- * Motion and trend for one position, or null when radar cannot say.
+ * Motion and intensity for one position, or null when radar cannot see it.
+ *
+ * Intensity and motion are reported independently, which they were not: the
+ * whole measurement used to be discarded whenever the correlation was too weak
+ * to trust, taking the reflectivity with it. Hail needs the field, not the
+ * match, so a storm sitting still over a featureless surround — or one whose
+ * earlier frame is missing — reported no hail at all, which is why none was ever
+ * seen. Motion now nulls out on its own, leaving `quality` at zero, and
+ * everything the field says survives.
  *
  * @param {number} lat
  * @param {number} lon
@@ -333,14 +348,29 @@ export async function measureMotion(lat, lon, referenceMs) {
     sampleWindow(url, earlier, lat, lon),
     sampleWindow(url, later, lat, lon),
   ]);
-  if (!a || !b) return null;
+  // Without the current frame there is nothing to say at all.
+  if (!b) return null;
 
-  const wetEarlier = coverage(a, CONVECTIVE_DBZ);
   const wetLater = coverage(b, CONVECTIVE_DBZ);
-  if (Math.max(wetEarlier, wetLater) < MIN_COVERAGE) return null;
+  const intensity = {
+    peakDbz: highPercentile(b, 0.998),
+    hailArea: coverage(b, HAIL_DBZ),
+    largeHailArea: coverage(b, LARGE_HAIL_DBZ),
+    coverage: wetLater,
+    speedKmH: 0,
+    directionDeg: 0,
+    quality: 0,
+    trend: undefined,
+    frames: [earlier, later],
+  };
+
+  if (!a) return intensity;
+  const wetEarlier = coverage(a, CONVECTIVE_DBZ);
+  intensity.trend = wetEarlier > 0 ? wetLater / wetEarlier : 1;
+  if (Math.max(wetEarlier, wetLater) < MIN_COVERAGE) return intensity;
 
   const match = bestShift(a, b);
-  if (!match || match.prominence < MIN_QUALITY) return null;
+  if (!match || match.prominence < MIN_QUALITY) return intensity;
 
   const km = kmPerPixel(lat);
   const hours = SEPARATION_MIN / 60;
@@ -348,20 +378,12 @@ export async function measureMotion(lat, lon, referenceMs) {
   const eastKmH = (match.subX * km) / hours;
   const northKmH = (-match.subY * km) / hours;
 
-  return {
-    peakDbz: highPercentile(b, 0.998),
-    hailArea: coverage(b, HAIL_DBZ),
-    largeHailArea: coverage(b, LARGE_HAIL_DBZ),
-    speedKmH: Math.hypot(eastKmH, northKmH),
-    directionDeg: (Math.atan2(eastKmH, northKmH) * 180 / Math.PI + 360) % 360,
-    // Prominence is a small number by construction; this maps the useful part of
-    // its range onto nought-to-one without pretending to more precision.
-    quality: Math.max(0, Math.min(1, (match.prominence - MIN_QUALITY) / 0.35)),
-    coverage: wetLater,
-    // Above one the convective area is growing, below one it is decaying.
-    trend: wetEarlier > 0 ? wetLater / wetEarlier : 1,
-    frames: [earlier, later],
-  };
+  intensity.speedKmH = Math.hypot(eastKmH, northKmH);
+  intensity.directionDeg = (Math.atan2(eastKmH, northKmH) * 180 / Math.PI + 360) % 360;
+  // Prominence is a small number by construction; this maps the useful part of
+  // its range onto nought-to-one without pretending to more precision.
+  intensity.quality = Math.max(0, Math.min(1, (match.prominence - MIN_QUALITY) / 0.35));
+  return intensity;
 }
 
 /** Forgets cached tiles. For tests, and when the radar scale changes. */

@@ -1194,21 +1194,26 @@ export function impactLevel({ flashesPerMinute = 0, peakDbz = null, jump = false
 export function hailRisk({ flashesPerMinute = 0, peakDbz = null, largeHailArea = 0, jump = false } = {}) {
   if (peakDbz === null) return null;
 
-  // Below 45 dBZ there is no hail signal to weigh, whatever the flash rate.
-  const core = Math.max(0, Math.min(1, (peakDbz - 45) / 17));
+  // Scaled to what this composite actually produces: 44 dBZ is where a core
+  // starts being notable in it and 55 is the most it has ever been seen to
+  // report. Against the textbook 45-to-62 nothing here could ever score.
+  const core = Math.max(0, Math.min(1, (peakDbz - 44) / 11));
   if (core <= 0) return { risk: 0, level: 0, label: 'No hail signal' };
 
   const rate = Math.max(0.01, flashesPerMinute);
   const updraft = Math.max(0, Math.min(1, Math.log10(rate / 1) / Math.log10(120 / 1)));
   // Extent matters: a single intense pixel is noise, a core of them is a storm.
-  const extent = Math.max(0, Math.min(1, largeHailArea / 0.02));
+  // Two per mille of the window is about eight hundred square kilometres of deep
+  // core, which is a large storm; the old divisor of 2% was ten times anything
+  // measured.
+  const extent = Math.max(0, Math.min(1, largeHailArea / 0.002));
 
   let risk = core * 0.5 + updraft * 0.3 + extent * 0.2;
   if (jump) risk = Math.min(1, risk + 0.1);
 
-  if (risk >= 0.7) return { risk, level: 3, label: 'Large hail likely' };
-  if (risk >= 0.5) return { risk, level: 2, label: 'Hail likely' };
-  if (risk >= 0.3) return { risk, level: 1, label: 'Hail possible' };
+  if (risk >= 0.68) return { risk, level: 3, label: 'Large hail likely' };
+  if (risk >= 0.48) return { risk, level: 2, label: 'Hail likely' };
+  if (risk >= 0.28) return { risk, level: 1, label: 'Hail possible' };
   return { risk, level: 0, label: 'Hail unlikely' };
 }
 

@@ -301,10 +301,10 @@ function buildLightningPanel() {
     label: 'Storm projections',
     hint: 'Projected cell motion and footprint',
     checked: lightning.nowcast,
-    onChange: async (checked) => {
-      // Storm hulls are computed with turf, which is 590 KB.
-      if (checked) await DEPS.turf().catch(() => {});
-      lightning.nowcast = checked;
+    onChange: (checked) => {
+      // The hull used to come from turf, 590 KB fetched on demand; it is twenty
+      // lines in the nowcast now, so there is nothing to wait for.
+      setLightningOption('nowcast', checked);
       resetNowcastHistory();
       refreshLightning({ force: true });
     },

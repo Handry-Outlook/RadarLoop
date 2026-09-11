@@ -212,10 +212,15 @@ export const PANES = [
   // other product — so the boundary of a projection was routinely buried by the
   // echoes it was drawn around. A z-index only orders against its siblings, so
   // being above the stack means being a sibling of it.
-  { name: 'nowcastOutlinePane', z: 545 },
+  // Above the strikes, so a projection's boundary reads over a dense field, and
+  // below Leaflet's own popup pane at 700 — which is what a thousand was above.
+  { name: 'nowcastOutlinePane', z: 565 },
   { name: 'warningPane', z: 550 },
   { name: 'labelsPane', z: 600, clickThrough: true },
-  { name: 'lightningPane', z: 1000 },
+  // Under the popups. At 1000 this sat above Leaflet's popupPane (700) and its
+  // tooltips (650), so a strike canvas covered any popup opened beneath it —
+  // including the nowcast's own, which is the one people open on purpose.
+  { name: 'lightningPane', z: 560 },
 ];
 
 /** Per-layer-group default z-index within the overlay stack. */

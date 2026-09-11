@@ -151,7 +151,10 @@ export const lightning = {
   counterDensity: 50,
   showAll: false,
   sound: loadSetting('lightningSound', false),
-  nowcast: false,
+  // On from the start. It was off by default from when it needed a library
+  // fetched on demand to draw anything; the hull is computed in-house now, so
+  // there is nothing to wait for and it is the reason the app exists.
+  nowcast: loadSetting('lightningNowcast', true),
   nowcastConfidence: 0.1,
   lastUpdate: null,
 };
@@ -218,6 +221,7 @@ export function setLightningOption(key, value, { persist = true } = {}) {
     colorByAge: 'lightningColorByAge',
     showLayer: 'lightningShowLayer',
     sound: 'lightningSound',
+    nowcast: 'lightningNowcast',
   }[key];
   if (persisted) saveSetting(persisted, value);
 }

@@ -190,6 +190,12 @@ const severity = await page.evaluate(() => {
       rainShaft: hailRisk({ flashesPerMinute: 0.5, peakDbz: 54 }).label,
       vigorous: hailRisk({ flashesPerMinute: 35, peakDbz: 57, largeHailArea: 0.004 }).label,
       severe: hailRisk({ flashesPerMinute: 90, peakDbz: 63, largeHailArea: 0.03, jump: true }).label,
+      // A severe UK afternoon as this composite actually renders one: a deep
+      // core near the top of its range and a busy but not extraordinary flash
+      // rate. The old scale scored this at nothing, which is the complaint.
+      severeUkDay: hailRisk({ flashesPerMinute: 25, peakDbz: 52, largeHailArea: 0.0005 }).label,
+      strongNoHail: hailRisk({ flashesPerMinute: 10, peakDbz: 48 }).label,
+      ordinary: hailRisk({ flashesPerMinute: 3, peakDbz: 45 }).label,
     },
   };
 });
@@ -217,6 +223,14 @@ ok('a strong echo with a high flash rate is hail', /likely/i.test(severity.hail.
    severity.hail.vigorous);
 ok('and a deeper one with a jump is large hail', /Large hail/i.test(severity.hail.severe),
    severity.hail.severe);
+// The reported failure: nothing ever showed hail, because the thresholds were
+// the textbook ones and this composite clips near 56 dBZ.
+ok('a severe day on this composite does report hail', /likely/i.test(severity.hail.severeUkDay),
+   severity.hail.severeUkDay);
+ok('a strong storm without a deep core does not',
+   /unlikely|possible/i.test(severity.hail.strongNoHail), severity.hail.strongNoHail);
+ok('and an ordinary one does not', /unlikely|No hail/i.test(severity.hail.ordinary),
+   severity.hail.ordinary);
 
 console.log('\n=== the outline sits above the weather ===');
 const stack = await page.evaluate(() => {
