@@ -15,6 +15,8 @@
 
 import { haversineKm } from '../core/util.js';
 import { runtime } from '../core/state.js';
+import { emit, EVENTS } from '../core/bus.js';
+import { measureMotion, resetRadarMotion } from './radarMotion.js';
 
 /* ------------------------------------------------------------------ *
  * Performance envelope
@@ -262,6 +264,87 @@ function ransacRegression(bins, iterations, threshold, decayConstant) {
  * Main calculation
  * ------------------------------------------------------------------ */
 
+
+/* ------------------------------------------------------------------ *
+ * Radar advection
+ * ------------------------------------------------------------------ */
+
+/**
+ * Motion measured from the radar field, cached by area.
+ *
+ * The nowcast has to stay synchronous — it runs on the draw path — so radar is
+ * consulted from a cache and refreshed behind it. A cluster with no hint yet
+ * behaves exactly as it did before radar was involved, and improves on the next
+ * refresh. That is also what keeps the whole thing optional: no radar frames, no
+ * hint, no change.
+ *
+ * Keyed on a quarter-degree cell, which is about 25 km. Storms inside one cell
+ * are steered by the same flow, so sharing a measurement between them is not an
+ * approximation worth avoiding — and it means a squall line of six clusters
+ * costs one pair of radar windows rather than six.
+ */
+const hints = new Map();
+const pending = new Set();
+
+/** How long a measurement is trusted before it is taken again. */
+const HINT_TTL_MS = 8 * 60 * 1000;
+
+const hintKey = (lat, lon) => `${Math.round(lat * 4)}|${Math.round(lon * 4)}`;
+
+/** The cached measurement for a position, if it is still fresh. */
+function radarHintFor(lat, lon, referenceMs) {
+  const hint = hints.get(hintKey(lat, lon));
+  if (!hint) return null;
+  return Math.abs(referenceMs - hint.at) <= HINT_TTL_MS ? hint : null;
+}
+
+/**
+ * Measures anything missing, in the background.
+ *
+ * The result is not returned: it lands in the cache and the listener is told, so
+ * whoever is drawing can ask again. Failures are cached as a null measurement so
+ * a region out of radar coverage is not retried on every pass.
+ */
+function refreshRadarHints(positions, referenceMs) {
+  for (const [lat, lon] of positions) {
+    const key = hintKey(lat, lon);
+    if (pending.has(key)) continue;
+    const existing = hints.get(key);
+    if (existing && Math.abs(referenceMs - existing.at) <= HINT_TTL_MS) continue;
+
+    pending.add(key);
+    measureMotion(lat, lon, referenceMs)
+      .then((measured) => {
+        hints.set(key, measured ? { ...measured, at: referenceMs } : { at: referenceMs, quality: 0 });
+        if (measured) {
+          // The memo is keyed on the strikes and the minute, neither of which
+          // changed; without this the next call would hand back the answer that
+          // was computed before the radar arrived.
+          memoKey = '';
+          emit(EVENTS.LIGHTNING_FILTERED, { reason: 'radar-motion' });
+        }
+      })
+      .catch(() => { hints.set(key, { at: referenceMs, quality: 0 }); })
+      .finally(() => pending.delete(key));
+  }
+}
+
+/** Angular difference between two bearings, 0 to 180. */
+function bearingGap(a, b) {
+  const d = Math.abs(((a - b) % 360 + 540) % 360 - 180);
+  return 180 - d;
+}
+
+/** Forgets every measurement. For tests, and when the view changes wholesale. */
+export function resetRadarHints() {
+  hints.clear();
+  pending.clear();
+  resetRadarMotion();
+}
+
+/** What the nowcast knows from radar right now. For diagnostics and checks. */
+export const radarHints = () => [...hints.entries()].map(([key, value]) => ({ key, ...value }));
+
 const MAX_SPEED_KMH = 80;
 let previousNowcasts = [];
 
@@ -371,11 +454,52 @@ export function calculateNowcast(strikes, reference = new Date()) {
     }
     const consistency = 1 - circularStdDev(bearings) / 90;
 
+    const baseLat = bins[bins.length - 1].lat;
+    const baseLon = bins[bins.length - 1].lon;
+
+    /* ---- radar ---- */
+    const radar = radarHintFor(baseLat, baseLon, referenceMs);
+    const lightningSpeed = speedKmH;
+    const lightningDirection = directionDeg;
+
+    // How much the lightning-only fit deserves to be believed. A cluster with
+    // one bin has no fit at all, which is the case radar helps most.
+    const lightningQuality = bins.length < 2
+      ? 0
+      : Math.max(0, Math.min(1, regressionScore * 0.5 + consistency * 0.5)) * Math.min(1, bins.length / 4);
+
+    let radarAgreement = 0;
+    if (radar && radar.quality > 0) {
+      // Blended as vectors, weighted by how much each estimate has earned. Two
+      // bearings cannot be averaged arithmetically — north-by-one-degree and
+      // north-by-minus-one average to south — and the speeds want combining too.
+      const weight = radar.quality / (radar.quality + lightningQuality + 1e-6);
+      const toRad = Math.PI / 180;
+      const u = lightningSpeed * Math.sin(lightningDirection * toRad) * (1 - weight)
+        + radar.speedKmH * Math.sin(radar.directionDeg * toRad) * weight;
+      const v = lightningSpeed * Math.cos(lightningDirection * toRad) * (1 - weight)
+        + radar.speedKmH * Math.cos(radar.directionDeg * toRad) * weight;
+      speedKmH = Math.min(Math.hypot(u, v), MAX_SPEED_KMH);
+      directionDeg = (Math.atan2(u, v) * 180 / Math.PI + 360) % 360;
+
+      // Two independent measurements agreeing is worth more than either alone.
+      if (lightningQuality > 0.15 && lightningSpeed > 5) {
+        radarAgreement = Math.max(0, Math.cos(bearingGap(lightningDirection, radar.directionDeg) * toRad));
+      }
+    }
+
     // A "lightning jump" — a sudden rate increase — usually precedes intensification.
     const cutoff = referenceMs - jumpWindow;
     const latest = cluster.filter((s) => s.ms >= cutoff).length;
     const middle = cluster.filter((s) => s.ms < cutoff && s.ms >= cutoff - jumpWindow).length;
     const jump = latest > 2.5 * middle && latest >= 6;
+
+    // Whether the convective area is growing is a thing radar measures directly.
+    // The flash-rate jump stays as the fallback, and as corroboration.
+    const growing = radar && radar.trend !== undefined
+      ? radar.trend > 1.15 || (jump && radar.trend > 0.95)
+      : jump;
+    const shrinking = radar && radar.trend !== undefined ? radar.trend < 0.85 : null;
 
     const decayFactor = (1 - Math.min(sinceLast / maxInactivityMs, 1)) ** 2;
     const sizeScore = Math.min(cluster.length / 50, 1);
@@ -388,16 +512,26 @@ export function calculateNowcast(strikes, reference = new Date()) {
       (bins.length / MIN_BINS_FOR_CONFIDENCE) * 0.10;
     confidence *= decayFactor * binMultiplier;
     confidence = Math.min(1, confidence + (jump ? 0.35 : 0));
+    // A measured motion is evidence in its own right, and one that agrees with
+    // the lightning track is better evidence than either on its own.
+    if (radar && radar.quality > 0) {
+      confidence = Math.min(1, confidence + radar.quality * 0.15 + radarAgreement * radar.quality * 0.15);
+    }
 
     raw.push({
       cluster,
-      baseLat: bins[bins.length - 1].lat,
-      baseLon: bins[bins.length - 1].lon,
+      baseLat,
+      baseLon,
       speedKmH, directionDeg, regressionScore, consistency, residualKm,
       confidence, clusterSize: cluster.length,
-      jump, decaying: decayFactor < 0.5,
+      jump, growing,
+      decaying: shrinking === null ? decayFactor < 0.5 : shrinking || decayFactor < 0.5,
+      radar,
     });
   }
+
+  // Anything without a fresh measurement is queued now, so the next pass has it.
+  refreshRadarHints(raw.map((entry) => [entry.baseLat, entry.baseLon]), referenceMs);
 
   const result = raw
     .map((entry) => smoothAndProject(entry, referenceMs, minClusterSize, p.steps))
@@ -460,7 +594,13 @@ function smoothAndProject(entry, referenceMs, minClusterSize, steps) {
       const moved = translatePolygon(ring, directionDeg, speedKmH * (minutes / 60));
       // Growing storms expand, decaying ones shrink.
       let scale = 1;
-      if (entry.jump) scale = 1 + 0.1 * (minutes / 15);
+      // Scaled by how fast the area is actually changing where radar says so,
+      // rather than by a fixed tenth for every growing storm.
+      const rate = entry.radar?.trend !== undefined
+        ? Math.max(-0.25, Math.min(0.25, (entry.radar.trend - 1) * 0.35))
+        : null;
+      if (rate !== null) scale = 1 + rate * (minutes / 15);
+      else if (entry.jump) scale = 1 + 0.1 * (minutes / 15);
       else if (entry.decaying) scale = 1 - 0.15 * (minutes / 15);
       polygons.push({
         timeMinutes: minutes,
@@ -480,6 +620,8 @@ function smoothAndProject(entry, referenceMs, minClusterSize, steps) {
     directionDeg,
     confidence: entry.confidence,
     clusterSize: entry.clusterSize,
+    motionSource: entry.radar?.quality > 0 ? 'radar+lightning' : 'lightning',
+    radarTrend: entry.radar?.trend ?? null,
     hullGeometry: hull,
     nowcastPolygons: polygons,
     uncertainty: {

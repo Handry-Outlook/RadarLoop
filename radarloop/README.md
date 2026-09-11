@@ -1443,6 +1443,63 @@ fills out.
     `["radar","satellite"]`, while the map check still passed.
     `tools/test-layer-reset.mjs`.
 
+## The lightning nowcast, and radar
+
+`lightning/nowcast.js` clusters recent strikes, fits a motion vector to each
+cluster and projects its footprint forward. The weak part was always the motion:
+lightning alone offers one signal for it, the drift of a cluster's own centroid
+between five-minute bins, and it is a poor one. Strikes are scattered across the
+whole convective area rather than marking its centre, so that centroid jitters by
+kilometres between bins for reasons unrelated to where the storm is going. A cell
+producing six flashes in a bin yields a velocity fitted to six points of noise.
+
+`lightning/radarMotion.js` answers it properly, and the technique is the standard
+one: take two reflectivity fields a quarter of an hour apart and find the
+displacement that best lines one up with the other. Advection is most of the
+forecast at these ranges, which is why every operational scheme does this before
+it does anything clever.
+
+**Normalised cross-correlation over integer shifts**, on a 160-pixel window at
+zoom 6 — about 1.4 km a pixel over the UK, so a storm at 50 km/h moves some nine
+pixels in fifteen minutes. The search reaches 24 pixels, well past the 80 km/h
+the nowcast will accept.
+
+**The score is prominence, not correlation.** Widespread stratiform rain
+correlates beautifully with itself at every shift and means nothing by it, while
+a distinct cell gives one sharp peak. So what is reported is how far the best
+shift stands above the average of all the others, and below a floor the
+measurement is discarded. `tools/test-nowcast-radar.mjs` holds both ends: a
+synthetic field displaced by a known amount is recovered exactly, in all four
+directions and at rest, while a smooth gradient — two frames of featureless rain
+— scores under the floor.
+
+The first version of that check correlated a featureless field with *itself*,
+which peaks perfectly at zero shift however featureless it is, and proved nothing.
+
+**Three things come out of having the field at all:**
+
+- *Motion*, blended with the lightning fit as vectors — two bearings cannot be
+  averaged arithmetically — weighted by what each estimate has earned. A cluster
+  with fewer than two time bins has no fit at all and previously got no motion;
+  radar now carries it entirely.
+- *Trend*, as the ratio of convective area between the two frames. The footprint
+  grows or shrinks by what was measured rather than by a fixed tenth for anything
+  flagged as a lightning jump, which stays as the fallback and as corroboration.
+- *Confidence*, which gains a term for having a measured motion at all and
+  another for that motion agreeing with the lightning track — two independent
+  estimates agreeing is worth more than either alone.
+
+**It stays optional and synchronous.** The nowcast runs on the draw path, so
+radar is consulted from a cache and measured behind it, keyed on a quarter-degree
+cell so a squall line of six clusters costs one pair of radar windows rather than
+six. A cluster with no measurement yet behaves exactly as it did before radar was
+involved and improves on the next pass. Missing tiles, an area outside coverage,
+or a correlation too weak to trust all resolve to the same thing: no hint, and the
+lightning-only estimate stands. Failures are cached too, so a region with no radar
+is not retried every pass.
+
+The popup says which sources are behind a projection, and names the trend.
+
 ## Live global strikes
 
 `layers/windyLightning.js`. The catalog has carried this product since the

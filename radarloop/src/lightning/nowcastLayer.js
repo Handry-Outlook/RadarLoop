@@ -22,6 +22,20 @@ function ensureGroup() {
   return group;
 }
 
+/**
+ * How the convective area is changing, as measured between two radar frames.
+ *
+ * A ratio is the honest number but not a readable one, so the bands are named.
+ * The thresholds match the ones the projection scales the footprint by.
+ */
+function trendLabel(ratio) {
+  if (ratio > 1.4) return 'growing quickly';
+  if (ratio > 1.15) return 'growing';
+  if (ratio < 0.6) return 'decaying quickly';
+  if (ratio < 0.85) return 'decaying';
+  return 'steady';
+}
+
 function popupHtml(cluster, forecast, impact) {
   return `
     <div class="wx-popup wx-popup--nowcast">
@@ -35,6 +49,9 @@ function popupHtml(cluster, forecast, impact) {
         <div><dt>Heading</dt><dd>${cluster.directionDeg.toFixed(0)}° ${compassPoint(cluster.directionDeg)}</dd></div>
         <div><dt>Confidence</dt><dd>${(cluster.confidence * 100).toFixed(0)}%</dd></div>
         <div><dt>Strikes</dt><dd>${cluster.clusterSize}</dd></div>
+        <div><dt>Motion from</dt><dd>${cluster.motionSource === 'radar+lightning' ? 'radar and strikes' : 'strikes'}</dd></div>
+        ${cluster.radarTrend === null || cluster.radarTrend === undefined ? '' : `
+        <div><dt>Trend</dt><dd>${trendLabel(cluster.radarTrend)}</dd></div>`}
       </dl>
     </div>`;
 }
