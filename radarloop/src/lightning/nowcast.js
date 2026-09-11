@@ -797,7 +797,11 @@ export function calculateNowcast(strikes, reference = new Date()) {
   const binSize = 5 * 60 * 1000;
   const jumpWindow = 10 * 60 * 1000;
 
-  const input = thinAcrossTime(recent.filter((s) => referenceMs - s.ms <= maxTimeRange), p.maxInput);
+  const inWindow = recent.filter((s) => referenceMs - s.ms <= maxTimeRange);
+  const input = thinAcrossTime(inWindow, p.maxInput);
+  // Rates are measured off the thinned set, so they have to be scaled back to
+  // what the network actually recorded or a busy day reads as a quiet one.
+  const sampleFactor = input.length ? inWindow.length / input.length : 1;
 
   const fitOptions = { binSize, decayConstant, ransacIterations };
 
@@ -922,6 +926,16 @@ export function calculateNowcast(strikes, reference = new Date()) {
 
     // Whether the convective area is growing is a thing radar measures directly.
     // The flash-rate jump stays as the fallback, and as corroboration.
+    const windowMin = jumpWindow / 60000;
+    const flashesPerMinute = (latest * sampleFactor) / windowMin;
+    const impact = impactLevel({ flashesPerMinute, peakDbz: radar?.peakDbz ?? null, jump });
+    const hail = hailRisk({
+      flashesPerMinute,
+      peakDbz: radar?.peakDbz ?? null,
+      largeHailArea: radar?.largeHailArea ?? 0,
+      jump,
+    });
+
     const lifeMinutes = remainingLifeMinutes(
       { latest, previous: middle },
       jumpWindow / 60000,
@@ -958,7 +972,7 @@ export function calculateNowcast(strikes, reference = new Date()) {
       baseLon,
       speedKmH, directionDeg, regressionScore, consistency, residualKm,
       confidence, clusterSize: cluster.length, bins: bins.length,
-      jump, growing, lifeMinutes,
+      jump, growing, lifeMinutes, flashesPerMinute, impact, hail,
       decaying: shrinking === null ? decayFactor < 0.5 : shrinking || decayFactor < 0.5,
       radar,
     });
@@ -1089,6 +1103,10 @@ function smoothAndProject(entry, referenceMs, minClusterSize, steps) {
     motionSource: entry.radar?.quality > 0 ? 'radar+lightning' : 'lightning',
     radarTrend: entry.radar?.trend ?? null,
     lifeMinutes: entry.lifeMinutes ?? null,
+    flashesPerMinute: entry.flashesPerMinute ?? 0,
+    peakDbz: entry.radar?.peakDbz ?? null,
+    impact: entry.impact,
+    hail: entry.hail,
     hullGeometry: hull,
     nowcastPolygons: polygons,
     uncertainty: {
@@ -1113,13 +1131,85 @@ export const COMPASS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', '
 export const compassPoint = (deg) => COMPASS[Math.round(((deg % 360) / 22.5)) % 16];
 
 /** Five-level impact rating from cluster intensity and trajectory confidence. */
-export function impactLevel(clusterSize, confidence) {
-  const score = Math.min(1, clusterSize / 120) * 0.6 + confidence * 0.4;
-  if (score >= 0.78) return { level: 5, label: 'Level 5 — Severe', colour: '#8a2be2' };
-  if (score >= 0.6) return { level: 4, label: 'Level 4 — High', colour: '#c026d3' };
-  if (score >= 0.42) return { level: 3, label: 'Level 3 — Elevated', colour: '#f43f5e' };
-  if (score >= 0.25) return { level: 2, label: 'Level 2 — Moderate', colour: '#f97316' };
-  return { level: 1, label: 'Level 1 — Low', colour: '#eab308' };
+/**
+ * How serious a storm is, from how fast it is flashing and how hard it is
+ * raining.
+ *
+ * The old score was `min(1, clusterSize / 120) * 0.6 + confidence * 0.4`, which
+ * put almost everything at level 5. Two things were wrong with it. The size term
+ * saturated at 120 strikes when a real cluster on a summer afternoon holds
+ * several hundred to a few thousand, so it was pinned at its maximum for any
+ * storm worth looking at. And confidence is a statement about how well the
+ * *motion* was fitted — a well-tracked ordinary shower is not a severe storm, but
+ * it scored like one.
+ *
+ * The flash rate is the honest measure, and it has to be a rate: a count grows
+ * with however long the cluster has been running and with how many strikes the
+ * sampler kept. Rates span three orders of magnitude, so the scale is
+ * logarithmic — an ordinary cell runs at one or two flashes a minute, a strong
+ * one in the tens, and a severe one in the hundreds.
+ *
+ * @param {object} storm
+ * @param {number} storm.flashesPerMinute  true rate, corrected for sampling
+ * @param {number|null} storm.peakDbz      peak reflectivity, when radar has it
+ * @param {boolean} storm.jump             a sudden increase in flash rate
+ */
+export function impactLevel({ flashesPerMinute = 0, peakDbz = null, jump = false } = {}) {
+  // 0.5 a minute scores nothing, 200 a minute scores one.
+  const rate = Math.max(0.01, flashesPerMinute);
+  const rateScore = Math.max(0, Math.min(1, Math.log10(rate / 0.5) / Math.log10(200 / 0.5)));
+
+  // 40 dBZ is ordinary convection, 65 is about as intense as these composites go.
+  const dbzScore = peakDbz === null ? null : Math.max(0, Math.min(1, (peakDbz - 40) / 25));
+
+  let score = dbzScore === null ? rateScore : rateScore * 0.6 + dbzScore * 0.4;
+  // A lightning jump precedes intensification often enough to be worth a step,
+  // not a level.
+  if (jump) score = Math.min(1, score + 0.12);
+
+  if (score >= 0.82) return { level: 5, label: 'Level 5 — Severe', colour: '#8a2be2', score };
+  if (score >= 0.64) return { level: 4, label: 'Level 4 — High', colour: '#c026d3', score };
+  if (score >= 0.45) return { level: 3, label: 'Level 3 — Elevated', colour: '#f43f5e', score };
+  if (score >= 0.25) return { level: 2, label: 'Level 2 — Moderate', colour: '#f97316', score };
+  return { level: 1, label: 'Level 1 — Low', colour: '#eab308', score };
+}
+
+/**
+ * Hail risk, from reflectivity and flash rate together.
+ *
+ * Neither alone is much use. High reflectivity is the direct signal — hail
+ * returns far more energy than rain, so a core above 50 dBZ is where it starts
+ * being worth mentioning and above 60 where it is likely to be large — but a
+ * melting-layer bright band or a very heavy rain shaft can reach the same
+ * numbers. A high flash rate is what distinguishes them: hail grows in a strong
+ * updraft, and a strong updraft separates charge, so the two go together closely
+ * enough that flash rate is used operationally as an updraft proxy.
+ *
+ * So this asks for both, and returns null rather than a guess when there is no
+ * radar to ask — lightning alone cannot tell a hailstorm from a vigorous rain
+ * storm, and saying so is more useful than a number that looks like it knows.
+ *
+ * @returns {{risk: number, level: 0|1|2|3, label: string}|null}
+ */
+export function hailRisk({ flashesPerMinute = 0, peakDbz = null, largeHailArea = 0, jump = false } = {}) {
+  if (peakDbz === null) return null;
+
+  // Below 45 dBZ there is no hail signal to weigh, whatever the flash rate.
+  const core = Math.max(0, Math.min(1, (peakDbz - 45) / 17));
+  if (core <= 0) return { risk: 0, level: 0, label: 'No hail signal' };
+
+  const rate = Math.max(0.01, flashesPerMinute);
+  const updraft = Math.max(0, Math.min(1, Math.log10(rate / 1) / Math.log10(120 / 1)));
+  // Extent matters: a single intense pixel is noise, a core of them is a storm.
+  const extent = Math.max(0, Math.min(1, largeHailArea / 0.02));
+
+  let risk = core * 0.5 + updraft * 0.3 + extent * 0.2;
+  if (jump) risk = Math.min(1, risk + 0.1);
+
+  if (risk >= 0.7) return { risk, level: 3, label: 'Large hail likely' };
+  if (risk >= 0.5) return { risk, level: 2, label: 'Hail likely' };
+  if (risk >= 0.3) return { risk, level: 1, label: 'Hail possible' };
+  return { risk, level: 0, label: 'Hail unlikely' };
 }
 
 export function confidenceColour(confidence) {

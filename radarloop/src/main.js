@@ -52,8 +52,8 @@ import { mercatorX, mercatorY } from './lightning/render.js';
 import { prune as strikeStorePrune, summary as strikeStoreSummary } from './layers/strikeStore.js';
 import { bestShift, measureMotion } from './lightning/radarMotion.js';
 import {
-  calculateNowcast, nowcastInternals, radarHints, remainingLifeMinutes, resetNowcastHistory,
-  resetRadarHints,
+  calculateNowcast, hailRisk, impactLevel, nowcastInternals, radarHints, remainingLifeMinutes,
+  resetNowcastHistory, resetRadarHints,
 } from './lightning/nowcast.js';
 
 /* ------------------------------------------------------------------ *
@@ -599,6 +599,7 @@ window.__strikeStore = { summary: strikeStoreSummary, prune: strikeStorePrune };
 window.__nowcast = {
   bestShift, measureMotion, calculateNowcast, radarHints, resetRadarHints,
   remainingLife: remainingLifeMinutes, resetNowcastHistory, nowcastInternals,
+  impactLevel, hailRisk,
 };
 window.__windyLightning = {
   decodeFeed, decodeStrike, parseFrame, bufferStrikes, framesCovering, feedStats,

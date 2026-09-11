@@ -16,7 +16,7 @@
 import { map, renderers, safeRemove } from '../core/map.js';
 import { escapeHtml } from '../core/util.js';
 import { lightning } from '../core/state.js';
-import { calculateNowcast, compassPoint, impactLevel } from './nowcast.js';
+import { calculateNowcast, compassPoint } from './nowcast.js';
 import { refreshOverlayMirror } from '../layers/mirrorBridge.js';
 
 /**
@@ -35,6 +35,13 @@ import { refreshOverlayMirror } from '../layers/mirrorBridge.js';
  */
 const EDGE = '#22d3ee';
 const SEVERE_EDGE = '#f8fafc';
+
+/**
+ * Hail. Amber, which nothing else on the map is using as a boundary — the strike
+ * ramp's yellow is a mark rather than a line, and the rainfall scale is a filled
+ * field. With the halo under it there is no mistaking one for the other.
+ */
+const HAIL_EDGE = '#fbbf24';
 const HALO = 'rgba(2, 6, 23, 0.85)';
 
 let group = null;
@@ -73,6 +80,11 @@ function popupHtml(cluster, forecast, impact) {
         <div><dt>Confidence</dt><dd>${(cluster.confidence * 100).toFixed(0)}%</dd></div>
         <div><dt>Strikes</dt><dd>${cluster.clusterSize}</dd></div>
         <div><dt>Motion from</dt><dd>${cluster.motionSource === 'radar+lightning' ? 'radar and strikes' : 'strikes'}</dd></div>
+        <div><dt>Flash rate</dt><dd>${cluster.flashesPerMinute.toFixed(cluster.flashesPerMinute < 10 ? 1 : 0)}/min</dd></div>
+        ${cluster.peakDbz === null ? '' : `
+        <div><dt>Peak echo</dt><dd>${Math.round(cluster.peakDbz)} dBZ</dd></div>`}
+        ${!cluster.hail ? '' : `
+        <div><dt>Hail</dt><dd>${escapeHtml(cluster.hail.label)}</dd></div>`}
         ${cluster.radarTrend === null || cluster.radarTrend === undefined ? '' : `
         <div><dt>Trend</dt><dd>${trendLabel(cluster.radarTrend)}</dd></div>`}
         ${cluster.lifeMinutes === null || cluster.lifeMinutes === undefined ? '' : `
@@ -102,9 +114,12 @@ export function drawNowcast(filtered, reference) {
     if (cluster.confidence < minConfidence) continue;
     drawn.push(cluster);
 
-    const impact = impactLevel(cluster.clusterSize, cluster.confidence);
+    const impact = cluster.impact;
     const strongAlert = impact.level >= 4;
-    const edge = strongAlert ? SEVERE_EDGE : EDGE;
+    // Hail gets its own colour. Severity is already carried by the line weight,
+    // so the hue is free to say something the weight cannot.
+    const hailing = (cluster.hail?.level ?? 0) >= 1;
+    const edge = hailing ? HAIL_EDGE : (strongAlert ? SEVERE_EDGE : EDGE);
     const baseOpacity = Math.max(0.45, cluster.confidence * 0.8 + 0.2);
 
     /** A line with a dark halo under it, so it reads on any background. */

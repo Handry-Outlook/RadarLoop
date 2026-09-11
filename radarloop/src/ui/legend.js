@@ -59,6 +59,29 @@ function lightningGroup() {
   ]);
 }
 
+/**
+ * The nowcast's key, shown only while it is switched on.
+ *
+ * Three colours mean three different things and none of them is guessable, least
+ * of all on a map that already has a warm ramp for strike age and another for
+ * rainfall. Hail in particular is the one worth naming: it is a claim about the
+ * storm, not a rendering choice.
+ */
+function nowcastGroup() {
+  if (!lightning.nowcast) return null;
+  const swatch = (colour) => el('span', {
+    class: 'legend-swatch',
+    style: { background: 'transparent', border: `3px solid ${colour}`, boxShadow: '0 0 0 1px rgba(2,6,23,.9)' },
+  });
+  return el('div', { class: 'legend-group' }, [
+    el('div', { class: 'legend-group__title' }, 'Storm projection'),
+    el('div', { class: 'legend-item' }, [swatch('#22d3ee'), el('span', { class: 'dim' }, 'Tracked storm')]),
+    el('div', { class: 'legend-item' }, [swatch('#f8fafc'), el('span', { class: 'dim' }, 'High impact')]),
+    el('div', { class: 'legend-item' }, [swatch('#fbbf24'), el('span', { class: 'dim' }, 'Hail possible')]),
+    el('p', { class: 'tiny dim' }, 'Solid is where it is now, dashed where it is heading.'),
+  ]);
+}
+
 function activeLayersGroup() {
   const items = [];
   for (const [group, slot] of slots) {
@@ -105,6 +128,7 @@ export function renderLegend() {
     usesSharedScale() ? radarScaleGroup() : null,
     accumulationGroup(),
     lightningGroup(),
+    nowcastGroup(),
     activeLayersGroup(),
   ].filter(Boolean);
 

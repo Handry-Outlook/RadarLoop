@@ -1594,6 +1594,40 @@ against bright strikes and dark sea alike. Each projection also gets a leader fr
 the storm to where it is going, which is the one thing a reader wants and the
 hardest to pick out of overlapping outlines.
 
+**Severity, recalibrated.** The score was
+`min(1, clusterSize / 120) * 0.6 + confidence * 0.4`, which put almost everything
+at level 5. The size term saturated at 120 strikes, where a real cluster on a
+summer afternoon holds several hundred to a few thousand, so it sat at its
+maximum for any storm worth looking at. And confidence is a statement about how
+well the *motion* was fitted — a well-tracked ordinary shower is not a severe
+storm, but it scored like one.
+
+The flash rate is the honest measure, and it has to be a rate: a count grows with
+how long the cluster has run and with how many strikes the sampler kept, so it is
+corrected for the thinning stride first. Rates span three orders of magnitude, so
+the scale is logarithmic — an ordinary cell runs at one or two flashes a minute,
+a strong one in the tens, a severe one in the hundreds. Peak reflectivity carries
+40% of the score where radar has it. The same June hour that used to be level 5
+across the board now reads 2, 2, 4, 3, 2, 2, 2 — at 3 to 25 flashes a minute.
+
+**Hail.** Reflectivity and flash rate, because neither alone is any use. High
+reflectivity is the direct signal — hail returns far more energy than rain, so a
+core above 50 dBZ is where it becomes worth mentioning and above 60 where it is
+likely to be large — but a melting-layer bright band or a heavy rain shaft
+reaches the same numbers. A high flash rate is what separates them: hail grows in
+a strong updraft and a strong updraft separates charge, which is why flash rate
+is used operationally as an updraft proxy. The extent of the deep core counts
+too, so one intense pixel cannot carry it.
+
+Without radar this returns null rather than a guess. Lightning alone cannot tell
+a hailstorm from a vigorous rain storm, and saying so is more useful than a
+number that looks like it knows.
+
+Storms with a hail signal are outlined in amber, high-impact ones in white, and
+everything else in cyan; the legend says so while the nowcast is on. Peak echo,
+flash rate and the hail wording are all in the popup, so the call can be argued
+with.
+
 Still coarse: the largest footprints on a big day are 60–80 km, which is a
 multicell cluster rather than a single cell. Splitting further needs the radar
 cores, not more lightning.

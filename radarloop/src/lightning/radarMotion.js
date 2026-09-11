@@ -31,7 +31,7 @@
 import { LAYER_CATALOG } from '../data/layers.js';
 import { expandUrl } from '../layers/urlTemplate.js';
 import { encodedFromPixel } from '../layers/windy.js';
-import { encodedToMmh } from '../layers/radarScale.js';
+import { encodedToDbz } from '../layers/radarScale.js';
 
 /**
  * Zoom the field is sampled at.
@@ -58,8 +58,19 @@ const MAX_SHIFT = 24;
 /** Minutes between the two frames compared. */
 export const SEPARATION_MIN = 15;
 
-/** Rain rate above which a pixel counts as convective, in mm/h. */
-const CONVECTIVE_MMH = 4;
+/** Reflectivity above which a pixel counts as convective, in dBZ. */
+const CONVECTIVE_DBZ = 40;
+
+/**
+ * Reflectivity thresholds for hail, in dBZ.
+ *
+ * Fifty is where hail becomes worth mentioning in a storm this deep, fifty-five
+ * where it is likely and sixty where it is likely to be large. These are the
+ * conventional single-polarisation figures; without dual-pol there is nothing
+ * better to go on, and the flash rate is what is added to them.
+ */
+const HAIL_DBZ = 50;
+const LARGE_HAIL_DBZ = 60;
 
 /** Below this share of wet pixels there is nothing to correlate. */
 const MIN_COVERAGE = 0.01;
@@ -115,7 +126,10 @@ async function loadTile(template, frameMs, x, y) {
     const field = new Float32Array(TILE * TILE);
     for (let i = 0, p = 0; i < data.length; i += 4, p += 1) {
       const encoded = encodedFromPixel(data[i], data[i + 1], data[i + 2]);
-      field[p] = encoded === null ? 0 : encodedToMmh(encoded);
+      // Reflectivity rather than rain rate. It is what hail thresholds are
+      // written in, and being a log scale it correlates better too — a rain-rate
+      // field is dominated by its few most intense pixels.
+      field[p] = encoded === null ? 0 : encodedToDbz(encoded);
     }
     return field;
   })().catch(() => null);
@@ -256,11 +270,37 @@ export function bestShift(earlier, later, size = WINDOW, maxShift = MAX_SHIFT) {
   return { ...best, subX, subY, prominence: best.score - average };
 }
 
-/** Share of a field above a rain rate. */
+/** Share of a field above a reflectivity. */
 function coverage(field, threshold) {
   let wet = 0;
   for (let i = 0; i < field.length; i += 1) if (field[i] >= threshold) wet += 1;
   return wet / field.length;
+}
+
+/**
+ * A high percentile of the field, as the storm's peak reflectivity.
+ *
+ * Not the maximum: a single bright pixel is as likely to be a ground return or a
+ * compression artefact as a hail core, and the maximum of a 25,000-pixel window
+ * will find one most of the time. The 99.8th percentile needs fifty pixels to
+ * agree, which is about eighty square kilometres at this zoom.
+ */
+function highPercentile(field, fraction) {
+  const bins = new Uint32Array(81);
+  let counted = 0;
+  for (let i = 0; i < field.length; i += 1) {
+    const v = field[i];
+    if (v <= 0) continue;
+    bins[Math.min(80, Math.round(v))] += 1;
+    counted += 1;
+  }
+  if (!counted) return 0;
+  let remaining = Math.max(1, Math.round(counted * (1 - fraction)));
+  for (let dbz = 80; dbz >= 0; dbz -= 1) {
+    remaining -= bins[dbz];
+    if (remaining <= 0) return dbz;
+  }
+  return 0;
 }
 
 /* ------------------------------------------------------------------ *
@@ -295,8 +335,8 @@ export async function measureMotion(lat, lon, referenceMs) {
   ]);
   if (!a || !b) return null;
 
-  const wetEarlier = coverage(a, CONVECTIVE_MMH);
-  const wetLater = coverage(b, CONVECTIVE_MMH);
+  const wetEarlier = coverage(a, CONVECTIVE_DBZ);
+  const wetLater = coverage(b, CONVECTIVE_DBZ);
   if (Math.max(wetEarlier, wetLater) < MIN_COVERAGE) return null;
 
   const match = bestShift(a, b);
@@ -309,6 +349,9 @@ export async function measureMotion(lat, lon, referenceMs) {
   const northKmH = (-match.subY * km) / hours;
 
   return {
+    peakDbz: highPercentile(b, 0.998),
+    hailArea: coverage(b, HAIL_DBZ),
+    largeHailArea: coverage(b, LARGE_HAIL_DBZ),
     speedKmH: Math.hypot(eastKmH, northKmH),
     directionDeg: (Math.atan2(eastKmH, northKmH) * 180 / Math.PI + 360) % 360,
     // Prominence is a small number by construction; this maps the useful part of

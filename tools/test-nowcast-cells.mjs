@@ -165,6 +165,59 @@ ok('one that has stopped is nearly done', life.silent <= 5, `${life.silent} min`
 ok('a shrinking radar area shortens a steady cell',
    life.radarDecay < life.steadyYoung, `${life.radarDecay} vs ${life.steadyYoung}`);
 
+
+console.log('\n=== how serious, and hail ===');
+const severity = await page.evaluate(() => {
+  const { impactLevel, hailRisk } = window.__nowcast;
+  const at = (rate, dbz, extra = {}) => impactLevel({ flashesPerMinute: rate, peakDbz: dbz, ...extra }).level;
+  return {
+    // Ordinary through severe, by flash rate alone.
+    drizzleStorm: at(0.4, null),
+    ordinary: at(2, null),
+    busy: at(12, null),
+    strong: at(40, null),
+    extreme: at(300, null),
+    // Reflectivity pulls a moderate rate up, as it should.
+    moderateRateWeakEcho: at(12, 42),
+    moderateRateStrongEcho: at(12, 62),
+    // The failure this replaces: a large but quiet cluster was level 5 purely
+    // for being large and well tracked.
+    bigButQuiet: at(1.5, null),
+
+    hail: {
+      noRadar: hailRisk({ flashesPerMinute: 40, peakDbz: null }),
+      weakEcho: hailRisk({ flashesPerMinute: 40, peakDbz: 43 }).label,
+      rainShaft: hailRisk({ flashesPerMinute: 0.5, peakDbz: 54 }).label,
+      vigorous: hailRisk({ flashesPerMinute: 35, peakDbz: 57, largeHailArea: 0.004 }).label,
+      severe: hailRisk({ flashesPerMinute: 90, peakDbz: 63, largeHailArea: 0.03, jump: true }).label,
+    },
+  };
+});
+console.log(`  ${JSON.stringify(severity)}`);
+ok('a barely-electrified shower is level 1', severity.drizzleStorm === 1, String(severity.drizzleStorm));
+ok('an ordinary storm is not severe', severity.ordinary <= 2, String(severity.ordinary));
+ok('the levels climb with the flash rate',
+   severity.ordinary < severity.busy && severity.busy < severity.strong && severity.strong <= severity.extreme,
+   JSON.stringify([severity.ordinary, severity.busy, severity.strong, severity.extreme]));
+ok('only a genuinely extreme rate reaches level 5', severity.extreme === 5, String(severity.extreme));
+// The whole point of the recalibration.
+ok('a large but quiet cluster is no longer severe', severity.bigButQuiet <= 2, String(severity.bigButQuiet));
+ok('a strong echo raises a moderate rate',
+   severity.moderateRateStrongEcho > severity.moderateRateWeakEcho,
+   `${severity.moderateRateWeakEcho} -> ${severity.moderateRateStrongEcho}`);
+
+// Lightning alone cannot tell a hailstorm from a vigorous rain storm, and
+// saying so beats a number that looks like it knows.
+ok('hail is not guessed at without radar', severity.hail.noRadar === null, String(severity.hail.noRadar));
+ok('a weak echo is no hail whatever the flash rate', /unlikely|No hail/i.test(severity.hail.weakEcho),
+   severity.hail.weakEcho);
+ok('a bright echo with no lightning is treated as rain, not hail',
+   /unlikely|possible/i.test(severity.hail.rainShaft), severity.hail.rainShaft);
+ok('a strong echo with a high flash rate is hail', /likely/i.test(severity.hail.vigorous),
+   severity.hail.vigorous);
+ok('and a deeper one with a jump is large hail', /Large hail/i.test(severity.hail.severe),
+   severity.hail.severe);
+
 console.log('\n=== the outline sits above the weather ===');
 const stack = await page.evaluate(() => {
   const map = window.RadarLoop.map();
