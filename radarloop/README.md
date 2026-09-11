@@ -1594,6 +1594,45 @@ against bright strikes and dark sea alike. Each projection also gets a leader fr
 the storm to where it is going, which is the one thing a reader wants and the
 hardest to pick out of overlapping outlines.
 
+**Cost.** A nowcast over a busy afternoon — 55,776 strikes in the window, 6,000
+of them sampled as input — took 2.6 seconds, and it runs on every scrubber
+commit. That is the lag, and all of it was in one place: every distance the
+clustering asked for was a haversine, four trigonometric calls and a square root,
+once per candidate pair, for six thousand strikes against their neighbours, twice
+over.
+
+None of that precision was doing anything. The question is whether two strikes
+are within a few tens of kilometres over a field a few hundred across, and an
+equirectangular projection about the field's own centre is wrong by under a tenth
+of a percent at that size — nothing against a join radius chosen to the nearest
+kilometre. On the plane a distance is two subtractions, two multiplications and
+an addition, and the square root is never needed because every comparison can be
+made against a squared radius. The neighbour lists moved into one flat array with
+an offset per strike rather than six thousand small ones, and the grid keys
+became integers rather than strings.
+
+The steering pass runs on a sample as well. It exists only to produce one
+field-wide vector, so it does not need every strike to find it.
+
+| | before | after |
+|---|---|---|
+| no radar (two passes) | 2602 ms | 106 ms |
+| radar available (one pass) | 1250 ms | 81 ms |
+
+**The hail scale, from what the product reports.** The thresholds came from the
+single-polarisation textbook — 50 dBZ worth mentioning, 60 likely large — which
+assumes a native radar. Measured over the eight busiest lightning cells inside
+this composite's coverage, storms peak at 55 to 62 dBZ and the share of pixels
+above 60 runs from 0.17% to 2.3%. So the numbers were reachable, but an ordinary
+storm peaking near 50 scored 0.24 against a floor of 0.3 and never fired at all.
+
+The scale now stretches between 42 and 58 dBZ, with a full-sized core at 1.5% of
+the window above 60. An ordinary shower at 48 dBZ reads "possible", an active
+storm at 53 with a dozen flashes a minute reads "likely", and a vigorous one at
+57 reads "large hail likely" — while a bright echo with no lightning stays at
+"possible" and a weak one with a high flash rate stays at "unlikely", which is
+what keeps it from being a reflectivity display with a hail label.
+
 **Severity, recalibrated.** The score was
 `min(1, clusterSize / 120) * 0.6 + confidence * 0.4`, which put almost everything
 at level 5. The size term saturated at 120 strikes, where a real cluster on a

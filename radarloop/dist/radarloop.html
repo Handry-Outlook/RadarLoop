@@ -14239,6 +14239,84 @@ function buildSpatialGrid(strikes, cellSizeKm) {
  * Clustering
  * ------------------------------------------------------------------ */
 
+/**
+ * Positions in kilometres on a flat plane, for the clustering to work in.
+ *
+ * Every distance the clustering asks for was a haversine: four trigonometric
+ * calls and a square root, once per candidate pair, for six thousand strikes
+ * against their neighbours, twice over. That was most of a two-and-a-half second
+ * nowcast.
+ *
+ * None of that precision is doing anything here. The question is whether two
+ * strikes are within a few tens of kilometres of each other, over a field a few
+ * hundred across; an equirectangular projection about the field's own centre is
+ * wrong by under a tenth of a percent at that size, which is nothing against a
+ * join radius chosen to the nearest kilometre. On the plane a distance is two
+ * subtractions, two multiplications and an addition, and the square root is not
+ * needed at all because every comparison can be made against a squared radius.
+ *
+ * @param {Array} strikes
+ * @param {(lat:number, lon:number, ms:number) => [number, number]|null} advect
+ */
+function toPlanar(strikes, advect) {
+  const n = strikes.length;
+  const px = new Float64Array(n);
+  const py = new Float64Array(n);
+
+  let sumLat = 0;
+  for (const s of strikes) sumLat += s.lat;
+  const midLat = n ? sumLat / n : 0;
+  const lonScale = KM_PER_DEG_LAT * Math.max(0.05, Math.cos((midLat * Math.PI) / 180));
+
+  for (let i = 0; i < n; i += 1) {
+    let { lat, lon } = strikes[i];
+    if (advect) {
+      const moved = advect(lat, lon, strikes[i].ms);
+      lat = moved[0];
+      lon = moved[1];
+    }
+    px[i] = lon * lonScale;
+    py[i] = lat * KM_PER_DEG_LAT;
+  }
+  return { px, py };
+}
+
+/**
+ * Buckets planar positions so a neighbour query reads nine cells.
+ *
+ * The cell is the query radius, so everything within reach is in the cell or one
+ * touching it. Keys are packed into one integer rather than a string: building
+ * six thousand strings per pass, and one per lookup, was itself measurable.
+ */
+function buildPlanarGrid(px, py, count, cellKm) {
+  const grid = new Map();
+  const size = Math.max(1, cellKm);
+  const key = (cx, cy) => cx * 100000 + cy;
+
+  for (let i = 0; i < count; i += 1) {
+    const k = key(Math.floor(px[i] / size), Math.floor(py[i] / size));
+    const bucket = grid.get(k);
+    if (bucket) bucket.push(i);
+    else grid.set(k, [i]);
+  }
+
+  return {
+    /** Calls `visit` with every index in the nine cells around a position. */
+    near(x, y, visit) {
+      const cx = Math.floor(x / size);
+      const cy = Math.floor(y / size);
+      for (let dx = -1; dx <= 1; dx += 1) {
+        for (let dy = -1; dy <= 1; dy += 1) {
+          const bucket = grid.get(key(cx + dx, cy + dy));
+          if (!bucket) continue;
+          for (let b = 0; b < bucket.length; b += 1) visit(bucket[b]);
+        }
+      }
+    },
+  };
+}
+
+
 /** How much further apart than they are wide two halves must be to be two cells. */
 /** How much of a cell's recent history the drawn footprint covers. */
 const HULL_WINDOW_MS = 20 * 60 * 1000;
@@ -14265,75 +14343,98 @@ const SPLIT_MIN_KM = 15;
  * separate them by much more. The ratio is what distinguishes them, and it does
  * not need to know how big a storm is in kilometres.
  *
- * @param {Array} members    strikes in the cluster
- * @param {Function} at      strike to its storm-relative position
- * @param {number} minSize   smallest half worth calling a cell
- * @param {number} depth     guard against splitting for ever
+ * Works on the same planar coordinates the clustering used, so a split costs
+ * arithmetic rather than a haversine per point per pass.
+ *
+ * @param {Array} members      strikes in the cluster
+ * @param {Array} indices      their positions in the planar arrays
+ * @param {Float64Array} px    planar x, in kilometres
+ * @param {Float64Array} py    planar y, in kilometres
+ * @param {number} minSize     smallest half worth calling a cell
+ * @param {number} depth       guard against splitting for ever
  */
-function splitIfTwoCells(members, at, minSize, depth = 0) {
+function splitIfTwoCells(members, indices, px, py, minSize, depth = 0) {
   if (depth >= 3 || members.length < minSize * 2) return [members];
-
-  const points = members.map(at);
+  const n = indices.length;
 
   // Seed on the two furthest-apart points, which is the split worth testing.
   let seedA = 0;
   let seedB = 0;
   let furthest = -1;
-  const step = Math.max(1, Math.floor(points.length / 40));
-  for (let i = 0; i < points.length; i += step) {
-    for (let j = i + step; j < points.length; j += step) {
-      const d = haversineKm(points[i][0], points[i][1], points[j][0], points[j][1]);
+  const step = Math.max(1, Math.floor(n / 40));
+  for (let i = 0; i < n; i += step) {
+    const ax = px[indices[i]];
+    const ay = py[indices[i]];
+    for (let j = i + step; j < n; j += step) {
+      const dx = ax - px[indices[j]];
+      const dy = ay - py[indices[j]];
+      const d = dx * dx + dy * dy;
       if (d > furthest) { furthest = d; seedA = i; seedB = j; }
     }
   }
   if (furthest <= 0) return [members];
 
-  let centreA = points[seedA];
-  let centreB = points[seedB];
-  let groupA = [];
-  let groupB = [];
+  let ax = px[indices[seedA]];
+  let ay = py[indices[seedA]];
+  let bx = px[indices[seedB]];
+  let by = py[indices[seedB]];
+  const side = new Uint8Array(n);
+  let countA = 0;
 
   for (let pass = 0; pass < 8; pass += 1) {
-    groupA = [];
-    groupB = [];
-    for (let i = 0; i < points.length; i += 1) {
-      const dA = haversineKm(points[i][0], points[i][1], centreA[0], centreA[1]);
-      const dB = haversineKm(points[i][0], points[i][1], centreB[0], centreB[1]);
-      (dA <= dB ? groupA : groupB).push(i);
+    countA = 0;
+    let sumAx = 0;
+    let sumAy = 0;
+    let sumBx = 0;
+    let sumBy = 0;
+    for (let i = 0; i < n; i += 1) {
+      const x = px[indices[i]];
+      const y = py[indices[i]];
+      const da = (x - ax) ** 2 + (y - ay) ** 2;
+      const db = (x - bx) ** 2 + (y - by) ** 2;
+      if (da <= db) { side[i] = 0; countA += 1; sumAx += x; sumAy += y; }
+      else { side[i] = 1; sumBx += x; sumBy += y; }
     }
-    if (!groupA.length || !groupB.length) return [members];
-    const mean = (group) => {
-      let lat = 0;
-      let lon = 0;
-      for (const i of group) { lat += points[i][0]; lon += points[i][1]; }
-      return [lat / group.length, lon / group.length];
-    };
-    const nextA = mean(groupA);
-    const nextB = mean(groupB);
-    const settled = haversineKm(nextA[0], nextA[1], centreA[0], centreA[1]) < 0.2
-      && haversineKm(nextB[0], nextB[1], centreB[0], centreB[1]) < 0.2;
-    centreA = nextA;
-    centreB = nextB;
+    const countB = n - countA;
+    if (!countA || !countB) return [members];
+    const nextAx = sumAx / countA;
+    const nextAy = sumAy / countA;
+    const nextBx = sumBx / countB;
+    const nextBy = sumBy / countB;
+    const settled = (nextAx - ax) ** 2 + (nextAy - ay) ** 2 < 0.04
+      && (nextBx - bx) ** 2 + (nextBy - by) ** 2 < 0.04;
+    ax = nextAx; ay = nextAy; bx = nextBx; by = nextBy;
     if (settled) break;
   }
 
-  if (groupA.length < minSize || groupB.length < minSize) return [members];
+  const countB = n - countA;
+  if (countA < minSize || countB < minSize) return [members];
 
-  const spread = (group, centre) => {
-    let total = 0;
-    for (const i of group) total += haversineKm(points[i][0], points[i][1], centre[0], centre[1]);
-    return total / group.length;
-  };
-  const separation = haversineKm(centreA[0], centreA[1], centreB[0], centreB[1]);
-  const width = (spread(groupA, centreA) + spread(groupB, centreB)) / 2;
+  let spreadA = 0;
+  let spreadB = 0;
+  for (let i = 0; i < n; i += 1) {
+    const x = px[indices[i]];
+    const y = py[indices[i]];
+    if (side[i] === 0) spreadA += Math.hypot(x - ax, y - ay);
+    else spreadB += Math.hypot(x - bx, y - by);
+  }
+  const separation = Math.hypot(ax - bx, ay - by);
+  const width = (spreadA / countA + spreadB / countB) / 2;
 
   // Below this the split is just cutting one blob in half.
   if (!(separation > Math.max(SPLIT_MIN_KM, width * SPLIT_RATIO))) return [members];
 
-  const pick = (group) => group.map((i) => members[i]);
+  const membersA = [];
+  const membersB = [];
+  const indicesA = [];
+  const indicesB = [];
+  for (let i = 0; i < n; i += 1) {
+    if (side[i] === 0) { membersA.push(members[i]); indicesA.push(indices[i]); }
+    else { membersB.push(members[i]); indicesB.push(indices[i]); }
+  }
   return [
-    ...splitIfTwoCells(pick(groupA), at, minSize, depth + 1),
-    ...splitIfTwoCells(pick(groupB), at, minSize, depth + 1),
+    ...splitIfTwoCells(membersA, indicesA, px, py, minSize, depth + 1),
+    ...splitIfTwoCells(membersB, indicesB, px, py, minSize, depth + 1),
   ];
 }
 
@@ -14367,81 +14468,76 @@ function splitIfTwoCells(members, at, minSize, depth = 0) {
 function clusterStrikes(strikes, {
   minClusterSize, maxDistance, maxTemporalSeparation, advect = null, minNeighbours = 3,
 }) {
-  if (!strikes.length) return [];
+  const count = strikes.length;
+  if (!count) return [];
 
-  // Positions in the storm-relative frame, computed once.
-  const lat = new Float64Array(strikes.length);
-  const lon = new Float64Array(strikes.length);
-  for (let i = 0; i < strikes.length; i += 1) {
-    if (advect) {
-      const [la, lo] = advect(strikes[i].lat, strikes[i].lon, strikes[i].ms);
-      lat[i] = la;
-      lon[i] = lo;
-    } else {
-      lat[i] = strikes[i].lat;
-      lon[i] = strikes[i].lon;
-    }
+  const { px, py } = toPlanar(strikes, advect);
+  const grid = buildPlanarGrid(px, py, count, maxDistance);
+  const reachSq = maxDistance * maxDistance;
+  const times = new Float64Array(count);
+  for (let i = 0; i < count; i += 1) times[i] = strikes[i].ms;
+
+  // Neighbour lists, flattened. One array of six thousand small arrays is six
+  // thousand allocations and the garbage that follows them; a flat list with an
+  // offset per strike is one.
+  const starts = new Int32Array(count + 1);
+  const flat = [];
+  const dense = new Uint8Array(count);
+
+  for (let i = 0; i < count; i += 1) {
+    starts[i] = flat.length;
+    const x = px[i];
+    const y = py[i];
+    const t = times[i];
+    grid.near(x, y, (j) => {
+      if (j === i) return;
+      const dt = t - times[j];
+      if (dt > maxTemporalSeparation || dt < -maxTemporalSeparation) return;
+      const dx = x - px[j];
+      const dy = y - py[j];
+      if (dx * dx + dy * dy > reachSq) return;
+      flat.push(j);
+    });
+    dense[i] = flat.length - starts[i] >= minNeighbours ? 1 : 0;
   }
-
-  const index = buildSpatialGrid(
-    Array.from(strikes, (s, i) => ({ lat: lat[i], lon: lon[i] })),
-    Math.max(maxDistance, 40),
-  );
-
-  /** Indices within reach of `i`, in space and in time. */
-  const neighboursOf = (i) => {
-    const out = [];
-    for (const j of index.queryNearby(lat[i], lon[i])) {
-      if (j === i) continue;
-      if (Math.abs(strikes[i].ms - strikes[j].ms) > maxTemporalSeparation) continue;
-      if (haversineKm(lat[i], lon[i], lat[j], lon[j]) > maxDistance) continue;
-      out.push(j);
-    }
-    return out;
-  };
-
-  // Density is a property of a strike, so it is settled before any recruiting
-  // starts. Deciding it mid-expansion made membership depend on visit order.
-  const dense = new Uint8Array(strikes.length);
-  const cached = new Array(strikes.length);
-  for (let i = 0; i < strikes.length; i += 1) {
-    cached[i] = neighboursOf(i);
-    dense[i] = cached[i].length >= minNeighbours ? 1 : 0;
-  }
+  starts[count] = flat.length;
 
   const clusters = [];
-  const assigned = new Int32Array(strikes.length).fill(-1);
-  const positionOf = new Map();
-  for (let i = 0; i < strikes.length; i += 1) positionOf.set(strikes[i], i);
+  const assigned = new Int32Array(count).fill(-1);
+  const queue = new Int32Array(count);
 
-  for (let i = 0; i < strikes.length; i += 1) {
+  for (let i = 0; i < count; i += 1) {
     if (assigned[i] !== -1 || !dense[i]) continue;
     const id = clusters.length;
     const members = [];
-    const queue = [i];
+    const indices = [];
+    let head = 0;
+    let tail = 0;
+    queue[tail] = i;
+    tail += 1;
     assigned[i] = id;
 
-    while (queue.length) {
-      const current = queue.pop();
+    while (head < tail) {
+      const current = queue[head];
+      head += 1;
       members.push(strikes[current]);
+      indices.push(current);
       // A sparse strike is carried along but does not recruit: that is the whole
       // difference between this and the chaining it replaces.
       if (!dense[current]) continue;
-      for (const j of cached[current]) {
+      for (let k = starts[current]; k < starts[current + 1]; k += 1) {
+        const j = flat[k];
         if (assigned[j] !== -1) continue;
         assigned[j] = id;
-        queue.push(j);
+        queue[tail] = j;
+        tail += 1;
       }
     }
 
     if (members.length < minClusterSize) continue;
     // A component can still be two storms joined by a thread; this is where that
     // is caught.
-    const at = (strike) => {
-      const i = positionOf.get(strike);
-      return i === undefined ? [strike.lat, strike.lon] : [lat[i], lon[i]];
-    };
-    for (const part of splitIfTwoCells(members, at, minClusterSize)) {
+    for (const part of splitIfTwoCells(members, indices, px, py, minClusterSize)) {
       if (part.length >= minClusterSize) clusters.push(part);
     }
   }
@@ -14801,7 +14897,27 @@ function remainingLifeMinutes({ latest, previous }, windowMin, ageMin, silentMin
  * quality floor it still carries about 60% of a good lightning fit; a clean
  * correlation against a weak track is over 95%.
  */
+/**
+ * The reflectivities the hail scale is stretched between, in dBZ.
+ *
+ * Set from what this composite actually reports rather than from the
+ * single-polarisation textbook, whose 50-and-60 assume a native radar. Measured
+ * over the eight busiest lightning cells inside its coverage, storms peak at 55
+ * to 62 and the share of pixels above 60 runs from 0.17% to 2.3%. The textbook
+ * numbers were not unreachable, but they left an ordinary storm peaking near 50
+ * scoring 0.24 against a floor of 0.3 — so it never fired at all, which is the
+ * complaint that led here.
+ */
+const HAIL_FLOOR_DBZ = 42;
+const HAIL_FULL_DBZ = 58;
+
+/** Share of the window above 60 dBZ that counts as a full-sized hail core. */
+const HAIL_CORE_SHARE = 0.015;
+
 const RADAR_MOTION_WEIGHT = 4;
+
+/** Strikes the steering pass runs on. It needs a direction, not a cell list. */
+const COARSE_PASS_BUDGET = 1500;
 
 const MAX_SPEED_KMH = 80;
 let previousNowcasts = [];
@@ -14899,8 +15015,11 @@ function calculateNowcast(strikes, reference = new Date()) {
   let steering = fromRadar && fromRadar.quality > 0 ? fromRadar : null;
   if (!steering) {
     // A pass with nothing to advect by produces blobs rather than cells, which
-    // is useless as an answer and perfectly good for measuring the flow.
-    const coarse = clusterStrikes(input, {
+    // is useless as an answer and perfectly good for measuring the flow. Since
+    // all it has to produce is one field-wide vector, it runs on a sample: the
+    // blobs come out the same shape and the pass costs a fraction of the one
+    // that matters.
+    const coarse = clusterStrikes(thinAcrossTime(input, COARSE_PASS_BUDGET), {
       minClusterSize, maxDistance, maxTemporalSeparation, minNeighbours: 3,
     }).sort((a, b) => b.length - a.length).slice(0, 6);
     steering = steeringFromLightning(coarse, fitOptions);
@@ -15280,26 +15399,21 @@ function impactLevel({ flashesPerMinute = 0, peakDbz = null, jump = false } = {}
 function hailRisk({ flashesPerMinute = 0, peakDbz = null, largeHailArea = 0, jump = false } = {}) {
   if (peakDbz === null) return null;
 
-  // Scaled to what this composite actually produces: 44 dBZ is where a core
-  // starts being notable in it and 55 is the most it has ever been seen to
-  // report. Against the textbook 45-to-62 nothing here could ever score.
-  const core = Math.max(0, Math.min(1, (peakDbz - 44) / 11));
+  // Below this there is no hail signal to weigh, whatever the flash rate.
+  const core = Math.max(0, Math.min(1, (peakDbz - HAIL_FLOOR_DBZ) / (HAIL_FULL_DBZ - HAIL_FLOOR_DBZ)));
   if (core <= 0) return { risk: 0, level: 0, label: 'No hail signal' };
 
   const rate = Math.max(0.01, flashesPerMinute);
-  const updraft = Math.max(0, Math.min(1, Math.log10(rate / 1) / Math.log10(120 / 1)));
+  const updraft = Math.max(0, Math.min(1, Math.log10(rate / 0.5) / Math.log10(100 / 0.5)));
   // Extent matters: a single intense pixel is noise, a core of them is a storm.
-  // Two per mille of the window is about eight hundred square kilometres of deep
-  // core, which is a large storm; the old divisor of 2% was ten times anything
-  // measured.
-  const extent = Math.max(0, Math.min(1, largeHailArea / 0.002));
+  const extent = Math.max(0, Math.min(1, largeHailArea / HAIL_CORE_SHARE));
 
-  let risk = core * 0.5 + updraft * 0.3 + extent * 0.2;
+  let risk = core * 0.55 + updraft * 0.28 + extent * 0.17;
   if (jump) risk = Math.min(1, risk + 0.1);
 
-  if (risk >= 0.68) return { risk, level: 3, label: 'Large hail likely' };
-  if (risk >= 0.48) return { risk, level: 2, label: 'Hail likely' };
-  if (risk >= 0.28) return { risk, level: 1, label: 'Hail possible' };
+  if (risk >= 0.75) return { risk, level: 3, label: 'Large hail likely' };
+  if (risk >= 0.52) return { risk, level: 2, label: 'Hail likely' };
+  if (risk >= 0.3) return { risk, level: 1, label: 'Hail possible' };
   return { risk, level: 0, label: 'Hail unlikely' };
 }
 
