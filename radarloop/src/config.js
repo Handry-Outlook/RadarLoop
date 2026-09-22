@@ -16,7 +16,8 @@ export const CREDENTIALS = {
   xweatherId: 'wgE96YE3scTQLKjnqiMsv',
   xweatherSecret: '1XwHqbCjiTqtzWi8txyN4JtM0ezVNuEfaDXQdkjq',
   accuweather: '34d63eadb3384b4b86e1f5a5741f9820',
-  synoptic: '62836fb21d9b422b878d830b31bdf0df',
+  synoptic: 'f307a3d403c64326ad29d54b38b9897a',
+  
 };
 
 /** Convenience: the `id_secret` pair Aeris/Xweather tile URLs embed in their path. */
